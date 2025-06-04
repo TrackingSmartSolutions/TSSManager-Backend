@@ -52,8 +52,7 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
         config.setAllowedOrigins(Arrays.asList(
                 "http://localhost:3000",
-                "http://192.168.1.X:3000",
-                "https://tu-frontend.netlify.app"
+                "https://tssmanager.netlify.app/"
         ));
         config.addAllowedHeader("Authorization");
         config.addAllowedHeader("Content-Type");
