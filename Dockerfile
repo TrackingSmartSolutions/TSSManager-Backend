@@ -1,4 +1,11 @@
+# Usa una imagen base con JDK (OpenJDK 21 slim es una buena opción para un tamaño reducido)
 FROM openjdk:21-jdk-slim
+
+# Instala Maven
+# openjdk:slim está basado en Debian/Ubuntu, así que usa apt-get
+RUN apt-get update && \
+    apt-get install -y maven && \
+    rm -rf /var/lib/apt/lists/*
 
 # Establece el directorio de trabajo dentro del contenedor
 WORKDIR /app
