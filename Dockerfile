@@ -2,6 +2,7 @@
 FROM openjdk:21-jdk-slim AS builder
 WORKDIR /app
 COPY . .
+RUN chmod +x ./mvnw  
 RUN ./mvnw clean package -DskipTests
 
 # Etapa 2: Crear la imagen final
