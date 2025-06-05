@@ -25,4 +25,4 @@ EXPOSE 8080
 # Comando para ejecutar la aplicación JAR
 # Asume que tu JAR se genera en target/your-app-name.jar
 # Ajusta 'target/*.jar' si el nombre es muy específico o usas Gradle (build/libs/*.jar)
-ENTRYPOINT ["java", "-jar", "target/*.jar"]
+ENTRYPOINT ["java", "-jar", "target/tssmanager-backend-0.0.1-SNAPSHOT.jar"]
