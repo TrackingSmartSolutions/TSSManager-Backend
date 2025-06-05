@@ -1,19 +1,12 @@
-# Usar una imagen base de OpenJDK (Java 17, slim para ser ligera)
-FROM openjdk:21-jdk-slim
-
-# Establecer el directorio de trabajo dentro del contenedor
+# Etapa 1: Construir la aplicación
+FROM openjdk:21-jdk-slim AS builder
 WORKDIR /app
+COPY . .
+RUN ./mvnw clean package -DskipTests
 
-# Copiar el archivo JAR construido por Maven/Gradle al contenedor
-# Necesitas reemplazar 'your-app-name.jar' con el nombre exacto de tu JAR.
-# Por ejemplo, si se llama 'tssmanager-backend-0.0.1-SNAPSHOT.jar', sería:
-# COPY target/tssmanager-backend-0.0.1-SNAPSHOT.jar app.jar
-COPY target/tssmanager-backend-0.0.1-SNAPSHOT.jar app.jar
-
-# Exponer el puerto en el que tu aplicación Spring Boot escuchará
-# Por defecto, Spring Boot usa 8080. Render mapeará este puerto internamente.
+# Etapa 2: Crear la imagen final
+FROM openjdk:21-jdk-slim
+WORKDIR /app
+COPY --from=builder /app/target/tssmanager-backend-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8080
-
-# Comando para ejecutar la aplicación cuando el contenedor se inicie
-# Spring Boot detecta automáticamente la variable de entorno PORT que Render proporciona
-CMD ["java", "-jar", "app.jar"]
+CMD ["java", "-Xms512m", "-Xmx1024m", "-jar", "app.jar"]
