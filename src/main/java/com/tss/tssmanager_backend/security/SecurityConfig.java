@@ -52,7 +52,7 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
         config.setAllowedOrigins(Arrays.asList(
                 "http://localhost:3000",
-                "https://tssmanager.netlify.app/"
+                "https://tssmanager.netlify.app"
         ));
         config.addAllowedHeader("Authorization");
         config.addAllowedHeader("Content-Type");
