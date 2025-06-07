@@ -2,7 +2,7 @@ package com.tss.tssmanager_backend.dto;
 
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
 import com.tss.tssmanager_backend.enums.SectorEmpresaEnum;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public class EmpresaDTO {
     private Integer id;
@@ -15,9 +15,9 @@ public class EmpresaDTO {
     private String rfc;
     private String razonSocial;
     private String regimenFiscal;
-    private LocalDateTime fechaCreacion;
-    private LocalDateTime fechaModificacion;
-    private LocalDateTime fechaUltimaActividad;
+    private Instant fechaCreacion;
+    private Instant fechaModificacion;
+    private Instant fechaUltimaActividad;
     private PropietarioDTO propietario;
     private Integer propietarioId;
 
@@ -42,12 +42,12 @@ public class EmpresaDTO {
     public void setRazonSocial(String razonSocial) { this.razonSocial = razonSocial; }
     public String getRegimenFiscal() { return regimenFiscal; }
     public void setRegimenFiscal(String regimenFiscal) { this.regimenFiscal = regimenFiscal; }
-    public LocalDateTime getFechaCreacion() { return fechaCreacion; }
-    public void setFechaCreacion(LocalDateTime fechaCreacion) { this.fechaCreacion = fechaCreacion; }
-    public LocalDateTime getFechaModificacion() { return fechaModificacion; }
-    public void setFechaModificacion(LocalDateTime fechaModificacion) { this.fechaModificacion = fechaModificacion; }
-    public LocalDateTime getFechaUltimaActividad() { return fechaUltimaActividad; }
-    public void setFechaUltimaActividad(LocalDateTime fechaUltimaActividad) { this.fechaUltimaActividad = fechaUltimaActividad; }
+    public Instant getFechaCreacion() { return fechaCreacion; }
+    public void setFechaCreacion(Instant fechaCreacion) { this.fechaCreacion = fechaCreacion; }
+    public Instant getFechaModificacion() { return fechaModificacion; }
+    public void setFechaModificacion(Instant fechaModificacion) { this.fechaModificacion = fechaModificacion; }
+    public Instant getFechaUltimaActividad() { return fechaUltimaActividad; }
+    public void setFechaUltimaActividad(Instant fechaUltimaActividad) { this.fechaUltimaActividad = fechaUltimaActividad; }
     public PropietarioDTO getPropietario() { return propietario; }
     public void setPropietario(PropietarioDTO propietario) { this.propietario = propietario; }
     public Integer getPropietarioId() { return propietarioId; }

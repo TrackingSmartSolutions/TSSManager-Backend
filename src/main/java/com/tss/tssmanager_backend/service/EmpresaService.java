@@ -18,7 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -54,9 +54,9 @@ public class EmpresaService {
         empresa.setPropietario(usuarioLogueado);
         empresa.setCreadoPor(usuarioLogueado.getNombreUsuario());
         empresa.setModificadoPor(usuarioLogueado.getNombreUsuario());
-        empresa.setFechaCreacion(LocalDateTime.now());
-        empresa.setFechaModificacion(LocalDateTime.now());
-        empresa.setFechaUltimaActividad(LocalDateTime.now());
+        empresa.setFechaCreacion(Instant.now());
+        empresa.setFechaModificacion(Instant.now());
+        empresa.setFechaUltimaActividad(Instant.now());
 
         validateEmpresa(empresa);
         Empresa savedEmpresa = empresaRepository.save(empresa);
@@ -71,9 +71,9 @@ public class EmpresaService {
                 contacto.setNombre(contactoDTO.getNombre());
                 contacto.setRol(contactoDTO.getRol());
                 contacto.setCelular(contactoDTO.getCelular());
-                contacto.setFechaCreacion(LocalDateTime.now());
-                contacto.setFechaModificacion(LocalDateTime.now());
-                contacto.setFechaUltimaActividad(LocalDateTime.now());
+                contacto.setFechaCreacion(Instant.now());
+                contacto.setFechaModificacion(Instant.now());
+                contacto.setFechaUltimaActividad(Instant.now());
 
                 if (contacto.getNombre() == null || contacto.getNombre().trim().isEmpty()) {
                     contacto.setNombre("Contacto de " + (contacto.getRol() != null ? contacto.getRol().name() : RolContactoEnum.RECEPCION.name()));
@@ -135,8 +135,8 @@ public class EmpresaService {
         empresa.setRfc(empresaActualizada.getRfc());
         empresa.setRazonSocial(empresaActualizada.getRazonSocial());
         empresa.setRegimenFiscal(empresaActualizada.getRegimenFiscal());
-        empresa.setFechaModificacion(LocalDateTime.now());
-        empresa.setFechaUltimaActividad(LocalDateTime.now());
+        empresa.setFechaModificacion(Instant.now());
+        empresa.setFechaUltimaActividad(Instant.now());
 
         if (empresaActualizada.getPropietario() != null && empresaActualizada.getPropietario().getId() != null) {
             Usuario propietario = usuarioRepository.findById(empresaActualizada.getPropietario().getId())
@@ -146,8 +146,8 @@ public class EmpresaService {
             List<Contacto> contactos = contactoRepository.findByEmpresaId(id);
             for (Contacto contacto : contactos) {
                 contacto.setPropietario(propietario);
-                contacto.setFechaModificacion(LocalDateTime.now());
-                contacto.setFechaUltimaActividad(LocalDateTime.now());
+                contacto.setFechaModificacion(Instant.now());
+                contacto.setFechaUltimaActividad(Instant.now());
                 contactoRepository.save(contacto);
             }
         } else if (empresaActualizada.getPropietario() != null && empresaActualizada.getPropietario().getId() == null) {
@@ -223,9 +223,9 @@ public class EmpresaService {
         contacto.setNombre(contactoDTO.getNombre());
         contacto.setRol(contactoDTO.getRol());
         contacto.setCelular(contactoDTO.getCelular());
-        contacto.setFechaCreacion(LocalDateTime.now());
-        contacto.setFechaModificacion(LocalDateTime.now());
-        contacto.setFechaUltimaActividad(LocalDateTime.now());
+        contacto.setFechaCreacion(Instant.now());
+        contacto.setFechaModificacion(Instant.now());
+        contacto.setFechaUltimaActividad(Instant.now());
 
         if (contacto.getNombre() == null || contacto.getNombre().trim().isEmpty()) {
             contacto.setNombre("Contacto de " + (contacto.getRol() != null ? contacto.getRol().name() : RolContactoEnum.RECEPCION.name()));
@@ -263,7 +263,7 @@ public class EmpresaService {
 
         Contacto savedContacto = contactoRepository.save(contacto);
 
-        empresa.setFechaUltimaActividad(LocalDateTime.now());
+        empresa.setFechaUltimaActividad(Instant.now());
         empresaRepository.save(empresa);
         logger.info("Contacto agregado exitosamente con ID: {}", savedContacto.getId());
         return convertToContactoDTO(savedContacto);
@@ -284,8 +284,8 @@ public class EmpresaService {
         if (contacto.getNombre() == null || contacto.getNombre().trim().isEmpty()) {
             contacto.setNombre("Contacto de " + (contacto.getRol() != null ? contacto.getRol().name() : RolContactoEnum.RECEPCION.name()));
         }
-        contacto.setFechaModificacion(LocalDateTime.now());
-        contacto.setFechaUltimaActividad(LocalDateTime.now());
+        contacto.setFechaModificacion(Instant.now());
+        contacto.setFechaUltimaActividad(Instant.now());
 
         // Ignorar propietarioId del DTO, usar el propietario de la empresa
         Empresa empresa = contacto.getEmpresa();
@@ -340,7 +340,7 @@ public class EmpresaService {
         }
 
         Contacto savedContacto = contactoRepository.save(contacto);
-        empresa.setFechaUltimaActividad(LocalDateTime.now());
+        empresa.setFechaUltimaActividad(Instant.now());
         empresaRepository.save(empresa);
 
         logger.info("Contacto con ID: {} editado exitosamente", id);
@@ -361,7 +361,7 @@ public class EmpresaService {
             throw new IllegalStateException("No se puede eliminar el último contacto de la empresa");
         }
         contactoRepository.delete(contacto);
-        empresa.setFechaUltimaActividad(LocalDateTime.now());
+        empresa.setFechaUltimaActividad(Instant.now());
         empresaRepository.save(empresa);
         logger.info("Contacto con ID: {} eliminado exitosamente", id);
     }

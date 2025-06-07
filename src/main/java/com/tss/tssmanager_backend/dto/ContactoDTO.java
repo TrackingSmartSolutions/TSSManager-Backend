@@ -1,7 +1,7 @@
 package com.tss.tssmanager_backend.dto;
 
 import com.tss.tssmanager_backend.enums.RolContactoEnum;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 public class ContactoDTO {
@@ -9,9 +9,9 @@ public class ContactoDTO {
     private String nombre;
     private RolContactoEnum rol;
     private String celular;
-    private LocalDateTime fechaCreacion;
-    private LocalDateTime fechaModificacion;
-    private LocalDateTime fechaUltimaActividad;
+    private Instant fechaCreacion;
+    private Instant fechaModificacion;
+    private Instant fechaUltimaActividad;
     private List<CorreoDTO> correos;
     private List<TelefonoDTO> telefonos;
     private String creadoPor;
@@ -28,12 +28,12 @@ public class ContactoDTO {
     public void setRol(RolContactoEnum rol) { this.rol = rol; }
     public String getCelular() { return celular; }
     public void setCelular(String celular) { this.celular = celular; }
-    public LocalDateTime getFechaCreacion() { return fechaCreacion; }
-    public void setFechaCreacion(LocalDateTime fechaCreacion) { this.fechaCreacion = fechaCreacion; }
-    public LocalDateTime getFechaModificacion() { return fechaModificacion; }
-    public void setFechaModificacion(LocalDateTime fechaModificacion) { this.fechaModificacion = fechaModificacion; }
-    public LocalDateTime getFechaUltimaActividad() { return fechaUltimaActividad; }
-    public void setFechaUltimaActividad(LocalDateTime fechaUltimaActividad) { this.fechaUltimaActividad = fechaUltimaActividad; }
+    public Instant getFechaCreacion() { return fechaCreacion; }
+    public void setFechaCreacion(Instant fechaCreacion) { this.fechaCreacion = fechaCreacion; }
+    public Instant getFechaModificacion() { return fechaModificacion; }
+    public void setFechaModificacion(Instant fechaModificacion) { this.fechaModificacion = fechaModificacion; }
+    public Instant getFechaUltimaActividad() { return fechaUltimaActividad; }
+    public void setFechaUltimaActividad(Instant fechaUltimaActividad) { this.fechaUltimaActividad = fechaUltimaActividad; }
     public List<CorreoDTO> getCorreos() { return correos; }
     public void setCorreos(List<CorreoDTO> correos) { this.correos = correos; }
     public List<TelefonoDTO> getTelefonos() { return telefonos; }

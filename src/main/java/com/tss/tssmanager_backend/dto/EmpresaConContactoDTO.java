@@ -4,7 +4,7 @@ import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
 import com.tss.tssmanager_backend.enums.SectorEmpresaEnum;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 @Data
@@ -19,9 +19,9 @@ public class EmpresaConContactoDTO {
     private String rfc;
     private String razonSocial;
     private String regimenFiscal;
-    private LocalDateTime fechaCreacion;
-    private LocalDateTime fechaModificacion;
-    private LocalDateTime fechaUltimaActividad;
+    private Instant fechaCreacion;
+    private Instant fechaModificacion;
+    private Instant fechaUltimaActividad;
     private List<ContactoDTO> contactos;
 
     public Integer getId() {
@@ -104,27 +104,27 @@ public class EmpresaConContactoDTO {
         this.regimenFiscal = regimenFiscal;
     }
 
-    public LocalDateTime getFechaCreacion() {
+    public Instant getFechaCreacion() {
         return fechaCreacion;
     }
 
-    public void setFechaCreacion(LocalDateTime fechaCreacion) {
+    public void setFechaCreacion(Instant fechaCreacion) {
         this.fechaCreacion = fechaCreacion;
     }
 
-    public LocalDateTime getFechaModificacion() {
+    public Instant getFechaModificacion() {
         return fechaModificacion;
     }
 
-    public void setFechaModificacion(LocalDateTime fechaModificacion) {
+    public void setFechaModificacion(Instant fechaModificacion) {
         this.fechaModificacion = fechaModificacion;
     }
 
-    public LocalDateTime getFechaUltimaActividad() {
+    public Instant getFechaUltimaActividad() {
         return fechaUltimaActividad;
     }
 
-    public void setFechaUltimaActividad(LocalDateTime fechaUltimaActividad) {
+    public void setFechaUltimaActividad(Instant fechaUltimaActividad) {
         this.fechaUltimaActividad = fechaUltimaActividad;
     }
 

@@ -2,7 +2,7 @@ package com.tss.tssmanager_backend.entity;
 
 import com.tss.tssmanager_backend.enums.RolContactoEnum;
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.data.annotation.CreatedBy;
@@ -49,15 +49,15 @@ public class Contacto {
 
     @CreatedDate
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
-    private LocalDateTime fechaCreacion;
+    private Instant fechaCreacion;
 
     @LastModifiedDate
     @Column(name = "fecha_modificacion", nullable = false)
-    private LocalDateTime fechaModificacion;
+    private Instant fechaModificacion;
 
     @LastModifiedDate
     @Column(name = "fecha_ultima_actividad", nullable = false)
-    private LocalDateTime fechaUltimaActividad;
+    private Instant fechaUltimaActividad;
 
     @OneToMany(mappedBy = "contacto", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
@@ -92,14 +92,14 @@ public class Contacto {
     public String getModificadoPor() { return modificadoPor; }
     public void setModificadoPor(String modificadoPor) { this.modificadoPor = modificadoPor; }
 
-    public LocalDateTime getFechaCreacion() { return fechaCreacion; }
-    public void setFechaCreacion(LocalDateTime fechaCreacion) { this.fechaCreacion = fechaCreacion; }
+    public Instant getFechaCreacion() { return fechaCreacion; }
+    public void setFechaCreacion(Instant fechaCreacion) { this.fechaCreacion = fechaCreacion; }
 
-    public LocalDateTime getFechaModificacion() { return fechaModificacion; }
-    public void setFechaModificacion(LocalDateTime fechaModificacion) { this.fechaModificacion = fechaModificacion; }
+    public Instant getFechaModificacion() { return fechaModificacion; }
+    public void setFechaModificacion(Instant fechaModificacion) { this.fechaModificacion = fechaModificacion; }
 
-    public LocalDateTime getFechaUltimaActividad() { return fechaUltimaActividad; }
-    public void setFechaUltimaActividad(LocalDateTime fechaUltimaActividad) { this.fechaUltimaActividad = fechaUltimaActividad; }
+    public Instant getFechaUltimaActividad() { return fechaUltimaActividad; }
+    public void setFechaUltimaActividad(Instant fechaUltimaActividad) { this.fechaUltimaActividad = fechaUltimaActividad; }
 
     public List<CorreoContacto> getCorreos() { return correos; }
     public void setCorreos(List<CorreoContacto> correos) {

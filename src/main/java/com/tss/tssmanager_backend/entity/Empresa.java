@@ -3,7 +3,7 @@ package com.tss.tssmanager_backend.entity;
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
 import com.tss.tssmanager_backend.enums.SectorEmpresaEnum;
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.data.annotation.CreatedBy;
@@ -66,15 +66,15 @@ public class Empresa {
 
     @CreatedDate
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
-    private LocalDateTime fechaCreacion;
+    private Instant fechaCreacion;
 
     @LastModifiedDate
     @Column(name = "fecha_modificacion", nullable = false)
-    private LocalDateTime fechaModificacion;
+    private Instant fechaModificacion;
 
     @LastModifiedDate
     @Column(name = "fecha_ultima_actividad", nullable = false)
-    private LocalDateTime fechaUltimaActividad;
+    private Instant fechaUltimaActividad;
 
     @OneToMany(mappedBy = "empresa", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
@@ -184,27 +184,27 @@ public class Empresa {
         this.modificadoPor = modificadoPor;
     }
 
-    public LocalDateTime getFechaCreacion() {
+    public Instant getFechaCreacion() {
         return fechaCreacion;
     }
 
-    public void setFechaCreacion(LocalDateTime fechaCreacion) {
+    public void setFechaCreacion(Instant fechaCreacion) {
         this.fechaCreacion = fechaCreacion;
     }
 
-    public LocalDateTime getFechaModificacion() {
+    public Instant getFechaModificacion() {
         return fechaModificacion;
     }
 
-    public void setFechaModificacion(LocalDateTime fechaModificacion) {
+    public void setFechaModificacion(Instant fechaModificacion) {
         this.fechaModificacion = fechaModificacion;
     }
 
-    public LocalDateTime getFechaUltimaActividad() {
+    public Instant getFechaUltimaActividad() {
         return fechaUltimaActividad;
     }
 
-    public void setFechaUltimaActividad(LocalDateTime fechaUltimaActividad) {
+    public void setFechaUltimaActividad(Instant fechaUltimaActividad) {
         this.fechaUltimaActividad = fechaUltimaActividad;
     }
 

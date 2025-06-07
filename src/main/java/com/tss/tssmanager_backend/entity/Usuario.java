@@ -9,7 +9,7 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "\"Usuarios\"")
@@ -46,13 +46,13 @@ public class Usuario {
     private EstatusUsuarioEnum estatus;
 
     @Column(name = "ultima_actividad")
-    private LocalDateTime ultimaActividad;
+    private Instant ultimaActividad;
 
     @CreatedDate
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
-    private LocalDateTime fechaCreacion;
+    private Instant fechaCreacion;
 
     @LastModifiedDate
     @Column(name = "fecha_modificacion", nullable = false)
-    private LocalDateTime fechaModificacion;
+    private Instant fechaModificacion;
 }
