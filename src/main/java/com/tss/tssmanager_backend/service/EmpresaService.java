@@ -58,22 +58,14 @@ public class EmpresaService {
         empresa.setFechaModificacion(LocalDateTime.now());
         empresa.setFechaUltimaActividad(LocalDateTime.now());
 
-        // Si se proporciona propietarioId en la entidad (a través del DTO), usarlo
-        if (empresa.getPropietario() == null && contactosDTO != null && !contactosDTO.isEmpty() && contactosDTO.get(0).getPropietarioId() != null) {
-            Usuario propietario = usuarioRepository.findById(contactosDTO.get(0).getPropietarioId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + contactosDTO.get(0).getPropietarioId()));
-            empresa.setPropietario(propietario);
-        }
-
         validateEmpresa(empresa);
         Empresa savedEmpresa = empresaRepository.save(empresa);
 
-        // Procesar contactos si se proporcionan
         if (contactosDTO != null && !contactosDTO.isEmpty()) {
             for (ContactoDTO contactoDTO : contactosDTO) {
                 Contacto contacto = new Contacto();
                 contacto.setEmpresa(savedEmpresa);
-                contacto.setPropietario(empresa.getPropietario()); // Usar el propietario de la empresa por defecto
+                contacto.setPropietario(savedEmpresa.getPropietario()); // Usar el propietario de la empresa
                 contacto.setCreadoPor(usuarioLogueado.getNombreUsuario());
                 contacto.setModificadoPor(usuarioLogueado.getNombreUsuario());
                 contacto.setNombre(contactoDTO.getNombre());
@@ -82,13 +74,6 @@ public class EmpresaService {
                 contacto.setFechaCreacion(LocalDateTime.now());
                 contacto.setFechaModificacion(LocalDateTime.now());
                 contacto.setFechaUltimaActividad(LocalDateTime.now());
-
-                // Si se proporciona propietarioId en el DTO, usarlo
-                if (contactoDTO.getPropietarioId() != null) {
-                    Usuario propietario = usuarioRepository.findById(contactoDTO.getPropietarioId())
-                            .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + contactoDTO.getPropietarioId()));
-                    contacto.setPropietario(propietario);
-                }
 
                 if (contacto.getNombre() == null || contacto.getNombre().trim().isEmpty()) {
                     contacto.setNombre("Contacto de " + (contacto.getRol() != null ? contacto.getRol().name() : RolContactoEnum.RECEPCION.name()));
@@ -153,11 +138,18 @@ public class EmpresaService {
         empresa.setFechaModificacion(LocalDateTime.now());
         empresa.setFechaUltimaActividad(LocalDateTime.now());
 
-
         if (empresaActualizada.getPropietario() != null && empresaActualizada.getPropietario().getId() != null) {
             Usuario propietario = usuarioRepository.findById(empresaActualizada.getPropietario().getId())
                     .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + empresaActualizada.getPropietario().getId()));
             empresa.setPropietario(propietario);
+
+            List<Contacto> contactos = contactoRepository.findByEmpresaId(id);
+            for (Contacto contacto : contactos) {
+                contacto.setPropietario(propietario);
+                contacto.setFechaModificacion(LocalDateTime.now());
+                contacto.setFechaUltimaActividad(LocalDateTime.now());
+                contactoRepository.save(contacto);
+            }
         } else if (empresaActualizada.getPropietario() != null && empresaActualizada.getPropietario().getId() == null) {
             logger.warn("Propietario con ID nulo ignorado al editar empresa con ID: {}", id);
         }
@@ -225,7 +217,7 @@ public class EmpresaService {
 
         Contacto contacto = new Contacto();
         contacto.setEmpresa(empresa);
-        contacto.setPropietario(empresa.getPropietario()); // Usar el propietario de la empresa por defecto
+        contacto.setPropietario(empresa.getPropietario()); // Usar el propietario de la empresa
         contacto.setCreadoPor(usuarioLogueado);
         contacto.setModificadoPor(usuarioLogueado);
         contacto.setNombre(contactoDTO.getNombre());
@@ -234,13 +226,6 @@ public class EmpresaService {
         contacto.setFechaCreacion(LocalDateTime.now());
         contacto.setFechaModificacion(LocalDateTime.now());
         contacto.setFechaUltimaActividad(LocalDateTime.now());
-
-        // Si se proporciona propietarioId, usarlo
-        if (contactoDTO.getPropietarioId() != null) {
-            Usuario propietario = usuarioRepository.findById(contactoDTO.getPropietarioId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + contactoDTO.getPropietarioId()));
-            contacto.setPropietario(propietario);
-        }
 
         if (contacto.getNombre() == null || contacto.getNombre().trim().isEmpty()) {
             contacto.setNombre("Contacto de " + (contacto.getRol() != null ? contacto.getRol().name() : RolContactoEnum.RECEPCION.name()));
@@ -302,11 +287,10 @@ public class EmpresaService {
         contacto.setFechaModificacion(LocalDateTime.now());
         contacto.setFechaUltimaActividad(LocalDateTime.now());
 
-        // Actualizar propietario si se proporciona propietarioId
-        if (contactoDTO.getPropietarioId() != null) {
-            Usuario propietario = usuarioRepository.findById(contactoDTO.getPropietarioId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + contactoDTO.getPropietarioId()));
-            contacto.setPropietario(propietario);
+        // Ignorar propietarioId del DTO, usar el propietario de la empresa
+        Empresa empresa = contacto.getEmpresa();
+        if (empresa != null && empresa.getPropietario() != null) {
+            contacto.setPropietario(empresa.getPropietario());
         }
 
         String usuarioLogueado = getUsuarioLogueadoName();
@@ -356,7 +340,6 @@ public class EmpresaService {
         }
 
         Contacto savedContacto = contactoRepository.save(contacto);
-        Empresa empresa = savedContacto.getEmpresa();
         empresa.setFechaUltimaActividad(LocalDateTime.now());
         empresaRepository.save(empresa);
 
@@ -407,7 +390,6 @@ public class EmpresaService {
         dto.setFechaCreacion(empresa.getFechaCreacion());
         dto.setFechaModificacion(empresa.getFechaModificacion());
         dto.setFechaUltimaActividad(empresa.getFechaUltimaActividad());
-        // Incluir el propietario
         if (empresa.getPropietario() != null) {
             PropietarioDTO propietarioDTO = new PropietarioDTO();
             propietarioDTO.setId(empresa.getPropietario().getId());
@@ -442,7 +424,6 @@ public class EmpresaService {
                 .collect(Collectors.toList()));
         dto.setCreadoPor(contacto.getCreadoPor());
         dto.setModificadoPor(contacto.getModificadoPor());
-        // Incluir el propietario
         if (contacto.getPropietario() != null) {
             PropietarioDTO propietarioDTO = new PropietarioDTO();
             propietarioDTO.setId(contacto.getPropietario().getId());
