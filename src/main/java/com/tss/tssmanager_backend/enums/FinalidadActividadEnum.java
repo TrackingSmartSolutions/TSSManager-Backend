@@ -1,0 +1,14 @@
+package com.tss.tssmanager_backend.enums;
+
+public enum FinalidadActividadEnum {
+    CLASIFICACION,
+    PRIMER_CONTACTO,
+    ENVIO_DE_INFORMACION,
+    REUNION,
+    COTIZACION_PROPUESTA_PRACTICA,
+    NEGOCIACION_REVISION,
+    CERRADO_GANADO,
+    RESPUESTA_POR_CORREO,
+    INTERES_FUTURO,
+    CERRADO_PERDIDO
+}

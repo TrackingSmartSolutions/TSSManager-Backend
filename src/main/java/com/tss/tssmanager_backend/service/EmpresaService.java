@@ -42,6 +42,9 @@ public class EmpresaService {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private TratoRepository tratoRepository;
+
     @Transactional
     public EmpresaDTO agregarEmpresaConContactos(Empresa empresa, List<ContactoDTO> contactosDTO) {
         logger.info("Agregando nueva empresa con contactos: {}", empresa.getNombre());
@@ -439,14 +442,6 @@ public class EmpresaService {
             logger.error("Validación fallida: Nombre y Domicilio Físico son obligatorios para empresa");
             throw new IllegalArgumentException("Nombre y Domicilio Físico son obligatorios");
         }
-        if (empresa.getEstatus() == EstatusEmpresaEnum.CLIENTE &&
-                (empresa.getDomicilioFiscal() == null || empresa.getDomicilioFiscal().trim().isEmpty() ||
-                        empresa.getRfc() == null || empresa.getRfc().trim().isEmpty() ||
-                        empresa.getRazonSocial() == null || empresa.getRazonSocial().trim().isEmpty() ||
-                        empresa.getRegimenFiscal() == null || empresa.getRegimenFiscal().trim().isEmpty())) {
-            logger.error("Validación fallida: Campos fiscales son obligatorios para estatus Cliente");
-            throw new IllegalArgumentException("Campos fiscales son obligatorios para estatus Cliente");
-        }
     }
 
     private String getUsuarioLogueadoName() {
@@ -464,9 +459,21 @@ public class EmpresaService {
         return nombreUsuario != null ? usuarioRepository.findByNombreUsuario(nombreUsuario) : null;
     }
 
-    @Deprecated
-    public EmpresaDTO agregarEmpresa(Empresa empresa) {
-        logger.warn("Usando método obsoleto agregarEmpresa. Usa agregarEmpresaConContactos en su lugar.");
-        return agregarEmpresaConContactos(empresa, null);
+    @Transactional(readOnly = true)
+    public boolean hasTratos(Integer empresaId) {
+        logger.info("Checking if empresa with ID: {} has tratos", empresaId);
+        return tratoRepository.existsByEmpresaId(empresaId);
     }
+
+    @Transactional(readOnly = true)
+    public EmpresaDTO getEmpresaById(Integer id) {
+        logger.info("Obteniendo empresa con ID: {}", id);
+        Empresa empresa = empresaRepository.findById(id)
+                .orElseThrow(() -> {
+                    logger.error("Empresa no encontrada con ID: {}", id);
+                    return new ResourceNotFoundException("Empresa no encontrada con id: " + id);
+                });
+        return convertToEmpresaDTO(empresa);
+    }
+
 }

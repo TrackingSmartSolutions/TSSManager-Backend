@@ -18,6 +18,19 @@ public class ContactoDTO {
     private String modificadoPor;
     private PropietarioDTO propietario;
     private Integer propietarioId;
+    private String telefono;
+    private String whatsapp;
+    private String email;
+
+    public ContactoDTO() {
+    }
+
+    public ContactoDTO(String nombre, String telefono, String whatsapp, String email) {
+        this.nombre = nombre;
+        this.telefono = telefono;
+        this.whatsapp = whatsapp;
+        this.email = email;
+    }
 
     // Getters y Setters
     public Integer getId() { return id; }
@@ -46,4 +59,10 @@ public class ContactoDTO {
     public void setPropietario(PropietarioDTO propietario) { this.propietario = propietario; }
     public Integer getPropietarioId() { return propietarioId; }
     public void setPropietarioId(Integer propietarioId) { this.propietarioId = propietarioId; }
+    public String getTelefono() { return telefono; }
+    public void setTelefono(String telefono) { this.telefono = telefono; }
+    public String getWhatsapp() { return whatsapp; }
+    public void setWhatsapp(String whatsapp) { this.whatsapp = whatsapp; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 }

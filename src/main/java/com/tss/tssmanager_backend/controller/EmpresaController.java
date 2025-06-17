@@ -207,4 +207,31 @@ public class EmpresaController {
         empresa.setRegimenFiscal(empresaConContactoDTO.getRegimenFiscal());
         return empresa;
     }
+
+    @GetMapping("/{id}/has-tratos")
+    public ResponseEntity<Boolean> hasTratos(@PathVariable Integer id) {
+        try {
+            logger.debug("Solicitud para verificar si empresa con ID: {} tiene tratos", id);
+            boolean hasTratos = empresaService.hasTratos(id);
+            return ResponseEntity.ok(hasTratos);
+        } catch (Exception e) {
+            logger.error("Error al verificar tratos para empresa con ID: {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(false);
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<EmpresaDTO> getEmpresaById(@PathVariable Integer id) {
+        try {
+            logger.debug("Solicitud para obtener empresa con ID: {}", id);
+            EmpresaDTO empresaDTO = empresaService.getEmpresaById(id);
+            return ResponseEntity.ok(empresaDTO);
+        } catch (ResourceNotFoundException e) {
+            logger.error("Empresa no encontrada con ID: {}", id, e);
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error interno al obtener empresa con ID: {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
 }
