@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import java.sql.Date;
 import java.sql.Time;
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "\"Actividades\"")
@@ -28,7 +29,7 @@ public class Actividad {
     private Integer asignadoAId;
 
     @Column(name = "fecha_limite", nullable = false)
-    private Date fechaLimite;
+    private LocalDate fechaLimite;
 
     @Column(name = "hora_inicio")
     private Time horaInicio;
@@ -93,6 +94,13 @@ public class Actividad {
     @JoinColumn(name = "trato_id", insertable = false, updatable = false)
     private Trato trato;
 
+    @Column(name = "contacto_id")
+    private Integer contactoId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "contacto_id", insertable = false, updatable = false)
+    private Contacto contacto;
+
     // Getters y setters
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -104,8 +112,8 @@ public class Actividad {
     public void setSubtipoTarea(SubtipoTareaEnum subtipoTarea) { this.subtipoTarea = subtipoTarea; }
     public Integer getAsignadoAId() { return asignadoAId; }
     public void setAsignadoAId(Integer asignadoAId) { this.asignadoAId = asignadoAId; }
-    public Date getFechaLimite() { return fechaLimite; }
-    public void setFechaLimite(Date fechaLimite) { this.fechaLimite = fechaLimite; }
+    public LocalDate getFechaLimite() { return fechaLimite; }
+    public void setFechaLimite(LocalDate fechaLimite) { this.fechaLimite = fechaLimite; }
     public Time getHoraInicio() { return horaInicio; }
     public void setHoraInicio(Time horaInicio) { this.horaInicio = horaInicio; }
     public String getDuracion() { return duracion; }
@@ -142,4 +150,8 @@ public class Actividad {
     public void setFechaModificacion(Instant fechaModificacion) { this.fechaModificacion = fechaModificacion; }
     public Trato getTrato() { return trato; }
     public void setTrato(Trato trato) { this.trato = trato; }
+    public Integer getContactoId() { return contactoId; }
+    public void setContactoId(Integer contactoId) { this.contactoId = contactoId; }
+    public Contacto getContacto() { return contacto; }
+    public void setContacto(Contacto contacto) { this.contacto = contacto; }
 }

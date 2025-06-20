@@ -4,6 +4,7 @@ import com.tss.tssmanager_backend.enums.*;
 import java.sql.Date;
 import java.sql.Time;
 import java.time.Instant;
+import java.time.LocalDate;
 
 public class ActividadDTO {
     private Integer id;
@@ -11,7 +12,7 @@ public class ActividadDTO {
     private TipoActividadEnum tipo;
     private SubtipoTareaEnum subtipoTarea;
     private Integer asignadoAId;
-    private Date fechaLimite;
+    private LocalDate fechaLimite;
     private Time horaInicio;
     private String duracion;
     private ModalidadActividadEnum modalidad;
@@ -29,6 +30,7 @@ public class ActividadDTO {
     private String notas;
     private Instant fechaCreacion;
     private Instant fechaModificacion;
+    private Integer contactoId;
 
     // Getters y setters
     public Integer getId() { return id; }
@@ -41,8 +43,8 @@ public class ActividadDTO {
     public void setSubtipoTarea(SubtipoTareaEnum subtipoTarea) { this.subtipoTarea = subtipoTarea; }
     public Integer getAsignadoAId() { return asignadoAId; }
     public void setAsignadoAId(Integer asignadoAId) { this.asignadoAId = asignadoAId; }
-    public Date getFechaLimite() { return fechaLimite; }
-    public void setFechaLimite(Date fechaLimite) { this.fechaLimite = fechaLimite; }
+    public LocalDate getFechaLimite() { return fechaLimite; }
+    public void setFechaLimite(LocalDate fechaLimite) { this.fechaLimite = fechaLimite; }
     public Time getHoraInicio() { return horaInicio; }
     public void setHoraInicio(Time horaInicio) { this.horaInicio = horaInicio; }
     public String getDuracion() { return duracion; }
@@ -77,4 +79,6 @@ public class ActividadDTO {
     public void setFechaCreacion(Instant fechaCreacion) { this.fechaCreacion = fechaCreacion; }
     public Instant getFechaModificacion() { return fechaModificacion; }
     public void setFechaModificacion(Instant fechaModificacion) { this.fechaModificacion = fechaModificacion; }
+    public Integer getContactoId() { return contactoId; }
+    public void setContactoId(Integer contactoId) { this.contactoId = contactoId; }
 }

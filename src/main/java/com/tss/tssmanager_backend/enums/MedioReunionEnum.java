@@ -4,5 +4,9 @@ public enum MedioReunionEnum {
     MEET,
     ZOOM,
     TEAMS,
-    OTRO
+    WHATSAPP,
+    TELEFONO,
+    OUTLOOK,
+    GMAIL,
+    PRESENCIAL
 }

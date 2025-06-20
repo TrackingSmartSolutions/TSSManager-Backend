@@ -119,8 +119,52 @@ public class TratoService {
         actividad.setFechaCreacion(Instant.now());
         actividad.setFechaModificacion(Instant.now());
 
+        // Asignar contactoId directamente
+        if (actividadDTO.getContactoId() != null) {
+            actividad.setContactoId(actividadDTO.getContactoId());
+            // Opcional: validar que el contacto existe si es necesario
+            Contacto contacto = entityManager.find(Contacto.class, actividadDTO.getContactoId());
+            if (contacto == null) {
+                throw new RuntimeException("El contacto con ID " + actividadDTO.getContactoId() + " no existe.");
+            }
+        }
+
         Actividad savedActividad = actividadRepository.save(actividad);
         return convertToDTO(savedActividad);
+    }
+
+    @Transactional
+    public ActividadDTO reprogramarActividad(Integer id, ActividadDTO actividadDTO) {
+        Actividad actividad = actividadRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Actividad no encontrada con id: " + id));
+
+        actividad.setAsignadoAId(actividadDTO.getAsignadoAId() != null ? actividadDTO.getAsignadoAId() : actividad.getAsignadoAId());
+        actividad.setFechaLimite(actividadDTO.getFechaLimite() != null ? actividadDTO.getFechaLimite() : actividad.getFechaLimite());
+        actividad.setHoraInicio(actividadDTO.getHoraInicio() != null ? actividadDTO.getHoraInicio() : actividad.getHoraInicio());
+        actividad.setDuracion(actividadDTO.getDuracion() != null ? actividadDTO.getDuracion() : actividad.getDuracion());
+        actividad.setModalidad(actividadDTO.getModalidad() != null ? actividadDTO.getModalidad() : actividad.getModalidad());
+        actividad.setLugarReunion(actividadDTO.getLugarReunion() != null ? actividadDTO.getLugarReunion() : actividad.getLugarReunion());
+        actividad.setMedio(actividadDTO.getMedio() != null ? actividadDTO.getMedio() : actividad.getMedio());
+        actividad.setEnlaceReunion(actividadDTO.getEnlaceReunion() != null ? actividadDTO.getEnlaceReunion() : actividad.getEnlaceReunion());
+        actividad.setFinalidad(actividadDTO.getFinalidad() != null ? actividadDTO.getFinalidad() : actividad.getFinalidad());
+        actividad.setSubtipoTarea(actividadDTO.getSubtipoTarea() != null ? actividadDTO.getSubtipoTarea() : actividad.getSubtipoTarea());
+        actividad.setContactoId(actividadDTO.getContactoId() != null ? actividadDTO.getContactoId() : actividad.getContactoId());
+
+        if (EstatusActividadEnum.CERRADA.equals(actividad.getEstatus())) {
+            throw new RuntimeException("No se puede reprogramar una actividad cerrada.");
+        }
+        actividad.setEstatus(EstatusActividadEnum.ABIERTA);
+        actividad.setFechaModificacion(Instant.now());
+
+        if (actividadDTO.getContactoId() != null) {
+            Contacto contacto = entityManager.find(Contacto.class, actividadDTO.getContactoId());
+            if (contacto == null) {
+                throw new RuntimeException("El contacto con ID " + actividadDTO.getContactoId() + " no existe.");
+            }
+        }
+
+        Actividad updatedActividad = actividadRepository.save(actividad);
+        return convertToDTO(updatedActividad);
     }
 
     public NotaTratoDTO agregarNota(Integer tratoId, String nota) {
@@ -170,6 +214,7 @@ public class TratoService {
         }
         trato.setNumeroUnidades(tratoDTO.getNumeroUnidades());
         trato.setIngresosEsperados(tratoDTO.getIngresosEsperados());
+        trato.setPropietarioId(tratoDTO.getPropietarioId());
         trato.setDescripcion(tratoDTO.getDescripcion());
         trato.setFechaModificacion(Instant.now());
         trato.setFechaUltimaActividad(Instant.now());
@@ -188,6 +233,7 @@ public class TratoService {
         actividad.setInformacion(actividadDTO.getInformacion());
         actividad.setSiguienteAccion(actividadDTO.getSiguienteAccion());
         actividad.setNotas(actividadDTO.getNotas());
+        actividad.setMedio(actividadDTO.getMedio());
         actividad.setFechaModificacion(Instant.now());
 
         Actividad updatedActividad = actividadRepository.save(actividad);
@@ -258,14 +304,41 @@ public class TratoService {
         List<Actividad> actividades = actividadRepository.findByTratoId(trato.getId());
         if (actividades != null) {
             dto.setActividades(actividades.stream().map(this::convertToDTO).collect(Collectors.toList()));
+            List<Actividad> actividadesAbiertas = actividades.stream()
+                    .filter(a -> EstatusActividadEnum.ABIERTA.equals(a.getEstatus()))
+                    .collect(Collectors.toList());
             dto.setActividadesAbiertas(new ActividadesAbiertasDTO(
-                    actividades.stream().filter(a -> a.getTipo() != null && a.getTipo().name().equalsIgnoreCase("TAREA")).map(this::convertToDTO).collect(Collectors.toList()),
-                    actividades.stream().filter(a -> a.getTipo() != null && a.getTipo().name().equalsIgnoreCase("LLAMADA")).map(this::convertToDTO).collect(Collectors.toList()),
-                    actividades.stream().filter(a -> a.getTipo() != null && a.getTipo().name().equalsIgnoreCase("REUNION")).map(this::convertToDTO).collect(Collectors.toList())
+                    actividadesAbiertas.stream()
+                            .filter(a -> a.getTipo() != null && a.getTipo().name().equalsIgnoreCase("TAREA"))
+                            .map(a -> enrichWithContacto(a, trato.getContacto()))
+                            .collect(Collectors.toList()),
+                    actividadesAbiertas.stream()
+                            .filter(a -> a.getTipo() != null && a.getTipo().name().equalsIgnoreCase("LLAMADA"))
+                            .map(a -> enrichWithContacto(a, trato.getContacto()))
+                            .collect(Collectors.toList()),
+                    actividadesAbiertas.stream()
+                            .filter(a -> a.getTipo() != null && a.getTipo().name().equalsIgnoreCase("REUNION"))
+                            .map(a -> enrichWithContacto(a, trato.getContacto()))
+                            .collect(Collectors.toList())
             ));
+            dto.setHistorialInteracciones(
+                    actividades.stream()
+                            .filter(a -> EstatusActividadEnum.CERRADA.equals(a.getEstatus()))
+                            .map(a -> {
+                                ActividadDTO interaccion = convertToDTO(a);
+                                interaccion.setFechaCompletado(a.getFechaCompletado());
+                                interaccion.setUsuarioCompletadoId(a.getUsuarioCompletadoId());
+                                interaccion.setRespuesta(a.getRespuesta());
+                                return interaccion;
+                            })
+                            .collect(Collectors.toList())
+            );
+
+
         } else {
             dto.setActividades(new ArrayList<>());
             dto.setActividadesAbiertas(new ActividadesAbiertasDTO(new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
+            dto.setHistorialInteracciones(new ArrayList<>());
         }
 
         dto.setFases(generateFases(trato.getFase()));
@@ -284,7 +357,6 @@ public class TratoService {
             dto.getContacto().setFechaModificacion(contacto.getFechaModificacion());
             dto.getContacto().setFechaUltimaActividad(contacto.getFechaUltimaActividad());
         }
-
         dto.setHistorialInteracciones(
                 actividades.stream()
                         .filter(a -> EstatusActividadEnum.CERRADA.equals(a.getEstatus()))
@@ -323,6 +395,15 @@ public class TratoService {
         dto.setNotas(actividad.getNotas());
         dto.setFechaCreacion(actividad.getFechaCreacion());
         dto.setFechaModificacion(actividad.getFechaModificacion());
+        dto.setContactoId(actividad.getContactoId());
+        return dto;
+    }
+
+    private ActividadDTO enrichWithContacto(Actividad actividad, Contacto tratoContacto) {
+        ActividadDTO dto = convertToDTO(actividad);
+        if (dto.getContactoId() == null && tratoContacto != null) {
+            dto.setContactoId(tratoContacto.getId());
+        }
         return dto;
     }
 

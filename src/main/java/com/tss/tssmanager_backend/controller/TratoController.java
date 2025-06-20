@@ -46,6 +46,12 @@ public class TratoController {
         return tratoService.programarActividad(actividadDTO);
     }
 
+    @PutMapping("/{tratoId}/actividades/{actividadId}")
+    public ActividadDTO reprogramarActividad(@PathVariable Integer tratoId, @PathVariable Integer actividadId, @RequestBody ActividadDTO actividadDTO) {
+        ActividadDTO updatedActividad = tratoService.reprogramarActividad(actividadId, actividadDTO);
+        return updatedActividad;
+    }
+
     @PostMapping("/{tratoId}/notas")
     public NotaTratoDTO agregarNota(@PathVariable Integer tratoId, @RequestBody String nota) {
         return tratoService.agregarNota(tratoId, nota);
