@@ -16,9 +16,17 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
     List<Trato> findByEmpresaId(Integer empresaId);
     List<Trato> findByFechaCreacionBetween(Instant startDate, Instant endDate);
     boolean existsByEmpresaId(Integer empresaId);
+    List<Trato> findByEmpresaIdAndFechaCreacionBetween(Integer empresaId, Instant start, Instant end);
+    List<Trato> findByEmpresaIdAndPropietarioIdAndFechaCreacionBetween(Integer empresaId, Integer propietarioId, Instant start, Instant end);
 
     @Query("SELECT t FROM Trato t LEFT JOIN FETCH t.contacto c LEFT JOIN FETCH c.telefonos WHERE t.id = :id")
     Optional<Trato> findTratoWithContactoAndTelefonos(@Param("id") Integer id);
     @Query("SELECT t FROM Trato t JOIN FETCH t.contacto WHERE t.id = :id")
     Optional<Trato> findTratoWithContacto(Integer id);
+    @Query("SELECT t.propietarioId, COUNT(t) FROM Trato t WHERE t.fechaCreacion BETWEEN ?1 AND ?2 GROUP BY t.propietarioId")
+    List<Object[]> countTratosByPropietario(Instant startDate, Instant endDate);
+    @Query("SELECT t.fase, COUNT(t) FROM Trato t WHERE t.propietarioId = :propietarioId AND t.fechaCreacion BETWEEN :startDate AND :endDate GROUP BY t.fase")
+    List<Object[]> countTratosByFaseAndPropietario(@Param("propietarioId") Integer propietarioId, @Param("startDate") Instant startDate, @Param("endDate") Instant endDate);
+    @Query("SELECT t.fase, COUNT(t) FROM Trato t WHERE t.fechaCreacion BETWEEN :startDate AND :endDate GROUP BY t.fase")
+    List<Object[]> countTratosByFase(@Param("startDate") Instant startDate, @Param("endDate") Instant endDate);
 }

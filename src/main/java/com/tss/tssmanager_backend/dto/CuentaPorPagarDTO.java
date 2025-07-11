@@ -1,0 +1,13 @@
+package com.tss.tssmanager_backend.dto;
+
+import lombok.Data;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+@Data
+public class CuentaPorPagarDTO {
+    private Integer id;
+    private LocalDate fechaPago;
+    private BigDecimal monto;
+    private Integer usuarioId;
+}

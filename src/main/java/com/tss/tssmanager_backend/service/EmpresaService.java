@@ -68,7 +68,7 @@ public class EmpresaService {
             for (ContactoDTO contactoDTO : contactosDTO) {
                 Contacto contacto = new Contacto();
                 contacto.setEmpresa(savedEmpresa);
-                contacto.setPropietario(savedEmpresa.getPropietario()); // Usar el propietario de la empresa
+                contacto.setPropietario(savedEmpresa.getPropietario());
                 contacto.setCreadoPor(usuarioLogueado.getNombreUsuario());
                 contacto.setModificadoPor(usuarioLogueado.getNombreUsuario());
                 contacto.setNombre(contactoDTO.getNombre());
@@ -220,7 +220,7 @@ public class EmpresaService {
 
         Contacto contacto = new Contacto();
         contacto.setEmpresa(empresa);
-        contacto.setPropietario(empresa.getPropietario()); // Usar el propietario de la empresa
+        contacto.setPropietario(empresa.getPropietario());
         contacto.setCreadoPor(usuarioLogueado);
         contacto.setModificadoPor(usuarioLogueado);
         contacto.setNombre(contactoDTO.getNombre());
@@ -275,79 +275,91 @@ public class EmpresaService {
     @Transactional
     public ContactoDTO editarContacto(Integer id, ContactoDTO contactoDTO) {
         logger.info("Editando contacto con ID: {}", id);
-        Contacto contacto = contactoRepository.findById(id)
-                .orElseThrow(() -> {
-                    logger.error("Contacto no encontrado con ID: {}", id);
-                    return new ResourceNotFoundException("Contacto no encontrado con id: " + id);
-                });
 
-        contacto.setNombre(contactoDTO.getNombre());
-        contacto.setRol(contactoDTO.getRol());
-        contacto.setCelular(contactoDTO.getCelular());
-        if (contacto.getNombre() == null || contacto.getNombre().trim().isEmpty()) {
-            contacto.setNombre("Contacto de " + (contacto.getRol() != null ? contacto.getRol().name() : RolContactoEnum.RECEPCION.name()));
-        }
-        contacto.setFechaModificacion(Instant.now());
-        contacto.setFechaUltimaActividad(Instant.now());
+        try {
+            Contacto contacto = contactoRepository.findById(id)
+                    .orElseThrow(() -> {
+                        logger.error("Contacto no encontrado con ID: {}", id);
+                        return new ResourceNotFoundException("Contacto no encontrado con id: " + id);
+                    });
 
-        // Ignorar propietarioId del DTO, usar el propietario de la empresa
-        Empresa empresa = contacto.getEmpresa();
-        if (empresa != null && empresa.getPropietario() != null) {
-            contacto.setPropietario(empresa.getPropietario());
-        }
+            // Actualizar campos básicos
+            contacto.setNombre(contactoDTO.getNombre());
+            contacto.setRol(contactoDTO.getRol());
+            contacto.setCelular(contactoDTO.getCelular());
 
-        String usuarioLogueado = getUsuarioLogueadoName();
-        if (usuarioLogueado != null) {
-            contacto.setModificadoPor(usuarioLogueado);
-        } else if (contactoDTO.getModificadoPor() != null && !contactoDTO.getModificadoPor().isEmpty()) {
-            if (usuarioRepository.findByNombreUsuario(contactoDTO.getModificadoPor()) == null) {
-                logger.error("Usuario modificador no encontrado: {}", contactoDTO.getModificadoPor());
-                throw new IllegalArgumentException("Usuario modificador no encontrado: " + contactoDTO.getModificadoPor());
+            // Validar nombre
+            if (contacto.getNombre() == null || contacto.getNombre().trim().isEmpty()) {
+                contacto.setNombre("Contacto de " + (contacto.getRol() != null ? contacto.getRol().name() : RolContactoEnum.RECEPCION.name()));
             }
-            contacto.setModificadoPor(contactoDTO.getModificadoPor());
-        } else {
-            logger.warn("No se puede determinar el usuario modificador, usando creadoPor como fallback");
-            contacto.setModificadoPor(contacto.getCreadoPor());
-        }
 
-        if (contactoDTO.getCorreos() != null) {
-            contacto.getCorreos().clear();
-            List<CorreoContacto> nuevosCorreos = contactoDTO.getCorreos().stream()
-                    .map(dto -> {
-                        if (dto.getCorreo() == null || dto.getCorreo().trim().isEmpty()) {
-                            throw new IllegalArgumentException("El correo no puede estar vacío");
-                        }
+            contacto.setFechaModificacion(Instant.now());
+            contacto.setFechaUltimaActividad(Instant.now());
+
+            // Mantener propietario de la empresa
+            Empresa empresa = contacto.getEmpresa();
+            if (empresa != null && empresa.getPropietario() != null) {
+                contacto.setPropietario(empresa.getPropietario());
+            }
+
+            // Determinar usuario modificador
+            String usuarioLogueado = getUsuarioLogueadoName();
+            if (usuarioLogueado != null) {
+                contacto.setModificadoPor(usuarioLogueado);
+            } else if (contactoDTO.getModificadoPor() != null && !contactoDTO.getModificadoPor().trim().isEmpty()) {
+                contacto.setModificadoPor(contactoDTO.getModificadoPor());
+            } else {
+                contacto.setModificadoPor(contacto.getCreadoPor());
+            }
+
+            // Eliminar correos existentes usando repositorio
+            if (contactoDTO.getCorreos() != null) {
+                correoContactoRepository.deleteByContactoId(id);
+                correoContactoRepository.flush();
+
+                // Crear nuevos correos
+                for (CorreoDTO correoDTO : contactoDTO.getCorreos()) {
+                    if (correoDTO.getCorreo() != null && !correoDTO.getCorreo().trim().isEmpty()) {
                         CorreoContacto correo = new CorreoContacto();
-                        correo.setCorreo(dto.getCorreo());
+                        correo.setCorreo(correoDTO.getCorreo().trim());
                         correo.setContacto(contacto);
-                        return correo;
-                    })
-                    .collect(Collectors.toList());
-            contacto.setCorreos(nuevosCorreos);
-        }
+                        correoContactoRepository.save(correo);
+                    }
+                }
+            }
 
-        if (contactoDTO.getTelefonos() != null) {
-            contacto.getTelefonos().clear();
-            List<TelefonoContacto> nuevosTelefonos = contactoDTO.getTelefonos().stream()
-                    .map(dto -> {
-                        if (dto.getTelefono() == null || dto.getTelefono().trim().isEmpty()) {
-                            throw new IllegalArgumentException("El teléfono no puede estar vacío");
-                        }
+            // Eliminar teléfonos existentes usando repositorio
+            if (contactoDTO.getTelefonos() != null) {
+                telefonoContactoRepository.deleteByContactoId(id);
+                telefonoContactoRepository.flush();
+
+                // Crear nuevos teléfonos
+                for (TelefonoDTO telefonoDTO : contactoDTO.getTelefonos()) {
+                    if (telefonoDTO.getTelefono() != null && !telefonoDTO.getTelefono().trim().isEmpty()) {
                         TelefonoContacto telefono = new TelefonoContacto();
-                        telefono.setTelefono(dto.getTelefono());
+                        telefono.setTelefono(telefonoDTO.getTelefono().trim());
                         telefono.setContacto(contacto);
-                        return telefono;
-                    })
-                    .collect(Collectors.toList());
-            contacto.setTelefonos(nuevosTelefonos);
+                        telefonoContactoRepository.save(telefono);
+                    }
+                }
+            }
+
+            // Guardar el contacto
+            Contacto savedContacto = contactoRepository.save(contacto);
+
+            // Actualizar fecha de última actividad de la empresa
+            empresa.setFechaUltimaActividad(Instant.now());
+            empresaRepository.save(empresa);
+
+            logger.info("Contacto con ID: {} editado exitosamente", id);
+            return convertToContactoDTO(savedContacto);
+
+        } catch (ResourceNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("Error inesperado al editar contacto con ID {}: {}", id, e.getMessage(), e);
+            throw new RuntimeException("Error al editar contacto: " + e.getMessage(), e);
         }
-
-        Contacto savedContacto = contactoRepository.save(contacto);
-        empresa.setFechaUltimaActividad(Instant.now());
-        empresaRepository.save(empresa);
-
-        logger.info("Contacto con ID: {} editado exitosamente", id);
-        return convertToContactoDTO(savedContacto);
     }
 
     @Transactional
@@ -378,7 +390,18 @@ public class EmpresaService {
         return result;
     }
 
-    private EmpresaDTO convertToEmpresaDTO(Empresa empresa) {
+    @Transactional(readOnly = true)
+    public ContactoDTO getContactoById(Integer id) {
+        logger.info("Obteniendo contacto con ID: {}", id);
+        Contacto contacto = contactoRepository.findById(id)
+                .orElseThrow(() -> {
+                    logger.error("Contacto no encontrado con ID: {}", id);
+                    return new ResourceNotFoundException("Contacto no encontrado con id: " + id);
+                });
+        return convertToContactoDTO(contacto);
+    }
+
+    public EmpresaDTO convertToEmpresaDTO(Empresa empresa) {
         EmpresaDTO dto = new EmpresaDTO();
         dto.setId(empresa.getId());
         dto.setNombre(empresa.getNombre());
@@ -401,6 +424,7 @@ public class EmpresaService {
         }
         return dto;
     }
+
 
     private ContactoDTO convertToContactoDTO(Contacto contacto) {
         ContactoDTO dto = new ContactoDTO();

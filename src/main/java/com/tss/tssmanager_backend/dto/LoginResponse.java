@@ -1,5 +1,8 @@
 package com.tss.tssmanager_backend.dto;
 
+import lombok.Data;
+
+@Data
 public class LoginResponse {
     private String token;
     private String message;
@@ -10,12 +13,4 @@ public class LoginResponse {
         this.message = message;
         this.rol = rol;
     }
-
-    // Getters and Setters
-    public String getToken() { return token; }
-    public void setToken(String token) { this.token = token; }
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-    public String getRol() { return rol; }
-    public void setRol(String rol) { this.rol = rol; }
 }

@@ -4,6 +4,7 @@ import com.tss.tssmanager_backend.dto.LoginRequest;
 import com.tss.tssmanager_backend.dto.LoginResponse;
 import com.tss.tssmanager_backend.dto.UsuarioDTO;
 import com.tss.tssmanager_backend.entity.Usuario;
+import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
 import com.tss.tssmanager_backend.repository.UsuarioRepository;
 import com.tss.tssmanager_backend.security.JwtUtil;
 import com.tss.tssmanager_backend.service.UsuarioService;
@@ -16,6 +17,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -52,5 +54,56 @@ public class AuthController {
     public ResponseEntity<List<UsuarioDTO>> getAllUsers() {
         List<UsuarioDTO> users = usuarioService.listarUsuarios();
         return ResponseEntity.ok(users);
+    }
+
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<Usuario> getUserById(@PathVariable Integer userId) {
+        Usuario usuario = usuarioRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return ResponseEntity.ok(usuario);
+    }
+
+    @GetMapping("/users/by-username/{nombreUsuario}")
+    public ResponseEntity<Usuario> getUserByUsername(@PathVariable String nombreUsuario) {
+        Usuario usuario = usuarioRepository.findByNombreUsuario(nombreUsuario);
+        if (usuario == null) {
+            throw new RuntimeException("Usuario no encontrado con nombreUsuario: " + nombreUsuario);
+        }
+        return ResponseEntity.ok(usuario);
+    }
+
+    @PostMapping("/users")
+    public ResponseEntity<Usuario> createUser(@RequestBody Usuario usuario) {
+        Usuario savedUsuario = usuarioService.guardarUsuario(usuario);
+        return ResponseEntity.ok(savedUsuario);
+    }
+
+    @PutMapping("/users/{userId}")
+    public ResponseEntity<Usuario> updateUser(@PathVariable Integer userId, @RequestBody Usuario usuario) {
+        usuario.setId(userId);
+        Usuario updatedUsuario = usuarioService.guardarUsuario(usuario);
+        return ResponseEntity.ok(updatedUsuario);
+    }
+
+    @PatchMapping("/users/{userId}/status")
+    public ResponseEntity<Usuario> toggleUserStatus(@PathVariable Integer userId) {
+        Usuario usuario = usuarioRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        usuario.setEstatus(usuario.getEstatus() == EstatusUsuarioEnum.ACTIVO ? EstatusUsuarioEnum.INACTIVO : EstatusUsuarioEnum.ACTIVO);
+        Usuario updatedUsuario = usuarioRepository.save(usuario);
+        return ResponseEntity.ok(updatedUsuario);
+    }
+
+    @PatchMapping("/users/{userId}/password")
+    public ResponseEntity<Usuario> resetPassword(@PathVariable Integer userId, @RequestBody Map<String, String> passwordData) {
+        String nuevaContrasena = passwordData.get("nuevaContrasena");
+        usuarioService.restablecerContrasena(userId, nuevaContrasena);
+        return ResponseEntity.ok(usuarioRepository.findById(userId).get());
+    }
+
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Integer userId) {
+        usuarioService.eliminarUsuario(userId);
+        return ResponseEntity.noContent().build();
     }
 }

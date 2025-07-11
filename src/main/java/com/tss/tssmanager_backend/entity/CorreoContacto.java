@@ -2,9 +2,11 @@ package com.tss.tssmanager_backend.entity;
 
 import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import lombok.Data;
 
 @Entity
 @Table(name = "\"Correos_Contactos\"")
+@Data
 public class CorreoContacto {
 
     @Id
@@ -19,13 +21,4 @@ public class CorreoContacto {
     @Column(nullable = false)
     private String correo;
 
-    // Getters y Setters
-    public Integer getId() { return id; }
-    public void setId(Integer id) { this.id = id; }
-
-    public Contacto getContacto() { return contacto; }
-    public void setContacto(Contacto contacto) { this.contacto = contacto; }
-
-    public String getCorreo() { return correo; }
-    public void setCorreo(String correo) { this.correo = correo; }
 }

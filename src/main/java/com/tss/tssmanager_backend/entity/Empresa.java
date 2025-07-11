@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+
+import lombok.Data;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -16,6 +18,7 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 @Entity
 @Table(name = "\"Empresas\"")
+@Data
 @EntityListeners(AuditingEntityListener.class)
 public class Empresa {
 
@@ -79,140 +82,4 @@ public class Empresa {
     @OneToMany(mappedBy = "empresa", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<Contacto> contactos = new ArrayList<>();
-
-    public Integer getId() {
-        return id;
-    }
-
-    public void setId(Integer id) {
-        this.id = id;
-    }
-
-    public String getNombre() {
-        return nombre;
-    }
-
-    public void setNombre(String nombre) {
-        this.nombre = nombre;
-    }
-
-    public Usuario getPropietario() {
-        return propietario;
-    }
-
-    public void setPropietario(Usuario propietario) {
-        this.propietario = propietario;
-    }
-
-    public EstatusEmpresaEnum getEstatus() {
-        return estatus;
-    }
-
-    public void setEstatus(EstatusEmpresaEnum estatus) {
-        this.estatus = estatus;
-    }
-
-    public String getSitioWeb() {
-        return sitioWeb;
-    }
-
-    public void setSitioWeb(String sitioWeb) {
-        this.sitioWeb = sitioWeb;
-    }
-
-    public SectorEmpresaEnum getSector() {
-        return sector;
-    }
-
-    public void setSector(SectorEmpresaEnum sector) {
-        this.sector = sector;
-    }
-
-    public String getDomicilioFisico() {
-        return domicilioFisico;
-    }
-
-    public void setDomicilioFisico(String domicilioFisico) {
-        this.domicilioFisico = domicilioFisico;
-    }
-
-    public String getDomicilioFiscal() {
-        return domicilioFiscal;
-    }
-
-    public void setDomicilioFiscal(String domicilioFiscal) {
-        this.domicilioFiscal = domicilioFiscal;
-    }
-
-    public String getRfc() {
-        return rfc;
-    }
-
-    public void setRfc(String rfc) {
-        this.rfc = rfc;
-    }
-
-    public String getRazonSocial() {
-        return razonSocial;
-    }
-
-    public void setRazonSocial(String razonSocial) {
-        this.razonSocial = razonSocial;
-    }
-
-    public String getRegimenFiscal() {
-        return regimenFiscal;
-    }
-
-    public void setRegimenFiscal(String regimenFiscal) {
-        this.regimenFiscal = regimenFiscal;
-    }
-
-    public String getCreadoPor() {
-        return creadoPor;
-    }
-
-    public void setCreadoPor(String creadoPor) {
-        this.creadoPor = creadoPor;
-    }
-
-    public String getModificadoPor() {
-        return modificadoPor;
-    }
-
-    public void setModificadoPor(String modificadoPor) {
-        this.modificadoPor = modificadoPor;
-    }
-
-    public Instant getFechaCreacion() {
-        return fechaCreacion;
-    }
-
-    public void setFechaCreacion(Instant fechaCreacion) {
-        this.fechaCreacion = fechaCreacion;
-    }
-
-    public Instant getFechaModificacion() {
-        return fechaModificacion;
-    }
-
-    public void setFechaModificacion(Instant fechaModificacion) {
-        this.fechaModificacion = fechaModificacion;
-    }
-
-    public Instant getFechaUltimaActividad() {
-        return fechaUltimaActividad;
-    }
-
-    public void setFechaUltimaActividad(Instant fechaUltimaActividad) {
-        this.fechaUltimaActividad = fechaUltimaActividad;
-    }
-
-    public List<Contacto> getContactos() {
-        return contactos;
-    }
-
-    public void setContactos(List<Contacto> contactos) {
-        this.contactos = contactos;
-    }
 }

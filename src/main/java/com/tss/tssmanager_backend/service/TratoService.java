@@ -255,6 +255,63 @@ public class TratoService {
         return fases;
     }
 
+    @Transactional
+    public List<TratoDTO> filtrarTratos(Integer empresaId, Integer propietarioId, Instant startDate, Instant endDate) {
+        List<Trato> tratos;
+        Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10); // 10 years ago
+        Instant end = (endDate != null) ? endDate : Instant.now();
+
+        if (empresaId != null && propietarioId != null) {
+            tratos = tratoRepository.findByEmpresaIdAndPropietarioIdAndFechaCreacionBetween(empresaId, propietarioId, start, end);
+        } else if (empresaId != null) {
+            tratos = tratoRepository.findByEmpresaIdAndFechaCreacionBetween(empresaId, start, end);
+        } else if (propietarioId != null) {
+            tratos = tratoRepository.findByPropietarioIdAndFechaCreacionBetween(propietarioId, start, end);
+        } else {
+            tratos = tratoRepository.findByFechaCreacionBetween(start, end);
+        }
+        return tratos.stream().map(this::convertToDTO).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<TratoDTO> contarTratosPorPropietario(Instant startDate, Instant endDate) {
+        Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10);
+        Instant end = (endDate != null) ? endDate : Instant.now();
+        List<Object[]> results = tratoRepository.countTratosByPropietario(start, end);
+        return results.stream().map(result -> {
+            Integer propietarioId = (Integer) result[0];
+            Long count = (Long) result[1];
+            Usuario usuario = usuarioRepository.findById(propietarioId).orElse(null);
+            TratoDTO dto = new TratoDTO();
+            dto.setPropietarioId(propietarioId);
+            dto.setPropietarioNombre(usuario != null ? usuario.getNombre() : "Usuario Desconocido");
+            dto.setNumeroUnidades(count.intValue());
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<TratoCountDTO> contarTratosPorFaseYPropietario(Integer propietarioId, Instant startDate, Instant endDate) {
+        Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10); // 10 years ago
+        Instant end = (endDate != null) ? endDate : Instant.now();
+
+        List<Object[]> results;
+        if (propietarioId == null) {
+            results = tratoRepository.countTratosByFase(start, end);
+        } else {
+            results = tratoRepository.countTratosByFaseAndPropietario(propietarioId, start, end);
+        }
+
+        return results.stream().map(result -> {
+            String fase = (String) result[0];
+            Long count = (Long) result[1];
+            TratoCountDTO dto = new TratoCountDTO();
+            dto.setFase(fase);
+            dto.setCount(count.intValue());
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
     private TratoDTO convertToDTO(Trato trato) {
         TratoDTO dto = new TratoDTO();
         dto.setId(trato.getId());
@@ -370,7 +427,7 @@ public class TratoService {
         return dto;
     }
 
-    private ActividadDTO convertToDTO(Actividad actividad) {
+    public ActividadDTO convertToDTO(Actividad actividad) {
         ActividadDTO dto = new ActividadDTO();
         dto.setId(actividad.getId());
         dto.setTratoId(actividad.getTratoId());

@@ -234,4 +234,19 @@ public class EmpresaController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
+
+    @GetMapping("/contactos/{contactoId}")
+    public ResponseEntity<ContactoDTO> getContactoById(@PathVariable Integer contactoId) {
+        try {
+            logger.debug("Solicitud para obtener contacto con ID: {}", contactoId);
+            ContactoDTO contactoDTO = empresaService.getContactoById(contactoId);
+            return ResponseEntity.ok(contactoDTO);
+        } catch (ResourceNotFoundException e) {
+            logger.error("Contacto no encontrado con ID: {}", contactoId, e);
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error interno al obtener contacto con ID: {}: {}", contactoId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
 }

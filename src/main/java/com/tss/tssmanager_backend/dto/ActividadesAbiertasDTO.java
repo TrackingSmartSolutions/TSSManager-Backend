@@ -1,7 +1,9 @@
 package com.tss.tssmanager_backend.dto;
 
+import lombok.Data;
 import java.util.List;
 
+@Data
 public class ActividadesAbiertasDTO {
     private List<ActividadDTO> tareas;
     private List<ActividadDTO> llamadas;
@@ -13,10 +15,4 @@ public class ActividadesAbiertasDTO {
         this.reuniones = reuniones;
     }
 
-    public List<ActividadDTO> getTareas() { return tareas; }
-    public void setTareas(List<ActividadDTO> tareas) { this.tareas = tareas; }
-    public List<ActividadDTO> getLlamadas() { return llamadas; }
-    public void setLlamadas(List<ActividadDTO> llamadas) { this.llamadas = llamadas; }
-    public List<ActividadDTO> getReuniones() { return reuniones; }
-    public void setReuniones(List<ActividadDTO> reuniones) { this.reuniones = reuniones; }
 }
