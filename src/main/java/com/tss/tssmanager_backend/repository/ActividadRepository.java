@@ -26,4 +26,10 @@ public interface ActividadRepository extends JpaRepository<Actividad, Integer> {
             LocalDate fechaLimite,
             EstatusActividadEnum estatus
     );
+    @Query("SELECT a FROM Actividad a WHERE a.asignadoAId = :asignadoAId AND a.fechaLimite BETWEEN :start AND :end")
+    List<Actividad> findByAsignadoAIdAndFechaLimiteBetween(
+            @Param("asignadoAId") Integer asignadoAId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end);
+    List<Actividad> findByFechaLimiteBetween(LocalDate start, LocalDate end);
 }
