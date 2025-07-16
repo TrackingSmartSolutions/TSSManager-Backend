@@ -32,4 +32,8 @@ public interface ActividadRepository extends JpaRepository<Actividad, Integer> {
             @Param("start") LocalDate start,
             @Param("end") LocalDate end);
     List<Actividad> findByFechaLimiteBetween(LocalDate start, LocalDate end);
+
+    List<Actividad> findByFechaLimite(LocalDate fecha);
+
+    List<Actividad> findByFechaLimiteBetweenAndEstatus(LocalDate start, LocalDate end, EstatusActividadEnum estatus);
 }

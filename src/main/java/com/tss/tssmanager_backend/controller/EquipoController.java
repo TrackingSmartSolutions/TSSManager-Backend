@@ -2,7 +2,6 @@ package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.dto.EquiposEstatusDTO;
 import com.tss.tssmanager_backend.entity.Equipo;
-import com.tss.tssmanager_backend.entity.EquiposEstatus;
 import com.tss.tssmanager_backend.enums.EstatusEquipoEnum;
 import com.tss.tssmanager_backend.enums.PlataformaEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoActivacionEquipoEnum;

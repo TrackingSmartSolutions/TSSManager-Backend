@@ -36,5 +36,7 @@ public class TratoDTO {
     private String sitioWeb;
     private String sector;
 
+    private boolean escalado;
+    private String nuevoAdministradorNombre;
 }
 

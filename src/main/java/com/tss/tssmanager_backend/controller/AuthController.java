@@ -7,6 +7,7 @@ import com.tss.tssmanager_backend.entity.Usuario;
 import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
 import com.tss.tssmanager_backend.repository.UsuarioRepository;
 import com.tss.tssmanager_backend.security.JwtUtil;
+import com.tss.tssmanager_backend.service.NotificacionService;
 import com.tss.tssmanager_backend.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,15 +27,14 @@ public class AuthController {
 
     @Autowired
     private AuthenticationManager authenticationManager;
-
     @Autowired
     private JwtUtil jwtUtil;
-
     @Autowired
     private UsuarioRepository usuarioRepository;
-
     @Autowired
     private UsuarioService usuarioService;
+    @Autowired
+    private NotificacionService notificacionService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
@@ -106,4 +107,37 @@ public class AuthController {
         usuarioService.eliminarUsuario(userId);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/solicitar-cambio-contrasena")
+    public ResponseEntity<?> solicitarCambioContrasena(@RequestBody Map<String, String> request) {
+        String correo = request.get("correo");
+        if (correo == null || correo.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "El correo electrónico es requerido"
+            ));
+        }
+        try {
+            Usuario usuario = usuarioRepository.findByCorreoElectronico(correo);
+            if (usuario == null) {
+                // Retornar error específico para correo no encontrado
+                return ResponseEntity.status(404).body(Map.of(
+                        "success", false,
+                        "message", "El correo electrónico no está registrado en el sistema"
+                ));
+            }
+            // Generar la notificación para administradores
+            notificacionService.generarNotificacionCambiarContrasena(usuario.getNombre(), usuario.getCorreoElectronico());
+            return ResponseEntity.ok().body(Map.of(
+                    "success", true,
+                    "message", "Solicitud enviada correctamente"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "message", "Error interno del servidor"
+            ));
+        }
+    }
 }
+

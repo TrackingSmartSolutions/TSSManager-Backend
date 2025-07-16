@@ -29,4 +29,13 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
     List<Object[]> countTratosByFaseAndPropietario(@Param("propietarioId") Integer propietarioId, @Param("startDate") Instant startDate, @Param("endDate") Instant endDate);
     @Query("SELECT t.fase, COUNT(t) FROM Trato t WHERE t.fechaCreacion BETWEEN :startDate AND :endDate GROUP BY t.fase")
     List<Object[]> countTratosByFase(@Param("startDate") Instant startDate, @Param("endDate") Instant endDate);
+
+    @Query("SELECT DISTINCT t FROM Trato t LEFT JOIN Actividad a ON t.id = a.tratoId " +
+            "WHERE (t.propietarioId = :userId OR a.asignadoAId = :userId) " +
+            "AND t.fechaCreacion BETWEEN :startDate AND :endDate")
+    List<Trato> findByPropietarioIdOrAsignadoIdAndFechaCreacionBetween(
+            @Param("userId") Integer userId,
+            @Param("startDate") Instant startDate,
+            @Param("endDate") Instant endDate
+    );
 }

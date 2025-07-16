@@ -3,7 +3,8 @@ package com.tss.tssmanager_backend.service;
 import com.tss.tssmanager_backend.dto.*;
 import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
-import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
+import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
+import com.tss.tssmanager_backend.enums.RolUsuarioEnum;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.persistence.EntityManager;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,21 +35,10 @@ public class TratoService {
     private UsuarioRepository usuarioRepository;
     @Autowired
     private EmpresaRepository empresaRepository;
+    @Autowired
+    private NotificacionService notificacionService;
     @PersistenceContext
     private EntityManager entityManager;
-
-    @Transactional
-    public List<TratoDTO> filtrarTratos(Integer propietarioId, Instant startDate, Instant endDate) {
-        List<Trato> tratos;
-        Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10); // 10 years ago
-        Instant end = (endDate != null) ? endDate : Instant.now();
-        if (propietarioId != null) {
-            tratos = tratoRepository.findByPropietarioIdAndFechaCreacionBetween(propietarioId, start, end);
-        } else {
-            tratos = tratoRepository.findByFechaCreacionBetween(start, end);
-        }
-        return tratos.stream().map(this::convertToDTO).collect(Collectors.toList());
-    }
 
     public List<TratoDTO> listarTratos() {
         return tratoRepository.findAll().stream().map(this::convertToDTO).collect(Collectors.toList());
@@ -93,12 +84,114 @@ public class TratoService {
     public TratoDTO moverFase(Integer id, String nuevaFase) {
         Trato trato = tratoRepository.findTratoWithContacto(id)
                 .orElseThrow(() -> new RuntimeException("Trato no encontrado"));
+
+        String faseAnterior = trato.getFase();
+        Integer propietarioAnterior = trato.getPropietarioId();
         trato.setFase(nuevaFase);
         trato.setProbabilidad(getProbabilidadPorFase(nuevaFase));
         trato.setFechaModificacion(Instant.now());
         trato.setFechaUltimaActividad(Instant.now());
+
+        // Información sobre escalamiento
+        boolean escalado = false;
+        Integer nuevoAdministrador = null;
+
+        // Solo escalar si el propietario actual es EMPLEADO y la fase requiere escalamiento
+        if (requiereEscalamiento(nuevaFase) && propietarioAnterior != null && !esAdministrador(propietarioAnterior)) {
+            Integer adminId = getAdministradorPredeterminado();
+            if (adminId != null) {
+                trato.setPropietarioId(adminId);
+                crearNotaEscalamiento(trato.getId(), faseAnterior, nuevaFase, adminId);
+                escalado = true;
+                nuevoAdministrador = adminId;
+            }
+        }
+
         Trato updatedTrato = tratoRepository.save(trato);
-        return convertToDTO(updatedTrato);
+        notificacionService.generarNotificacionTratoGanado(updatedTrato); // Verifica si el trato se ganó al cambiar la fase
+        if (requiereEscalamiento(nuevaFase) && !esAdministrador(propietarioAnterior)) {
+            Integer adminId = getAdministradorPredeterminado();
+            if (adminId != null) {
+                trato.setPropietarioId(adminId);
+                crearNotaEscalamiento(trato.getId(), faseAnterior, nuevaFase, adminId);
+                escalado = true;
+                nuevoAdministrador = adminId;
+                notificacionService.generarNotificacionEscalamiento(updatedTrato, adminId);
+            }
+        }
+        TratoDTO result = convertToDTO(updatedTrato);
+
+        // Agregar información sobre escalamiento al DTO
+        result.setEscalado(escalado);
+        if (escalado && nuevoAdministrador != null) {
+            Usuario administrador = usuarioRepository.findById(nuevoAdministrador).orElse(null);
+            result.setNuevoAdministradorNombre(administrador != null ? administrador.getNombre() : "Administrador");
+        }
+
+        return result;
+    }
+
+    private boolean requiereEscalamiento(String fase) {
+        return "COTIZACION_PROPUESTA_PRACTICA".equals(fase) ||
+                "NEGOCIACION_REVISION".equals(fase) ||
+                "CERRADO_GANADO".equals(fase);
+    }
+
+    private Integer getAdministradorPredeterminado() {
+        try {
+            Optional<Usuario> admin = usuarioRepository.findFirstByRolAndEstatusOrderById(
+                    RolUsuarioEnum.ADMINISTRADOR,
+                    EstatusUsuarioEnum.ACTIVO
+            );
+            return admin.map(Usuario::getId).orElse(null);
+        } catch (Exception e) {
+            System.err.println("Error al obtener administrador predeterminado: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean esAdministrador(Integer usuarioId) {
+        if (usuarioId == null) return false;
+
+        try {
+            Optional<Usuario> usuario = usuarioRepository.findById(usuarioId);
+            return usuario.map(u -> RolUsuarioEnum.ADMINISTRADOR.equals(u.getRol())).orElse(false);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void crearNotaEscalamiento(Integer tratoId, String faseAnterior, String nuevaFase, Integer adminId) {
+        try {
+            NotaTrato nota = new NotaTrato();
+            nota.setTratoId(tratoId);
+            nota.setUsuarioId(adminId);
+            nota.setNota(String.format("Escalamiento automático: Trato movido de '%s' a '%s' y asignado automáticamente a administrador.",
+                    formatearNombreFase(faseAnterior),
+                    formatearNombreFase(nuevaFase)));
+            nota.setFechaCreacion(Instant.now());
+            notaTratoRepository.save(nota);
+        } catch (Exception e) {
+            System.err.println("Error al crear nota de escalamiento: " + e.getMessage());
+        }
+    }
+
+    private String formatearNombreFase(String fase) {
+        if (fase == null) return "Desconocida";
+
+        switch (fase) {
+            case "CLASIFICACION": return "Clasificación";
+            case "PRIMER_CONTACTO": return "Primer Contacto";
+            case "ENVIO_DE_INFORMACION": return "Envío de Información";
+            case "REUNION": return "Reunión";
+            case "COTIZACION_PROPUESTA_PRACTICA": return "Cotización/Propuesta Práctica";
+            case "NEGOCIACION_REVISION": return "Negociación/Revisión";
+            case "CERRADO_GANADO": return "Cerrado Ganado";
+            case "RESPUESTA_POR_CORREO": return "Respuesta por Correo";
+            case "INTERES_FUTURO": return "Interés Futuro";
+            case "CERRADO_PERDIDO": return "Cerrado Perdido";
+            default: return fase;
+        }
     }
 
     public ActividadDTO programarActividad(ActividadDTO actividadDTO) {
@@ -130,6 +223,7 @@ public class TratoService {
         }
 
         Actividad savedActividad = actividadRepository.save(actividad);
+        notificacionService.generarNotificacionActividad(savedActividad);
         return convertToDTO(savedActividad);
     }
 
@@ -261,16 +355,34 @@ public class TratoService {
         Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10); // 10 years ago
         Instant end = (endDate != null) ? endDate : Instant.now();
 
+        // Obtener el usuario actual para determinar si es empleado
+        Integer currentUserId = getCurrentUserId();
+        RolUsuarioEnum currentUserRole = getCurrentUserRole(); // Necesitarás implementar este método
+
         if (empresaId != null && propietarioId != null) {
             tratos = tratoRepository.findByEmpresaIdAndPropietarioIdAndFechaCreacionBetween(empresaId, propietarioId, start, end);
         } else if (empresaId != null) {
             tratos = tratoRepository.findByEmpresaIdAndFechaCreacionBetween(empresaId, start, end);
         } else if (propietarioId != null) {
-            tratos = tratoRepository.findByPropietarioIdAndFechaCreacionBetween(propietarioId, start, end);
+            // Si es empleado, buscar tratos donde sea propietario O tenga actividades asignadas
+            if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
+                tratos = tratoRepository.findByPropietarioIdOrAsignadoIdAndFechaCreacionBetween(propietarioId, start, end);
+            } else {
+                tratos = tratoRepository.findByPropietarioIdAndFechaCreacionBetween(propietarioId, start, end);
+            }
         } else {
-            tratos = tratoRepository.findByFechaCreacionBetween(start, end);
+            // Si no hay filtros específicos y es empleado, aplicar la misma lógica
+            if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
+                tratos = tratoRepository.findByPropietarioIdOrAsignadoIdAndFechaCreacionBetween(currentUserId, start, end);
+            } else {
+                tratos = tratoRepository.findByFechaCreacionBetween(start, end);
+            }
         }
         return tratos.stream().map(this::convertToDTO).collect(Collectors.toList());
+    }
+
+    private RolUsuarioEnum getCurrentUserRole() {
+        return ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getRol();
     }
 
     @Transactional(readOnly = true)

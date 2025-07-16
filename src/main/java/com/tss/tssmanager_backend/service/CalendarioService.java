@@ -32,6 +32,8 @@ public class CalendarioService {
     private CuentaPorPagarRepository cuentaPorPagarRepository;
     @Autowired
     private UsuarioRepository usuarioRepository;
+    @Autowired
+    private NotificacionService notificacionService;
 
     private static final ZoneId MEXICO_ZONE = ZoneId.of("America/Mexico_City");
 
@@ -134,6 +136,7 @@ public class CalendarioService {
             }
         }
 
+        notificacionService.generarNotificacionCuentasYSims();
         return eventos;
     }
 

@@ -10,7 +10,6 @@ import com.tss.tssmanager_backend.repository.ActividadRepository;
 import com.tss.tssmanager_backend.service.TratoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
