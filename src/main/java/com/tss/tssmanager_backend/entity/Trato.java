@@ -64,5 +64,12 @@ public class Trato {
     @OneToMany(mappedBy = "tratoId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Actividad> actividades;
 
+    @Column(name = "correos_seguimiento_activo")
+    private Boolean correosSeguimientoActivo = false;
 
+    @Column(name = "fecha_activacion_seguimiento")
+    private LocalDateTime fechaActivacionSeguimiento;
+
+    @Column(name = "correos_seguimiento_enviados")
+    private Integer correosSeguimientoEnviados = 0;
 }

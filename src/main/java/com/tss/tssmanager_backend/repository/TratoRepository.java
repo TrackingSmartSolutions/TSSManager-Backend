@@ -38,4 +38,13 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
             @Param("startDate") Instant startDate,
             @Param("endDate") Instant endDate
     );
+
+    // Método para encontrar tratos con correos de seguimiento activos
+    List<Trato> findByCorreosSeguimientoActivoTrueAndFaseIn(List<String> fases);
+
+    // Método para encontrar tratos que necesitan correos de seguimiento
+    @Query("SELECT t FROM Trato t WHERE t.correosSeguimientoActivo = true " +
+            "AND t.fase IN :fases " +
+            "AND t.fechaActivacionSeguimiento IS NOT NULL")
+    List<Trato> findTratosConSeguimientoActivo(@Param("fases") List<String> fases);
 }
