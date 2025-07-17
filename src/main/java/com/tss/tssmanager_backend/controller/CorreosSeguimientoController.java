@@ -51,4 +51,14 @@ public class CorreosSeguimientoController {
             return ResponseEntity.badRequest().build();
         }
     }
+
+    @PostMapping("/verificar-pendientes")
+    public ResponseEntity<String> verificarCorreosPendientes() {
+        try {
+            correosSeguimientoService.verificarCorreosPendientes();
+            return ResponseEntity.ok("Verificación de correos pendientes completada");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error al verificar correos pendientes");
+        }
+    }
 }

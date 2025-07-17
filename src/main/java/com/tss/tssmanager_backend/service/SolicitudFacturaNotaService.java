@@ -9,7 +9,6 @@ import com.lowagie.text.pdf.PdfWriter;
 import com.tss.tssmanager_backend.dto.FacturaDTO;
 import com.tss.tssmanager_backend.dto.SolicitudFacturaNotaDTO;
 import com.tss.tssmanager_backend.entity.*;
-import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
 import com.tss.tssmanager_backend.enums.TipoDocumentoSolicitudEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.*;

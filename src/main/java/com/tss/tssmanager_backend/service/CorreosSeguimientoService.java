@@ -68,7 +68,6 @@ public class CorreosSeguimientoService {
         tratoRepository.save(trato);
     }
 
-    @Scheduled(cron = "0 0 9 * * *") // Ejecutar todos los días a las 9:00 AM
     @Transactional
     public void procesarCorreosSeguimiento() {
         List<Trato> tratosActivos = tratoRepository.findByCorreosSeguimientoActivoTrueAndFaseIn(FASES_SEGUIMIENTO);
@@ -183,5 +182,54 @@ public class CorreosSeguimientoService {
         return tratoRepository.findById(tratoId)
                 .map(trato -> trato.getCorreosSeguimientoActivo() != null && trato.getCorreosSeguimientoActivo())
                 .orElse(false);
+    }
+
+    @Transactional
+    public void verificarCorreosPendientes() {
+        List<Trato> tratosActivos = tratoRepository.findByCorreosSeguimientoActivoTrueAndFaseIn(FASES_SEGUIMIENTO);
+
+        for (Trato trato : tratosActivos) {
+            if (hayCorreosPendientes(trato)) {
+                enviarCorreosPendientes(trato);
+            }
+        }
+    }
+
+    private boolean hayCorreosPendientes(Trato trato) {
+        if (trato.getFechaActivacionSeguimiento() == null) {
+            return false;
+        }
+
+        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime fechaActivacion = trato.getFechaActivacionSeguimiento();
+        long diasTranscurridos = java.time.Duration.between(fechaActivacion, ahora).toDays();
+
+        int correosSeguimientoEnviados = trato.getCorreosSeguimientoEnviados() != null ?
+                trato.getCorreosSeguimientoEnviados() : 0;
+
+        // Verificar si hay correos que debieron enviarse
+        return (correosSeguimientoEnviados == 0 && diasTranscurridos >= 3) ||
+                (correosSeguimientoEnviados == 1 && diasTranscurridos >= 6) ||
+                (correosSeguimientoEnviados == 2 && diasTranscurridos >= 9);
+    }
+
+    private void enviarCorreosPendientes(Trato trato) {
+        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime fechaActivacion = trato.getFechaActivacionSeguimiento();
+        long diasTranscurridos = java.time.Duration.between(fechaActivacion, ahora).toDays();
+
+        int correosSeguimientoEnviados = trato.getCorreosSeguimientoEnviados() != null ?
+                trato.getCorreosSeguimientoEnviados() : 0;
+
+        // Enviar todos los correos pendientes de una vez
+        if (correosSeguimientoEnviados == 0 && diasTranscurridos >= 3) {
+            enviarCorreoSeguimiento(trato);
+        }
+        if (correosSeguimientoEnviados <= 1 && diasTranscurridos >= 6) {
+            enviarCorreoSeguimiento(trato);
+        }
+        if (correosSeguimientoEnviados <= 2 && diasTranscurridos >= 9) {
+            enviarCorreoSeguimiento(trato);
+        }
     }
 }

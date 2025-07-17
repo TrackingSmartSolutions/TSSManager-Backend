@@ -6,6 +6,7 @@ import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
 import com.tss.tssmanager_backend.enums.RolUsuarioEnum;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -41,6 +42,17 @@ public class NotificacionService {
     private CuentaPorPagarRepository cuentaPorPagarRepository;
     @Autowired
     private EmpresaRepository empresaRepository;
+
+    @PostConstruct
+    public void inicializarNotificaciones() {
+        logger.info("Inicializando verificación de notificaciones al arrancar la aplicación");
+        try {
+            verificarNotificacionesProgramadas();
+            limpiarNotificacionesLeidas();
+        } catch (Exception e) {
+            logger.error("Error durante la inicialización de notificaciones: {}", e.getMessage());
+        }
+    }
 
     @Transactional
     public void generarNotificacionCambiarContrasena(String usuarioNombre, String usuarioCorreo) {
@@ -143,14 +155,13 @@ public class NotificacionService {
         }
     }
 
-    // Método programado para ejecutarse todos los días a las 8:00 AM
-    @Scheduled(cron = "0 0 8 * * *")
+    // Método programado para ejecutarse cada 6 horas
+    @Scheduled(cron = "0 0 */6 * * *")
     @Transactional
     public void verificarNotificacionesProgramadas() {
-        logger.info("Iniciando verificación de notificaciones programadas");
+        logger.info("Verificación programada de respaldo ejecutada");
         generarNotificacionCuentasYSims();
         verificarActividadesProximas();
-        logger.info("Verificación de notificaciones programadas completada");
     }
 
     // Método separado para verificar actividades próximas
@@ -276,8 +287,9 @@ public class NotificacionService {
 
     @Transactional(readOnly = true)
     public List<Notificacion> listarNotificacionesPorUsuario() {
+        verificarNotificacionesProgramadas();
+
         Integer userId = ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
-        // Ordenar por fecha de creación descendente (más recientes primero)
         return notificacionRepository.findByUsuarioIdOrderByFechaCreacionDesc(userId);
     }
 
@@ -317,10 +329,10 @@ public class NotificacionService {
         logger.info("Todas las notificaciones del usuario {} marcadas como leídas", userId);
     }
 
-    @Scheduled(cron = "0 0 2 * * *") // Ejecutar a las 2:00 AM todos los días
+    @Scheduled(cron = "0 0 */12 * * *")
     @Transactional
     public void limpiarNotificacionesLeidas() {
-        logger.info("Iniciando limpieza de notificaciones leídas");
+        logger.info("Limpieza programada de respaldo ejecutada");
         try {
             Instant hace24Horas = Instant.now().minusSeconds(24 * 60 * 60);
             List<Notificacion> notificacionesParaEliminar = notificacionRepository
@@ -332,6 +344,16 @@ public class NotificacionService {
             }
         } catch (Exception e) {
             logger.error("Error al limpiar notificaciones leídas: {}", e.getMessage());
+        }
+    }
+
+    @Transactional
+    public void verificarNotificacionesSilenciosa() {
+        try {
+            generarNotificacionCuentasYSims();
+            verificarActividadesProximas();
+        } catch (Exception e) {
+            logger.error("Error en verificación silenciosa: {}", e.getMessage());
         }
     }
 }

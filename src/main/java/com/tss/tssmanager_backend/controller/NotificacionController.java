@@ -50,5 +50,12 @@ public class NotificacionController {
         return ResponseEntity.ok(Map.of("mensaje", "Verificación de notificaciones ejecutada"));
     }
 
+    // Ejecutar limpieza de notificaciones manualmente
+    @PostMapping("/limpiar-leidas")
+    public ResponseEntity<Map<String, String>> limpiarNotificacionesLeidas() {
+        notificacionService.limpiarNotificacionesLeidas();
+        return ResponseEntity.ok(Map.of("mensaje", "Limpieza de notificaciones ejecutada"));
+    }
+
 
 }
