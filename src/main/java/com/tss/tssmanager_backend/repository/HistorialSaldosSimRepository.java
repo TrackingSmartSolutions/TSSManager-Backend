@@ -9,8 +9,9 @@ import java.util.List;
 
 public interface HistorialSaldosSimRepository extends JpaRepository<HistorialSaldosSim, Integer> {
     @Modifying
-    @Query("DELETE FROM HistorialSaldosSim h WHERE h.sim.id = :simId")
-    void deleteBySimId(Integer simId);
+    @Query("DELETE FROM HistorialSaldosSim h WHERE h.sim.numero = :simNumero")
+    void deleteBySimNumero(String simNumero);
 
-    List<HistorialSaldosSim> findBySimId(Integer simId);
+    @Query("SELECT h FROM HistorialSaldosSim h WHERE h.sim.numero = :simNumero ORDER BY h.fecha DESC")
+    List<HistorialSaldosSim> findBySimNumero(String simNumero);
 }

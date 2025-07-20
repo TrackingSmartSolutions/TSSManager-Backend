@@ -15,7 +15,7 @@ public class HistorialSaldosSim {
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sim_id", nullable = false)
+    @JoinColumn(name = "sim_numero", referencedColumnName = "numero", nullable = false)
     private Sim sim;
 
     @Column(name = "saldo_actual")

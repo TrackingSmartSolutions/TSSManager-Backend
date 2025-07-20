@@ -46,6 +46,40 @@ public class JwtUtil {
         return claims.getSubject();
     }
 
+    public Long extractUserId(String token) {
+        logger.debug("Extracting userId from token");
+        Claims claims = getClaims(token);
+        Object userIdClaim = claims.get("userId");
+
+        if (userIdClaim == null) {
+            logger.warn("userId claim not found in token");
+            return null;
+        }
+
+        // Manejar diferentes tipos de datos que puede retornar el claim
+        if (userIdClaim instanceof Number) {
+            return ((Number) userIdClaim).longValue();
+        } else if (userIdClaim instanceof String) {
+            try {
+                return Long.parseLong((String) userIdClaim);
+            } catch (NumberFormatException e) {
+                logger.error("Error parsing userId from string: {}", userIdClaim, e);
+                return null;
+            }
+        }
+
+        logger.error("Unexpected userId claim type: {}", userIdClaim.getClass());
+        return null;
+    }
+
+    private Claims getClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
     public boolean validateToken(String token) {
         try {
             logger.debug("Validating token");

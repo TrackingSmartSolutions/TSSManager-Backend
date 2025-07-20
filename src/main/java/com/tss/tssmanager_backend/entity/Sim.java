@@ -45,10 +45,25 @@ public class Sim {
     private Integer grupo;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "equipo_id")
+    @JoinColumn(name = "equipo_imei", referencedColumnName = "imei")
     @JsonBackReference
     private Equipo equipo;
 
     @Column(name = "contrasena")
     private String contrasena;
+
+    public String getEquipoImei() {
+        return equipo != null ? equipo.getImei() : null;
+    }
+
+    public void setEquipoByImei(String imei) {
+        if (equipo == null && imei != null) {
+            equipo = new Equipo();
+            equipo.setImei(imei);
+        } else if (equipo != null && imei != null) {
+            equipo.setImei(imei);
+        } else if (imei == null) {
+            equipo = null;
+        }
+    }
 }

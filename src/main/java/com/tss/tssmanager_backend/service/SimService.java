@@ -43,29 +43,71 @@ public class SimService {
             sim.setContrasena(null);
             sim.setPrincipal(PrincipalSimEnum.NO);
         } else {
+            // Para SIMs de TSS
             if (sim.getId() != null) {
+                // Es una actualización - obtener SIM existente
                 Sim simExistente = simRepository.findById(sim.getId())
                         .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada."));
-                if (simExistente.getGrupo() != null) {
+
+                // Si cambia de NO principal a SI principal, generar nuevo grupo
+                if (simExistente.getPrincipal() == PrincipalSimEnum.NO &&
+                        sim.getPrincipal() == PrincipalSimEnum.SI) {
+                    sim.setGrupo(generarNuevoGrupo());
+                }
+                // Si cambia de SI principal a NO principal, debe especificar grupo
+                else if (simExistente.getPrincipal() == PrincipalSimEnum.SI &&
+                        sim.getPrincipal() == PrincipalSimEnum.NO) {
+                    if (sim.getGrupo() == null) {
+                        throw new IllegalStateException("Debe especificar un grupo para SIM no principal.");
+                    }
+                    // Validar que el grupo seleccionado tenga espacio para SIMs no principales
+                    Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupoExcluding(sim.getGrupo(), sim.getId());
+                    if (nonPrincipalCount >= 5) {
+                        throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
+                    }
+                }
+                // Si sigue siendo principal, mantener su grupo actual
+                else if (sim.getPrincipal() == PrincipalSimEnum.SI) {
                     sim.setGrupo(simExistente.getGrupo());
                 }
-            }
-            if (sim.getPrincipal() == PrincipalSimEnum.SI && sim.getId() == null) {
-                sim.setGrupo(generarNuevoGrupo());
-            } else if (sim.getGrupo() != null) {
-                Long principalCount = simRepository.countPrincipalesByGrupo(sim.getGrupo());
-                Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupo(sim.getGrupo());
-                if (principalCount >= 1 && sim.getPrincipal() == PrincipalSimEnum.SI) {
-                    throw new IllegalStateException("El grupo seleccionado ya tiene un SIM principal.");
+                // Si sigue siendo no principal, validar el grupo
+                else if (sim.getPrincipal() == PrincipalSimEnum.NO && sim.getGrupo() != null) {
+                    // Validar que el grupo tenga espacio (excluyendo la SIM actual)
+                    Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupoExcluding(sim.getGrupo(), sim.getId());
+                    if (nonPrincipalCount >= 5) {
+                        throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
+                    }
                 }
-                if (nonPrincipalCount >= 5 && sim.getPrincipal() == PrincipalSimEnum.NO) {
-                    throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
-                }
-                if (principalCount + nonPrincipalCount >= 6) {
-                    throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 6 SIMs.");
+            } else {
+                // Es una creación nueva
+                if (sim.getPrincipal() == PrincipalSimEnum.SI) {
+                    sim.setGrupo(generarNuevoGrupo());
+                } else if (sim.getGrupo() != null) {
+                    // Validar espacio en el grupo para SIM no principal
+                    Long principalCount = simRepository.countPrincipalesByGrupo(sim.getGrupo());
+                    Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupo(sim.getGrupo());
+
+                    // Para SIM NO principal, solo validar:
+                    // 1. Que no exceda el límite de 5 SIMs no principales
+                    // 2. Que el total no exceda 6 SIMs (1 principal + 5 no principales)
+                    if (nonPrincipalCount >= 5) {
+                        throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
+                    }
+                    if (principalCount + nonPrincipalCount >= 6) {
+                        throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 6 SIMs.");
+                    }
+
+                    // REMOVER esta validación que estaba causando el error:
+                    // if (principalCount >= 1) {
+                    //     throw new IllegalStateException("El grupo seleccionado ya tiene un SIM principal.");
+                    // }
+
+                } else {
+                    throw new IllegalStateException("Debe especificar un grupo para SIM no principal.");
                 }
             }
 
+            // Establecer valores por defecto para SIMs de TSS
             if (sim.getVigencia() == null) {
                 sim.setVigencia(Date.valueOf(LocalDate.now()));
             }
@@ -80,7 +122,7 @@ public class SimService {
         Sim savedSim = simRepository.save(sim);
 
         if (savedSim.getEquipo() != null) {
-            System.out.println("Vinculando equipo con ID: " + savedSim.getEquipo().getId() + " a SIM con ID: " + savedSim.getId());
+            System.out.println("Vinculando equipo con IMEI: " + savedSim.getEquipo().getImei() + " a SIM con ID: " + savedSim.getId());
         } else if (savedSim.getId() != null && sim.getEquipo() == null) {
             System.out.println("Desvinculando equipo de SIM con ID: " + savedSim.getId());
         }
@@ -94,13 +136,18 @@ public class SimService {
                 .filter(group -> {
                     Long principalCount = simRepository.countPrincipalesByGrupo(group);
                     Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupo(group);
-                    return principalCount + nonPrincipalCount < 6;
+
+                    // Un grupo está disponible si:
+                    // 1. Tiene una SIM principal Y menos de 5 SIMs no principales
+                    // 2. O no tiene SIM principal aún (para futuras SIMs principales)
+                    return (principalCount == 1 && nonPrincipalCount < 5) ||
+                            (principalCount == 0 && nonPrincipalCount == 0);
                 })
                 .toList();
     }
 
     public List<SimDTO> obtenerTodasLasSims() {
-        return simRepository.findAll().stream()
+        return simRepository.findAllWithEquipo().stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }
@@ -117,7 +164,7 @@ public class SimService {
         if (sim.getEquipo() != null) {
             throw new IllegalStateException("No se puede eliminar la SIM porque está vinculada a un equipo.");
         }
-        historialSaldosSimRepository.deleteBySimId(id);
+        historialSaldosSimRepository.deleteBySimNumero(sim.getNumero());
         simRepository.delete(sim);
     }
 
@@ -134,7 +181,7 @@ public class SimService {
         HistorialSaldosSim historial = new HistorialSaldosSim();
         historial.setSim(sim);
         historial.setSaldoActual(sim.getTarifa() == TarifaSimEnum.POR_SEGUNDO ? saldoActual : null);
-        historial.setDatos(sim.getTarifa() == TarifaSimEnum.SIN_LIMITE ? datos : null);
+        historial.setDatos((sim.getTarifa() == TarifaSimEnum.SIN_LIMITE || sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) ? datos : null);
         historial.setFecha(fecha != null ? fecha : Date.valueOf(LocalDate.now()));
         historialSaldosSimRepository.save(historial);
     }
@@ -149,7 +196,7 @@ public class SimService {
     public List<HistorialSaldosSim> obtenerHistorialSaldos(Integer simId) {
         Sim sim = simRepository.findById(simId)
                 .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada con ID: " + simId));
-        return historialSaldosSimRepository.findBySimId(simId);
+        return historialSaldosSimRepository.findBySimNumero(sim.getNumero());
     }
 
     private Integer generarNuevoGrupo() {
@@ -168,9 +215,15 @@ public class SimService {
         dto.setRecarga(sim.getRecarga());
         dto.setVigencia(sim.getVigencia());
         dto.setContrasena(sim.getContrasena());
+
         if (sim.getEquipo() != null) {
+            // Nuevo mapeo usando IMEI
+            dto.setEquipoImei(sim.getEquipo().getImei());
+            dto.setEquipoNombre(sim.getEquipo().getNombre());
+            // Mantener compatibilidad temporal
             dto.setEquipoId(sim.getEquipo().getId());
         }
+
         return dto;
     }
 }

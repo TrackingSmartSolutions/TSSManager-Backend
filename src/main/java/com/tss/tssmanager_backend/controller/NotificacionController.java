@@ -50,12 +50,26 @@ public class NotificacionController {
         return ResponseEntity.ok(Map.of("mensaje", "Verificación de notificaciones ejecutada"));
     }
 
-    // Ejecutar limpieza de notificaciones manualmente
+    // Ejecutar limpieza de notificaciones automática
     @PostMapping("/limpiar-leidas")
     public ResponseEntity<Map<String, String>> limpiarNotificacionesLeidas() {
         notificacionService.limpiarNotificacionesLeidas();
         return ResponseEntity.ok(Map.of("mensaje", "Limpieza de notificaciones ejecutada"));
     }
 
-
+    @PostMapping("/limpiar-leidas-manual")
+    public ResponseEntity<Map<String, Object>> limpiarNotificacionesLeidasManual() {
+        try {
+            int eliminadas = notificacionService.limpiarNotificacionesLeidasManual();
+            return ResponseEntity.ok(Map.of(
+                    "mensaje", "Limpieza manual ejecutada exitosamente",
+                    "eliminadas", eliminadas
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                    "mensaje", "Error durante la limpieza manual: " + e.getMessage(),
+                    "eliminadas", 0
+            ));
+        }
+    }
 }

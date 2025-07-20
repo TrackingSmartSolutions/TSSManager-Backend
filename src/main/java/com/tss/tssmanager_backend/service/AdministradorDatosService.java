@@ -367,9 +367,9 @@ public class AdministradorDatosService {
                 sim.setGrupo(Integer.parseInt(grupoStr));
             }
 
-            String equipoIdStr = record.get("equipo_id");
-            if (equipoIdStr != null && !equipoIdStr.isEmpty()) {
-                Optional<Equipo> equipoOpt = equipoRepository.findById(Integer.parseInt(equipoIdStr));
+            String equipoImeiStr = record.get("equipo_imei");
+            if (equipoImeiStr != null && !equipoImeiStr.isEmpty()) {
+                Optional<Equipo> equipoOpt = equipoRepository.findByImei(equipoImeiStr);
                 if (equipoOpt.isPresent()) {
                     sim.setEquipo(equipoOpt.get());
                 }
@@ -388,11 +388,11 @@ public class AdministradorDatosService {
         try {
             HistorialSaldosSim historial = new HistorialSaldosSim();
 
-            // Buscar SIM por ID
-            Integer simId = Integer.parseInt(record.get("sim_id"));
-            Optional<Sim> simOpt = simRepository.findById(simId);
+            // Buscar SIM por número en lugar de ID
+            String simNumero = record.get("sim_numero");
+            Optional<Sim> simOpt = simRepository.findByNumero(simNumero);
             if (simOpt.isEmpty()) {
-                throw new RuntimeException("SIM no encontrada con ID: " + simId);
+                throw new RuntimeException("SIM no encontrada con número: " + simNumero);
             }
 
             historial.setSim(simOpt.get());
@@ -420,6 +420,7 @@ public class AdministradorDatosService {
             return false;
         }
     }
+
 
     private boolean procesarTrato(CSVRecord record, Integer usuarioId) {
         try {
@@ -688,7 +689,7 @@ public class AdministradorDatosService {
             case "equipos":
                 return equipoRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
             case "sims":
-                return simRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                return simRepository.findAllWithEquipo().stream().map(Object.class::cast).collect(Collectors.toList());
             case "historialSaldos":
                 return historialSaldoRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
             default:
@@ -880,16 +881,16 @@ public class AdministradorDatosService {
                 valores.add(sim.getResponsable().toString());
                 valores.add(sim.getPrincipal().toString());
                 valores.add(sim.getGrupo() != null ? sim.getGrupo().toString() : "");
-                valores.add(sim.getEquipo() != null ? sim.getEquipo().getId().toString() : "");
                 valores.add(sim.getContrasena() != null ? sim.getContrasena() : "");
+                valores.add(sim.getEquipoImei() != null ? sim.getEquipoImei() : "");
                 break;
 
             case "historialSaldos":
                 HistorialSaldosSim historial = (HistorialSaldosSim) objeto;
-                valores.add(historial.getSim() != null ? historial.getSim().getId().toString() : "");
                 valores.add(historial.getSaldoActual() != null ? historial.getSaldoActual().toString() : "");
                 valores.add(historial.getDatos() != null ? historial.getDatos().toString() : "");
                 valores.add(historial.getFecha() != null ? historial.getFecha().toString() : "");
+                valores.add(historial.getSim() != null ? historial.getSim().getNumero() : "");
                 break;
 
             default:

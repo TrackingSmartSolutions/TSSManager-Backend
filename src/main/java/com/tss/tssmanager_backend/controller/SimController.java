@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,8 +45,12 @@ public class SimController {
     }
 
     @PostMapping
-    public ResponseEntity<Sim> crearSim(@RequestBody Map<String, Object> simData) {
+    public ResponseEntity<?> crearSim(@RequestBody Map<String, Object> simData) {
         try {
+            // Log para debugging
+            System.out.println("=== DATOS RECIBIDOS ===");
+            System.out.println("Datos completos: " + simData);
+
             Sim sim = new Sim();
             sim.setNumero((String) simData.get("numero"));
             sim.setTarifa(TarifaSimEnum.valueOf((String) simData.get("tarifa")));
@@ -54,36 +59,96 @@ public class SimController {
             sim.setGrupo(simData.get("grupo") != null ? Integer.parseInt(simData.get("grupo").toString()) : null);
             sim.setRecarga(simData.get("recarga") != null ? new BigDecimal(simData.get("recarga").toString()) : null);
             sim.setContrasena((String) simData.get("contrasena"));
+
             if (simData.get("vigencia") != null) {
                 String vigenciaStr = (String) simData.get("vigencia");
                 LocalDate localDate = LocalDate.parse(vigenciaStr);
                 sim.setVigencia(Date.valueOf(localDate));
             }
 
-            // Manejo del equipo
+            // Manejo del equipo por IMEI
             if (simData.get("equipo") instanceof Map) {
                 Map<String, Object> equipoData = (Map<String, Object>) simData.get("equipo");
+                String imei = (String) equipoData.get("imei");
                 Integer equipoId = (Integer) equipoData.get("id");
-                if (equipoId != null) {
+
+                System.out.println("=== EQUIPO DATA ===");
+                System.out.println("IMEI: " + imei + ", ID: " + equipoId);
+
+                if (imei != null && !imei.trim().isEmpty()) {
+                    Equipo equipo = equipoRepository.findByImei(imei)
+                            .orElseThrow(() -> new EntityNotFoundException("Equipo no encontrado con IMEI: " + imei));
+                    sim.setEquipo(equipo);
+                    System.out.println("Equipo encontrado: " + equipo.getNombre());
+                } else if (equipoId != null) {
                     Equipo equipo = equipoRepository.findById(equipoId)
                             .orElseThrow(() -> new EntityNotFoundException("Equipo no encontrado con ID: " + equipoId));
                     sim.setEquipo(equipo);
                 }
             } else if (simData.get("equipo") == null) {
-                sim.setEquipo(null); // Desvincular si no se envía equipo
+                sim.setEquipo(null);
             }
+
+            System.out.println("=== SIM ANTES DE GUARDAR ===");
+            System.out.println("Número: " + sim.getNumero());
+            System.out.println("Grupo: " + sim.getGrupo());
+            System.out.println("Principal: " + sim.getPrincipal());
+            System.out.println("Responsable: " + sim.getResponsable());
 
             Sim simGuardada = simService.guardarSim(sim);
             return ResponseEntity.ok(simGuardada);
-        } catch (IllegalStateException | IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(null);
+
+        } catch (IllegalStateException e) {
+            System.err.println("IllegalStateException: " + e.getMessage());
+            e.printStackTrace();
+
+            // Crear respuesta de error más específica
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Estado inválido");
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (IllegalArgumentException e) {
+            System.err.println("IllegalArgumentException: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Argumento inválido");
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (EntityNotFoundException e) {
+            System.err.println("EntityNotFoundException: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Entidad no encontrada");
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (Exception e) {
+            System.err.println("Exception general: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Error interno");
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.status(500).body(errorResponse);
         }
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Sim> actualizarSim(@PathVariable Integer id, @RequestBody Map<String, Object> simData) {
         try {
-            Sim sim = simService.obtenerSim(id); // Obtener el SIM existente
+            Sim sim = simService.obtenerSim(id);
             sim.setNumero((String) simData.get("numero"));
             sim.setTarifa(TarifaSimEnum.valueOf((String) simData.get("tarifa")));
             sim.setResponsable(ResponsableSimEnum.valueOf((String) simData.get("responsable")));
@@ -97,16 +162,22 @@ public class SimController {
                 sim.setVigencia(Date.valueOf(localDate));
             }
 
-            // Manejo del equipo
+            // Manejo del equipo por IMEI
             if (simData.get("equipo") instanceof Map) {
                 Map<String, Object> equipoData = (Map<String, Object>) simData.get("equipo");
+                String imei = (String) equipoData.get("imei");
                 Integer equipoId = (Integer) equipoData.get("id");
-                if (equipoId != null) {
+
+                if (imei != null && !imei.trim().isEmpty()) {
+                    Equipo equipo = equipoRepository.findByImei(imei)
+                            .orElseThrow(() -> new EntityNotFoundException("Equipo no encontrado con IMEI: " + imei));
+                    sim.setEquipo(equipo);
+                } else if (equipoId != null) {
                     Equipo equipo = equipoRepository.findById(equipoId)
                             .orElseThrow(() -> new EntityNotFoundException("Equipo no encontrado con ID: " + equipoId));
                     sim.setEquipo(equipo);
                 } else {
-                    sim.setEquipo(null); // Desvincular si el ID es null
+                    sim.setEquipo(null); // Desvincular si el IMEI/ID es null
                 }
             } else if (simData.get("equipo") == null) {
                 sim.setEquipo(null); // Desvincular si no se envía equipo

@@ -19,12 +19,16 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Service
 public class NotificacionService {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificacionService.class);
+
+    private static final ZoneId ZONE_ID = ZoneId.of("America/Mexico_City");
 
     @Autowired
     private NotificacionRepository notificacionRepository;
@@ -52,6 +56,15 @@ public class NotificacionService {
         } catch (Exception e) {
             logger.error("Error durante la inicialización de notificaciones: {}", e.getMessage());
         }
+    }
+
+
+    private Instant obtenerInstantLocal() {
+        return ZonedDateTime.now(ZONE_ID).toInstant();
+    }
+
+    private ZonedDateTime convertirAZonaLocal(Instant instant) {
+        return instant.atZone(ZONE_ID);
     }
 
     @Transactional
@@ -82,7 +95,7 @@ public class NotificacionService {
                     .orElseThrow(() -> new RuntimeException("Propietario no encontrado"));
 
             LocalDate fechaActividad = actividad.getFechaLimite();
-            LocalDate hoy = LocalDate.now();
+            LocalDate hoy = LocalDate.now(ZONE_ID);
             LocalDate manana = hoy.plusDays(1);
 
             // Verificar si es el día antes o el mismo día
@@ -167,7 +180,7 @@ public class NotificacionService {
     // Método separado para verificar actividades próximas
     @Transactional
     public void verificarActividadesProximas() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = LocalDate.now(ZONE_ID);
         LocalDate manana = hoy.plusDays(1);
 
         // Buscar actividades para hoy y mañana
@@ -183,7 +196,7 @@ public class NotificacionService {
 
     @Transactional
     public void generarNotificacionCuentasYSims() {
-        LocalDate hoy = LocalDate.now();
+        LocalDate hoy = LocalDate.now(ZONE_ID);
         LocalDate manana = hoy.plusDays(1);
 
         try {
@@ -242,7 +255,6 @@ public class NotificacionService {
                             sim.getEquipo() != null ? sim.getEquipo().getImei() : "Sin equipo",
                             vigenciaDate);
 
-                    // Cambiar para notificar a todos los usuarios activos
                     notificarTodosLosUsuarios("RECARGA", mensaje);
                 });
     }
@@ -268,7 +280,7 @@ public class NotificacionService {
 
     // Método para verificar si existe una notificación reciente similar
     private boolean existeNotificacionReciente(Integer usuarioId, String tipo, String mensaje) {
-        Instant hace24Horas = Instant.now().minusSeconds(24 * 60 * 60);
+        Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
         return notificacionRepository.existsByUsuarioIdAndTipoNotificacionAndMensajeAndFechaCreacionAfter(
                 usuarioId, tipo, mensaje, hace24Horas
         );
@@ -280,15 +292,21 @@ public class NotificacionService {
         notificacion.setUsuario(usuario);
         notificacion.setTipoNotificacion(tipo);
         notificacion.setMensaje(mensaje);
-        notificacion.setFechaCreacion(Instant.now());
+        notificacion.setFechaCreacion(obtenerInstantLocal());
         notificacion.setEstatus(EstatusNotificacionEnum.NO_LEIDA);
         notificacionRepository.save(notificacion);
     }
 
     @Transactional(readOnly = true)
     public List<Notificacion> listarNotificacionesPorUsuario() {
-        verificarNotificacionesProgramadas();
+        Integer userId = ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
+        return notificacionRepository.findByUsuarioIdOrderByFechaCreacionDesc(userId);
+    }
 
+    // Crear un método separado para verificar y listar
+    @Transactional
+    public List<Notificacion> listarNotificacionesConVerificacion() {
+        verificarNotificacionesProgramadas();
         Integer userId = ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
         return notificacionRepository.findByUsuarioIdOrderByFechaCreacionDesc(userId);
     }
@@ -305,7 +323,7 @@ public class NotificacionService {
             Notificacion notificacion = notificacionRepository.findById(notificacionId)
                     .orElseThrow(() -> new RuntimeException("Notificación no encontrada"));
             notificacion.setEstatus(EstatusNotificacionEnum.LEIDA);
-            notificacion.setFechaLeida(Instant.now());
+            notificacion.setFechaLeida(obtenerInstantLocal()); // Corregido: usar hora local
             notificacionRepository.save(notificacion);
             logger.info("Notificación {} marcada como leída", notificacionId);
         } catch (Exception e) {
@@ -319,7 +337,7 @@ public class NotificacionService {
         Integer userId = ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
         List<Notificacion> notificacionesNoLeidas = notificacionRepository.findByUsuarioIdAndEstatus(userId, EstatusNotificacionEnum.NO_LEIDA);
 
-        Instant ahora = Instant.now();
+        Instant ahora = obtenerInstantLocal();
         notificacionesNoLeidas.forEach(notificacion -> {
             notificacion.setEstatus(EstatusNotificacionEnum.LEIDA);
             notificacion.setFechaLeida(ahora);
@@ -332,18 +350,30 @@ public class NotificacionService {
     @Scheduled(cron = "0 0 */12 * * *")
     @Transactional
     public void limpiarNotificacionesLeidas() {
-        logger.info("Limpieza programada de respaldo ejecutada");
+        logger.info("Limpieza programada de notificaciones ejecutada");
         try {
-            Instant hace24Horas = Instant.now().minusSeconds(24 * 60 * 60);
+            Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
+
+            // Mejorar la consulta para mejor rendimiento
             List<Notificacion> notificacionesParaEliminar = notificacionRepository
                     .findByEstatusAndFechaLeidaBefore(EstatusNotificacionEnum.LEIDA, hace24Horas);
 
             if (!notificacionesParaEliminar.isEmpty()) {
+                logger.info("Encontradas {} notificaciones para eliminar", notificacionesParaEliminar.size());
+
+                // Log de algunas notificaciones para debugging
+                notificacionesParaEliminar.stream()
+                        .limit(5)
+                        .forEach(notif -> logger.debug("Eliminando notificación ID: {}, Fecha leída: {}",
+                                notif.getId(), notif.getFechaLeida()));
+
                 notificacionRepository.deleteAll(notificacionesParaEliminar);
-                logger.info("Eliminadas {} notificaciones leídas", notificacionesParaEliminar.size());
+                logger.info("Eliminadas {} notificaciones leídas con más de 24 horas", notificacionesParaEliminar.size());
+            } else {
+                logger.info("No se encontraron notificaciones para eliminar");
             }
         } catch (Exception e) {
-            logger.error("Error al limpiar notificaciones leídas: {}", e.getMessage());
+            logger.error("Error al limpiar notificaciones leídas: {}", e.getMessage(), e);
         }
     }
 
@@ -354,6 +384,36 @@ public class NotificacionService {
             verificarActividadesProximas();
         } catch (Exception e) {
             logger.error("Error en verificación silenciosa: {}", e.getMessage());
+        }
+    }
+
+    @Transactional
+    public int limpiarNotificacionesLeidasManual() {
+        logger.info("Limpieza manual de notificaciones ejecutada");
+        try {
+            Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
+
+            List<Notificacion> notificacionesParaEliminar = notificacionRepository
+                    .findByEstatusAndFechaLeidaBefore(EstatusNotificacionEnum.LEIDA, hace24Horas);
+
+            if (!notificacionesParaEliminar.isEmpty()) {
+                logger.info("Limpieza manual: Encontradas {} notificaciones para eliminar", notificacionesParaEliminar.size());
+
+                // Log detallado para debugging
+                notificacionesParaEliminar.forEach(notif ->
+                        logger.debug("Eliminando notificación ID: {}, Usuario: {}, Fecha leída: {}, Hace 24h: {}",
+                                notif.getId(), notif.getUsuario().getId(), notif.getFechaLeida(), hace24Horas));
+
+                notificacionRepository.deleteAll(notificacionesParaEliminar);
+                logger.info("Limpieza manual: Eliminadas {} notificaciones leídas", notificacionesParaEliminar.size());
+                return notificacionesParaEliminar.size();
+            } else {
+                logger.info("Limpieza manual: No se encontraron notificaciones para eliminar");
+                return 0;
+            }
+        } catch (Exception e) {
+            logger.error("Error en limpieza manual de notificaciones: {}", e.getMessage(), e);
+            throw e;
         }
     }
 }

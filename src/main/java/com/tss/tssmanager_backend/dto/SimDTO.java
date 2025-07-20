@@ -13,12 +13,16 @@ public class SimDTO {
     private Integer id;
     private String numero;
     private TarifaSimEnum tarifa;
+    private Date vigencia;
+    private BigDecimal recarga;
     private ResponsableSimEnum responsable;
     private PrincipalSimEnum principal;
     private Integer grupo;
-    private BigDecimal recarga;
-    private Date vigencia;
     private String contrasena;
+    private String equipoImei;
+
+    @Deprecated
     private Integer equipoId;
 
+    private String equipoNombre;
 }
