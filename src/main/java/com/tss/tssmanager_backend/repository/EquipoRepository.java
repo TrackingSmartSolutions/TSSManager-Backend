@@ -14,4 +14,6 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
 
     @Query("SELECT e FROM Equipo e WHERE e.imei = :imei")
     Optional<Equipo> findByImei(@Param("imei") String imei);
+
+
 }

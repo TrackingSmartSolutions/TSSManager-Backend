@@ -2,9 +2,7 @@ package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.*;
 import com.tss.tssmanager_backend.entity.*;
-import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
-import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
-import com.tss.tssmanager_backend.enums.RolUsuarioEnum;
+import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.persistence.EntityManager;
@@ -39,6 +37,8 @@ public class TratoService {
     private NotificacionService notificacionService;
     @PersistenceContext
     private EntityManager entityManager;
+    @Autowired
+    private EmailService emailService;
 
     public List<TratoDTO> listarTratos() {
         return tratoRepository.findAll().stream().map(this::convertToDTO).collect(Collectors.toList());
@@ -180,20 +180,32 @@ public class TratoService {
         if (fase == null) return "Desconocida";
 
         switch (fase) {
-            case "CLASIFICACION": return "Clasificación";
-            case "PRIMER_CONTACTO": return "Primer Contacto";
-            case "ENVIO_DE_INFORMACION": return "Envío de Información";
-            case "REUNION": return "Reunión";
-            case "COTIZACION_PROPUESTA_PRACTICA": return "Cotización/Propuesta Práctica";
-            case "NEGOCIACION_REVISION": return "Negociación/Revisión";
-            case "CERRADO_GANADO": return "Cerrado Ganado";
-            case "RESPUESTA_POR_CORREO": return "Respuesta por Correo";
-            case "INTERES_FUTURO": return "Interés Futuro";
-            case "CERRADO_PERDIDO": return "Cerrado Perdido";
-            default: return fase;
+            case "CLASIFICACION":
+                return "Clasificación";
+            case "PRIMER_CONTACTO":
+                return "Primer Contacto";
+            case "ENVIO_DE_INFORMACION":
+                return "Envío de Información";
+            case "REUNION":
+                return "Reunión";
+            case "COTIZACION_PROPUESTA_PRACTICA":
+                return "Cotización/Propuesta Práctica";
+            case "NEGOCIACION_REVISION":
+                return "Negociación/Revisión";
+            case "CERRADO_GANADO":
+                return "Cerrado Ganado";
+            case "RESPUESTA_POR_CORREO":
+                return "Respuesta por Correo";
+            case "INTERES_FUTURO":
+                return "Interés Futuro";
+            case "CERRADO_PERDIDO":
+                return "Cerrado Perdido";
+            default:
+                return fase;
         }
     }
 
+    @Transactional
     public ActividadDTO programarActividad(ActividadDTO actividadDTO) {
         Actividad actividad = new Actividad();
         actividad.setTratoId(actividadDTO.getTratoId());
@@ -215,15 +227,40 @@ public class TratoService {
         // Asignar contactoId directamente
         if (actividadDTO.getContactoId() != null) {
             actividad.setContactoId(actividadDTO.getContactoId());
-            // Opcional: validar que el contacto existe si es necesario
+            // Validar que el contacto existe
             Contacto contacto = entityManager.find(Contacto.class, actividadDTO.getContactoId());
             if (contacto == null) {
                 throw new RuntimeException("El contacto con ID " + actividadDTO.getContactoId() + " no existe.");
             }
+            System.out.println("Contacto encontrado: " + contacto.getNombre());
+        } else {
+            System.out.println("No se proporcionó contactoId en la actividad");
         }
 
         Actividad savedActividad = actividadRepository.save(actividad);
+
+        // Generar notificación
         notificacionService.generarNotificacionActividad(savedActividad);
+
+        boolean esTipoReunion = savedActividad.getTipo() != null &&
+                TipoActividadEnum.REUNION.equals(savedActividad.getTipo());
+
+        boolean esModalidadVirtual = savedActividad.getModalidad() != null &&
+                ModalidadActividadEnum.VIRTUAL.equals(savedActividad.getModalidad());
+
+        if (esTipoReunion && esModalidadVirtual) {
+            enviarCorreosReunionVirtual(savedActividad, actividadDTO.getTratoId());
+        } else {
+            if (!esTipoReunion) {
+                System.out.println("  - Tipo no es REUNION (actual: " +
+                        (savedActividad.getTipo() != null ? savedActividad.getTipo().name() : "NULL") + ")");
+            }
+            if (!esModalidadVirtual) {
+                System.out.println("  - Modalidad no es VIRTUAL (actual: " +
+                        (savedActividad.getModalidad() != null ? savedActividad.getModalidad().name() : "NULL") + ")");
+            }
+        }
+
         return convertToDTO(savedActividad);
     }
 
@@ -231,6 +268,14 @@ public class TratoService {
     public ActividadDTO reprogramarActividad(Integer id, ActividadDTO actividadDTO) {
         Actividad actividad = actividadRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Actividad no encontrada con id: " + id));
+
+        // Agregar verificación de timestamp para evitar procesamiento duplicado
+        if (actividad.getFechaModificacion() != null) {
+            long tiempoTranscurrido = Instant.now().toEpochMilli() - actividad.getFechaModificacion().toEpochMilli();
+            if (tiempoTranscurrido < 5000) { // 5 segundos de ventana
+                return convertToDTO(actividad); // Retornar sin procesar
+            }
+        }
 
         actividad.setAsignadoAId(actividadDTO.getAsignadoAId() != null ? actividadDTO.getAsignadoAId() : actividad.getAsignadoAId());
         actividad.setFechaLimite(actividadDTO.getFechaLimite() != null ? actividadDTO.getFechaLimite() : actividad.getFechaLimite());
@@ -258,6 +303,25 @@ public class TratoService {
         }
 
         Actividad updatedActividad = actividadRepository.save(actividad);
+
+        boolean esTipoReunion = updatedActividad.getTipo() != null &&
+                TipoActividadEnum.REUNION.equals(updatedActividad.getTipo());
+
+        boolean esModalidadVirtual = updatedActividad.getModalidad() != null &&
+                ModalidadActividadEnum.VIRTUAL.equals(updatedActividad.getModalidad());
+
+        if (esTipoReunion && esModalidadVirtual) {
+            enviarCorreosReunionVirtualReprogramada(updatedActividad, updatedActividad.getTratoId());
+        } else {
+            if (!esTipoReunion) {
+                System.out.println("  - Tipo no es REUNION (actual: " +
+                        (updatedActividad.getTipo() != null ? updatedActividad.getTipo().name() : "NULL") + ")");
+            }
+            if (!esModalidadVirtual) {
+                System.out.println("  - Modalidad no es VIRTUAL (actual: " +
+                        (updatedActividad.getModalidad() != null ? updatedActividad.getModalidad().name() : "NULL") + ")");
+            }
+        }
         return convertToDTO(updatedActividad);
     }
 
@@ -607,17 +671,284 @@ public class TratoService {
 
     private Integer getProbabilidadPorFase(String fase) {
         switch (fase) {
-            case "CLASIFICACION": return 0;
-            case "PRIMER_CONTACTO": return 10;
-            case "ENVIO_DE_INFORMACION": return 30;
-            case "REUNION": return 50;
-            case "COTIZACION_PROPUESTA_PRACTICA": return 70;
-            case "NEGOCIACION_REVISION": return 85;
-            case "CERRADO_GANADO": return 100;
-            case "RESPUESTA_POR_CORREO": return 0;
-            case "INTERES_FUTURO": return 0;
-            case "CERRADO_PERDIDO": return 0;
-            default: return 0;
+            case "CLASIFICACION":
+                return 0;
+            case "PRIMER_CONTACTO":
+                return 10;
+            case "ENVIO_DE_INFORMACION":
+                return 30;
+            case "REUNION":
+                return 50;
+            case "COTIZACION_PROPUESTA_PRACTICA":
+                return 70;
+            case "NEGOCIACION_REVISION":
+                return 85;
+            case "CERRADO_GANADO":
+                return 100;
+            case "RESPUESTA_POR_CORREO":
+                return 0;
+            case "INTERES_FUTURO":
+                return 0;
+            case "CERRADO_PERDIDO":
+                return 0;
+            default:
+                return 0;
         }
     }
+
+
+    private void enviarCorreosReunionVirtual(Actividad actividad, Integer tratoId) {
+        try {
+            // Obtener información del trato y contacto
+            Optional<Trato> tratoOptional = tratoRepository.findTratoWithContacto(tratoId);
+
+            if (!tratoOptional.isPresent()) {
+                System.err.println("ERROR: No se encontró el trato con ID: " + tratoId);
+                return;
+            }
+            Trato trato = tratoOptional.get();
+            if (trato.getContacto() == null) {
+                System.err.println("ERROR: El trato no tiene contacto asociado");
+                return;
+            }
+            Contacto contacto = trato.getContacto();
+
+            // Obtener usuario asignado
+            Usuario usuarioAsignado = null;
+            if (actividad.getAsignadoAId() != null) {
+                usuarioAsignado = usuarioRepository.findById(actividad.getAsignadoAId()).orElse(null);
+                if (usuarioAsignado != null) {
+                    System.out.println("Usuario asignado encontrado: " + usuarioAsignado.getNombre());
+                    System.out.println("Email usuario asignado: " + usuarioAsignado.getCorreoElectronico());
+                } else {
+                    System.out.println("ADVERTENCIA: No se encontró usuario asignado con ID: " + actividad.getAsignadoAId());
+                }
+            } else {
+                System.out.println("ADVERTENCIA: La actividad no tiene usuario asignado");
+            }
+
+            // Preparar datos del correo
+            String asunto = "Reunión Virtual Programada con Tracking Smart Solutions";
+            String cuerpoCorreo = generarCuerpoCorreoReunion(actividad, trato, usuarioAsignado);
+            // Obtener correo del contacto
+            String correoContacto = obtenerCorreoContacto(contacto);
+            // Enviar correo al contacto
+            if (correoContacto != null && !correoContacto.trim().isEmpty()) {
+                try {
+                    EmailRecord recordContacto = emailService.enviarCorreo(correoContacto, asunto, cuerpoCorreo, null, tratoId);
+                } catch (Exception e) {
+                    System.err.println("ERROR enviando correo al contacto: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println("NO SE ENVÍA correo al contacto - Email vacío o nulo");
+            }
+
+            // Enviar correo al usuario asignado
+            if (usuarioAsignado != null &&
+                    usuarioAsignado.getCorreoElectronico() != null &&
+                    !usuarioAsignado.getCorreoElectronico().trim().isEmpty()) {
+                try {
+                    EmailRecord recordUsuario = emailService.enviarCorreo(
+                            usuarioAsignado.getCorreoElectronico(), asunto, cuerpoCorreo, null, tratoId);
+                } catch (Exception e) {
+                    System.err.println("ERROR enviando correo al usuario: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println("NO SE ENVÍA correo al usuario - Usuario nulo o email vacío");
+                if (usuarioAsignado == null) {
+                    System.out.println("  - Usuario asignado es NULL");
+                } else if (usuarioAsignado.getCorreoElectronico() == null) {
+                    System.out.println("  - Email del usuario es NULL");
+                } else if (usuarioAsignado.getCorreoElectronico().trim().isEmpty()) {
+                    System.out.println("  - Email del usuario está vacío");
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("ERROR GENERAL en enviarCorreosReunionVirtualDebug: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private String obtenerCorreoContacto(Contacto contacto) {
+        if (contacto.getCorreos() == null) {
+            return null;
+        }
+        if (contacto.getCorreos().isEmpty()) {
+            return null;
+        }
+
+        // Imprimir todos los correos disponibles
+        for (int i = 0; i < contacto.getCorreos().size(); i++) {
+            var correoObj = contacto.getCorreos().get(i);
+        }
+
+        String primerCorreo = contacto.getCorreos().stream()
+                .findFirst()
+                .map(c -> c.getCorreo())
+                .orElse(null);
+        return primerCorreo;
+    }
+
+    private String generarCuerpoCorreoReunion(Actividad actividad, Trato trato, Usuario usuarioAsignado) {
+        StringBuilder cuerpo = new StringBuilder();
+        cuerpo.append("<html><body>");
+        cuerpo.append("<h2>Reunión Virtual Programada</h2>");
+
+        if (actividad.getFechaLimite() != null) {
+            cuerpo.append("<p><strong>Fecha:</strong> ").append(actividad.getFechaLimite()).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Fecha límite es NULL");
+        }
+
+        if (actividad.getHoraInicio() != null) {
+            cuerpo.append("<p><strong>Hora:</strong> ").append(actividad.getHoraInicio()).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Hora inicio es NULL");
+        }
+
+        if (actividad.getDuracion() != null) {
+            String duracionTexto = actividad.getDuracion().contains(":") ? actividad.getDuracion() + " horas" : actividad.getDuracion() + " minutos";
+            cuerpo.append("<p><strong>Duración:</strong> ").append(duracionTexto).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Duración es NULL");
+        }
+
+        if (actividad.getEnlaceReunion() != null && !actividad.getEnlaceReunion().isEmpty()) {
+            cuerpo.append("<p><strong>Enlace de reunión:</strong> <a href=\"").append(actividad.getEnlaceReunion()).append("\">").append(actividad.getEnlaceReunion()).append("</a></p>");
+        } else {
+            System.out.println("ADVERTENCIA: Enlace de reunión es NULL o vacío");
+        }
+
+        if (usuarioAsignado != null) {
+            cuerpo.append("<p><strong>Responsable:</strong> ").append(usuarioAsignado.getNombre()).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Usuario asignado es NULL");
+        }
+        cuerpo.append("<p>Esta reunión ha sido programada automáticamente. Por favor, confirme su asistencia.</p>");
+        cuerpo.append("</body></html>");
+
+        String cuerpoFinal = cuerpo.toString();
+        return cuerpoFinal;
+    }
+
+    private void enviarCorreosReunionVirtualReprogramada(Actividad actividad, Integer tratoId) {
+        try {
+            // Obtener información del trato y contacto
+            Optional<Trato> tratoOptional = tratoRepository.findTratoWithContacto(tratoId);
+
+            if (!tratoOptional.isPresent()) {
+                System.err.println("ERROR: No se encontró el trato con ID: " + tratoId);
+                return;
+            }
+            Trato trato = tratoOptional.get();
+            if (trato.getContacto() == null) {
+                System.err.println("ERROR: El trato no tiene contacto asociado");
+                return;
+            }
+            Contacto contacto = trato.getContacto();
+
+            // Obtener usuario asignado
+            Usuario usuarioAsignado = null;
+            if (actividad.getAsignadoAId() != null) {
+                usuarioAsignado = usuarioRepository.findById(actividad.getAsignadoAId()).orElse(null);
+                if (usuarioAsignado != null) {
+                    System.out.println("Usuario asignado encontrado: " + usuarioAsignado.getNombre());
+                    System.out.println("Email usuario asignado: " + usuarioAsignado.getCorreoElectronico());
+                } else {
+                    System.out.println("ADVERTENCIA: No se encontró usuario asignado con ID: " + actividad.getAsignadoAId());
+                }
+            } else {
+                System.out.println("ADVERTENCIA: La actividad no tiene usuario asignado");
+            }
+
+            // Preparar datos del correo
+            String asunto = "Reunión Virtual Reprogramada con Tracking Smart Solutions";
+            String cuerpoCorreo = generarCuerpoCorreoReunionReprogramada(actividad, trato, usuarioAsignado);
+            // Obtener correo del contacto
+            String correoContacto = obtenerCorreoContacto(contacto);
+            // Enviar correo al contacto
+            if (correoContacto != null && !correoContacto.trim().isEmpty()) {
+                try {
+                    EmailRecord recordContacto = emailService.enviarCorreo(correoContacto, asunto, cuerpoCorreo, null, tratoId);
+                } catch (Exception e) {
+                    System.err.println("ERROR enviando correo al contacto: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println("NO SE ENVÍA correo al contacto - Email vacío o nulo");
+            }
+
+            // Enviar correo al usuario asignado
+            if (usuarioAsignado != null &&
+                    usuarioAsignado.getCorreoElectronico() != null &&
+                    !usuarioAsignado.getCorreoElectronico().trim().isEmpty()) {
+                try {
+                    EmailRecord recordUsuario = emailService.enviarCorreo(
+                            usuarioAsignado.getCorreoElectronico(), asunto, cuerpoCorreo, null, tratoId);
+                } catch (Exception e) {
+                    System.err.println("ERROR enviando correo al usuario: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println("NO SE ENVÍA correo al usuario - Usuario nulo o email vacío");
+                if (usuarioAsignado == null) {
+                    System.out.println("  - Usuario asignado es NULL");
+                } else if (usuarioAsignado.getCorreoElectronico() == null) {
+                    System.out.println("  - Email del usuario es NULL");
+                } else if (usuarioAsignado.getCorreoElectronico().trim().isEmpty()) {
+                    System.out.println("  - Email del usuario está vacío");
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("ERROR GENERAL en enviarCorreosReunionVirtualReprogramada: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private String generarCuerpoCorreoReunionReprogramada(Actividad actividad, Trato trato, Usuario usuarioAsignado) {
+        StringBuilder cuerpo = new StringBuilder();
+        cuerpo.append("<html><body>");
+        cuerpo.append("<h2>Reunión Virtual Reprogramada</h2>");
+
+        if (actividad.getFechaLimite() != null) {
+            cuerpo.append("<p><strong>Nueva Fecha:</strong> ").append(actividad.getFechaLimite()).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Fecha límite es NULL");
+        }
+
+        if (actividad.getHoraInicio() != null) {
+            cuerpo.append("<p><strong>Nueva Hora:</strong> ").append(actividad.getHoraInicio()).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Hora inicio es NULL");
+        }
+
+        if (actividad.getDuracion() != null) {
+            String duracionTexto = actividad.getDuracion().contains(":") ? actividad.getDuracion() + " horas" : actividad.getDuracion() + " minutos";
+            cuerpo.append("<p><strong>Duración:</strong> ").append(duracionTexto).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Duración es NULL");
+        }
+
+        if (actividad.getEnlaceReunion() != null && !actividad.getEnlaceReunion().isEmpty()) {
+            cuerpo.append("<p><strong>Enlace de reunión:</strong> <a href=\"").append(actividad.getEnlaceReunion()).append("\">").append(actividad.getEnlaceReunion()).append("</a></p>");
+        } else {
+            System.out.println("ADVERTENCIA: Enlace de reunión es NULL o vacío");
+        }
+
+        if (usuarioAsignado != null) {
+            cuerpo.append("<p><strong>Responsable:</strong> ").append(usuarioAsignado.getNombre()).append("</p>");
+        } else {
+            System.out.println("ADVERTENCIA: Usuario asignado es NULL");
+        }
+        cuerpo.append("<p>Esta reunión ha sido reprogramada. Por favor, tome nota de los nuevos horarios y confirme su asistencia.</p>");
+        cuerpo.append("</body></html>");
+
+        String cuerpoFinal = cuerpo.toString();
+        return cuerpoFinal;
+    }
+
 }

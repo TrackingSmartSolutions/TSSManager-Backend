@@ -2,9 +2,11 @@ package com.tss.tssmanager_backend.repository;
 
 import com.tss.tssmanager_backend.entity.Trato;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -47,4 +49,11 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
             "AND t.fase IN :fases " +
             "AND t.fechaActivacionSeguimiento IS NOT NULL")
     List<Trato> findTratosConSeguimientoActivo(@Param("fases") List<String> fases);
+
+    List<Trato> findByPropietarioId(Integer propietarioId);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM Trato t WHERE t.propietarioId = :propietarioId")
+    void deleteByPropietarioId(@Param("propietarioId") Integer propietarioId);
 }
