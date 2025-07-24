@@ -13,11 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -242,25 +240,6 @@ public class TratoService {
         // Generar notificación
         notificacionService.generarNotificacionActividad(savedActividad);
 
-        boolean esTipoReunion = savedActividad.getTipo() != null &&
-                TipoActividadEnum.REUNION.equals(savedActividad.getTipo());
-
-        boolean esModalidadVirtual = savedActividad.getModalidad() != null &&
-                ModalidadActividadEnum.VIRTUAL.equals(savedActividad.getModalidad());
-
-        if (esTipoReunion && esModalidadVirtual) {
-            enviarCorreosReunionVirtual(savedActividad, actividadDTO.getTratoId());
-        } else {
-            if (!esTipoReunion) {
-                System.out.println("  - Tipo no es REUNION (actual: " +
-                        (savedActividad.getTipo() != null ? savedActividad.getTipo().name() : "NULL") + ")");
-            }
-            if (!esModalidadVirtual) {
-                System.out.println("  - Modalidad no es VIRTUAL (actual: " +
-                        (savedActividad.getModalidad() != null ? savedActividad.getModalidad().name() : "NULL") + ")");
-            }
-        }
-
         return convertToDTO(savedActividad);
     }
 
@@ -269,11 +248,10 @@ public class TratoService {
         Actividad actividad = actividadRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Actividad no encontrada con id: " + id));
 
-        // Agregar verificación de timestamp para evitar procesamiento duplicado
         if (actividad.getFechaModificacion() != null) {
             long tiempoTranscurrido = Instant.now().toEpochMilli() - actividad.getFechaModificacion().toEpochMilli();
-            if (tiempoTranscurrido < 5000) { // 5 segundos de ventana
-                return convertToDTO(actividad); // Retornar sin procesar
+            if (tiempoTranscurrido < 5000) {
+                return convertToDTO(actividad);
             }
         }
 
@@ -304,24 +282,6 @@ public class TratoService {
 
         Actividad updatedActividad = actividadRepository.save(actividad);
 
-        boolean esTipoReunion = updatedActividad.getTipo() != null &&
-                TipoActividadEnum.REUNION.equals(updatedActividad.getTipo());
-
-        boolean esModalidadVirtual = updatedActividad.getModalidad() != null &&
-                ModalidadActividadEnum.VIRTUAL.equals(updatedActividad.getModalidad());
-
-        if (esTipoReunion && esModalidadVirtual) {
-            enviarCorreosReunionVirtualReprogramada(updatedActividad, updatedActividad.getTratoId());
-        } else {
-            if (!esTipoReunion) {
-                System.out.println("  - Tipo no es REUNION (actual: " +
-                        (updatedActividad.getTipo() != null ? updatedActividad.getTipo().name() : "NULL") + ")");
-            }
-            if (!esModalidadVirtual) {
-                System.out.println("  - Modalidad no es VIRTUAL (actual: " +
-                        (updatedActividad.getModalidad() != null ? updatedActividad.getModalidad().name() : "NULL") + ")");
-            }
-        }
         return convertToDTO(updatedActividad);
     }
 
@@ -697,7 +657,7 @@ public class TratoService {
     }
 
 
-    private void enviarCorreosReunionVirtual(Actividad actividad, Integer tratoId) {
+    private void enviarCorreosReunion(Actividad actividad, Integer tratoId) {
         try {
             // Obtener información del trato y contacto
             Optional<Trato> tratoOptional = tratoRepository.findTratoWithContacto(tratoId);
@@ -795,46 +755,133 @@ public class TratoService {
     private String generarCuerpoCorreoReunion(Actividad actividad, Trato trato, Usuario usuarioAsignado) {
         StringBuilder cuerpo = new StringBuilder();
         cuerpo.append("<html><body>");
-        cuerpo.append("<h2>Reunión Virtual Programada</h2>");
 
-        if (actividad.getFechaLimite() != null) {
-            cuerpo.append("<p><strong>Fecha:</strong> ").append(actividad.getFechaLimite()).append("</p>");
-        } else {
-            System.out.println("ADVERTENCIA: Fecha límite es NULL");
+        cuerpo.append("<h2>Confirmación de cita con Tracking Smart Solutions</h2>");
+        cuerpo.append("<p>¡Hola!</p>");
+        cuerpo.append("<p>Espero que esté teniendo un excelente día. Le escribo para confirmar nuestra reunión programada");
+
+        // Agregar fecha y hora si están disponibles
+        if (actividad.getFechaLimite() != null && actividad.getHoraInicio() != null) {
+            String fechaFormateada = formatearFechaAmigable(actividad.getFechaLimite());
+            cuerpo.append(" para el ").append(fechaFormateada).append(" a las ").append(actividad.getHoraInicio());
         }
 
-        if (actividad.getHoraInicio() != null) {
-            cuerpo.append("<p><strong>Hora:</strong> ").append(actividad.getHoraInicio()).append("</p>");
-        } else {
-            System.out.println("ADVERTENCIA: Hora inicio es NULL");
-        }
+        cuerpo.append(" con nuestro experto en soluciones para flotas de Tracking Smart Solutions y platicar sobre los desafíos logísticos que presenta hoy en día, así como discutir la manera en que podemos aportar valor a su negocio.</p>");
 
+        // Duración si está disponible
         if (actividad.getDuracion() != null) {
-            String duracionTexto = actividad.getDuracion().contains(":") ? actividad.getDuracion() + " horas" : actividad.getDuracion() + " minutos";
-            cuerpo.append("<p><strong>Duración:</strong> ").append(duracionTexto).append("</p>");
-        } else {
-            System.out.println("ADVERTENCIA: Duración es NULL");
+            String duracionTexto = actividad.getDuracion().contains(":") ?
+                    actividad.getDuracion() + " horas" : actividad.getDuracion() + " minutos";
+            cuerpo.append("<p><strong>Duración estimada:</strong> ").append(duracionTexto).append("</p>");
         }
 
-        if (actividad.getEnlaceReunion() != null && !actividad.getEnlaceReunion().isEmpty()) {
-            cuerpo.append("<p><strong>Enlace de reunión:</strong> <a href=\"").append(actividad.getEnlaceReunion()).append("\">").append(actividad.getEnlaceReunion()).append("</a></p>");
-        } else {
-            System.out.println("ADVERTENCIA: Enlace de reunión es NULL o vacío");
+        // Información de la reunión según modalidad
+        if (actividad.getModalidad() == ModalidadActividadEnum.VIRTUAL) {
+            if (actividad.getEnlaceReunion() != null && !actividad.getEnlaceReunion().isEmpty()) {
+                cuerpo.append("<p>Aquí le comparto el enlace para unirse a la videollamada:</p>");
+                cuerpo.append("<p><a href=\"").append(actividad.getEnlaceReunion()).append("\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;\">Unirse a la reunión</a></p>");
+                cuerpo.append("<p>O copie y pegue este enlace en su navegador:<br>").append(actividad.getEnlaceReunion()).append("</p>");
+            }
+        } else if (actividad.getModalidad() == ModalidadActividadEnum.PRESENCIAL) {
+            if (actividad.getLugarReunion() != null && !actividad.getLugarReunion().isEmpty()) {
+                cuerpo.append("<p><strong>Lugar de la reunión:</strong></p>");
+                cuerpo.append("<p>").append(actividad.getLugarReunion()).append("</p>");
+            }
         }
 
+        // Mensaje de cierre
+        cuerpo.append("<p>Si necesita hacer algún cambio en el horario o tiene alguna pregunta previa, no dude en contactarme.</p>");
+        cuerpo.append("<p>Saludos cordiales,</p>");
+
+        // Nombre del responsable
         if (usuarioAsignado != null) {
-            cuerpo.append("<p><strong>Responsable:</strong> ").append(usuarioAsignado.getNombre()).append("</p>");
+            cuerpo.append("<p>").append(usuarioAsignado.getNombre()).append("<br>");
+            cuerpo.append("Tracking Smart Solutions</p>");
         } else {
-            System.out.println("ADVERTENCIA: Usuario asignado es NULL");
+            cuerpo.append("<p>Equipo de Tracking Smart Solutions</p>");
         }
-        cuerpo.append("<p>Esta reunión ha sido programada automáticamente. Por favor, confirme su asistencia.</p>");
+
         cuerpo.append("</body></html>");
 
         String cuerpoFinal = cuerpo.toString();
+        System.out.println("Cuerpo del correo generado:\n" + cuerpoFinal);
         return cuerpoFinal;
     }
 
-    private void enviarCorreosReunionVirtualReprogramada(Actividad actividad, Integer tratoId) {
+
+    private String generarCuerpoCorreoReunionReprogramada(Actividad actividad, Trato trato, Usuario usuarioAsignado) {
+        StringBuilder cuerpo = new StringBuilder();
+        cuerpo.append("<html><body>");
+
+        // Mensaje principal para reprogramación
+        cuerpo.append("<h2>Cambio de horario - Reunión con Tracking Smart Solutions</h2>");
+        cuerpo.append("<p>¡Hola!</p>");
+        cuerpo.append("<p>Espero que esté teniendo un excelente día. Le escribo para informarle sobre el cambio de horario en nuestra reunión");
+
+        // Agregar nueva fecha y hora
+        if (actividad.getFechaLimite() != null && actividad.getHoraInicio() != null) {
+            String fechaFormateada = formatearFechaAmigable(actividad.getFechaLimite());
+            cuerpo.append(". <strong>Nueva fecha y hora:</strong> ").append(fechaFormateada).append(" a las ").append(actividad.getHoraInicio());
+        }
+
+        cuerpo.append(".</p>");
+        cuerpo.append("<p>Seguimos muy entusiasmados por conversar con usted sobre los desafíos logísticos de su empresa y cómo Tracking Smart Solutions puede aportar valor a su negocio.</p>");
+
+        // Duración si está disponible
+        if (actividad.getDuracion() != null) {
+            String duracionTexto = actividad.getDuracion().contains(":") ?
+                    actividad.getDuracion() + " horas" : actividad.getDuracion() + " minutos";
+            cuerpo.append("<p><strong>Duración estimada:</strong> ").append(duracionTexto).append("</p>");
+        }
+
+        // Información de la reunión según modalidad
+        if (actividad.getModalidad() == ModalidadActividadEnum.VIRTUAL) {
+            if (actividad.getEnlaceReunion() != null && !actividad.getEnlaceReunion().isEmpty()) {
+                cuerpo.append("<p>El enlace para unirse a la videollamada sigue siendo el mismo:</p>");
+                cuerpo.append("<p><a href=\"").append(actividad.getEnlaceReunion()).append("\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;\">Unirse a la reunión</a></p>");
+                cuerpo.append("<p>O copie y pegue este enlace en su navegador:<br>").append(actividad.getEnlaceReunion()).append("</p>");
+            }
+        } else if (actividad.getModalidad() == ModalidadActividadEnum.PRESENCIAL) {
+            if (actividad.getLugarReunion() != null && !actividad.getLugarReunion().isEmpty()) {
+                cuerpo.append("<p><strong>Lugar de la reunión:</strong></p>");
+                cuerpo.append("<p>").append(actividad.getLugarReunion()).append("</p>");
+            }
+        }
+
+        // Mensaje de cierre
+        cuerpo.append("<p>Agradecemos su comprensión y flexibilidad. Si tiene alguna pregunta o necesita hacer algún ajuste adicional, no dude en contactarme.</p>");
+        cuerpo.append("<p>Saludos cordiales,</p>");
+
+        // Nombre del responsable
+        if (usuarioAsignado != null) {
+            cuerpo.append("<p>").append(usuarioAsignado.getNombre()).append("<br>");
+            cuerpo.append("Tracking Smart Solutions</p>");
+        } else {
+            cuerpo.append("<p>Equipo de Tracking Smart Solutions</p>");
+        }
+
+        cuerpo.append("</body></html>");
+
+        return cuerpo.toString();
+    }
+
+    // Método auxiliar para formatear la fecha de manera más amigable
+    private String formatearFechaAmigable(LocalDate fecha) {
+        if (fecha == null) return "";
+
+        String[] diasSemana = {"lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"};
+        String[] meses = {"enero", "febrero", "marzo", "abril", "mayo", "junio",
+                "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"};
+
+        int diaSemana = fecha.getDayOfWeek().getValue() - 1; // 0 = lunes
+        int dia = fecha.getDayOfMonth();
+        int mes = fecha.getMonthValue() - 1; // 0 = enero
+
+        return String.format("%s %d de %s", diasSemana[diaSemana], dia, meses[mes]);
+    }
+
+
+    private void enviarCorreosReunionReprogramada(Actividad actividad, Integer tratoId) {
         try {
             // Obtener información del trato y contacto
             Optional<Trato> tratoOptional = tratoRepository.findTratoWithContacto(tratoId);
@@ -909,46 +956,134 @@ public class TratoService {
         }
     }
 
-    private String generarCuerpoCorreoReunionReprogramada(Actividad actividad, Trato trato, Usuario usuarioAsignado) {
-        StringBuilder cuerpo = new StringBuilder();
-        cuerpo.append("<html><body>");
-        cuerpo.append("<h2>Reunión Virtual Reprogramada</h2>");
+    @Transactional
+    public void enviarCorreoReunion(Integer actividadId, Integer tratoId) {
+        Actividad actividad = actividadRepository.findById(actividadId)
+                .orElseThrow(() -> new RuntimeException("Actividad no encontrada"));
+        enviarCorreosReunion(actividad, tratoId);
+    }
 
-        if (actividad.getFechaLimite() != null) {
-            cuerpo.append("<p><strong>Nueva Fecha:</strong> ").append(actividad.getFechaLimite()).append("</p>");
-        } else {
-            System.out.println("ADVERTENCIA: Fecha límite es NULL");
+    @Transactional
+    public void enviarCorreoReunionReprogramada(Integer actividadId, Integer tratoId) {
+        Actividad actividad = actividadRepository.findById(actividadId)
+                .orElseThrow(() -> new RuntimeException("Actividad no encontrada"));
+        enviarCorreosReunionReprogramada(actividad, tratoId);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> verificarDatosContacto(Integer tratoId) {
+        Trato trato = tratoRepository.findTratoWithContacto(tratoId)
+                .orElseThrow(() -> new RuntimeException("Trato no encontrado"));
+
+        if (trato.getContacto() == null) {
+            throw new RuntimeException("El trato no tiene contacto asociado");
         }
 
-        if (actividad.getHoraInicio() != null) {
-            cuerpo.append("<p><strong>Nueva Hora:</strong> ").append(actividad.getHoraInicio()).append("</p>");
+        Contacto contacto = trato.getContacto();
+        boolean tieneCorreo = contacto.getCorreos() != null && !contacto.getCorreos().isEmpty() &&
+                contacto.getCorreos().stream().anyMatch(c -> c.getCorreo() != null && !c.getCorreo().trim().isEmpty());
+        boolean tieneCelular = contacto.getCelular() != null && !contacto.getCelular().trim().isEmpty();
+
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("tieneCorreo", tieneCorreo);
+        resultado.put("tieneCelular", tieneCelular);
+        resultado.put("nombreContacto", contacto.getNombre());
+        resultado.put("celular", contacto.getCelular());
+
+        return resultado;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, String> generarMensajeWhatsApp(Integer tratoId, Integer actividadId, boolean esReprogramacion) {
+        Trato trato = tratoRepository.findTratoWithContacto(tratoId)
+                .orElseThrow(() -> new RuntimeException("Trato no encontrado"));
+
+        Actividad actividad = actividadRepository.findById(actividadId)
+                .orElseThrow(() -> new RuntimeException("Actividad no encontrada"));
+
+        if (trato.getContacto() == null) {
+            throw new RuntimeException("El trato no tiene contacto asociado");
+        }
+
+        Contacto contacto = trato.getContacto();
+        if (contacto.getCelular() == null || contacto.getCelular().trim().isEmpty()) {
+            throw new RuntimeException("El contacto no tiene número de celular");
+        }
+
+        Usuario usuarioAsignado = null;
+        if (actividad.getAsignadoAId() != null) {
+            usuarioAsignado = usuarioRepository.findById(actividad.getAsignadoAId()).orElse(null);
+        }
+
+        String mensaje = generarMensajeWhatsAppReunion(actividad, trato, usuarioAsignado, esReprogramacion);
+        String celularLimpio = contacto.getCelular().replaceAll("[^0-9]", ""); // Solo números
+        String celular = "52" + celularLimpio;
+
+
+        Map<String, String> resultado = new HashMap<>();
+        resultado.put("mensaje", mensaje);
+        resultado.put("celular", celular);
+        resultado.put("urlWhatsApp", "https://wa.me/" + celular + "?text=" + java.net.URLEncoder.encode(mensaje, java.nio.charset.StandardCharsets.UTF_8));
+
+        return resultado;
+    }
+
+    private String generarMensajeWhatsAppReunion(Actividad actividad, Trato trato, Usuario usuarioAsignado, boolean esReprogramacion) {
+        StringBuilder mensaje = new StringBuilder();
+
+        if (esReprogramacion) {
+            mensaje.append("*Cambio de horario - Reunión con Tracking Smart Solutions*\n\n");
+            mensaje.append("¡Hola! Espero que esté teniendo un excelente día. Le escribo para informarle sobre el cambio de horario en nuestra reunión");
         } else {
-            System.out.println("ADVERTENCIA: Hora inicio es NULL");
+            mensaje.append("*Confirmación de cita con Tracking Smart Solutions*\n\n");
+            mensaje.append("¡Hola! Espero que esté teniendo un excelente día. Le escribo para confirmar nuestra reunión programada");
+        }
+
+        if (actividad.getFechaLimite() != null && actividad.getHoraInicio() != null) {
+            String fechaFormateada = formatearFechaAmigable(actividad.getFechaLimite());
+            if (esReprogramacion) {
+                mensaje.append(".\n\n*Nueva fecha y hora:* ").append(fechaFormateada).append(" a las ").append(actividad.getHoraInicio());
+            } else {
+                mensaje.append(" para el ").append(fechaFormateada).append(" a las ").append(actividad.getHoraInicio());
+            }
+        }
+
+        if (!esReprogramacion) {
+            mensaje.append(" con nuestro experto en soluciones para flotas de Tracking Smart Solutions para platicar sobre los desafíos logísticos que presenta hoy en día.");
         }
 
         if (actividad.getDuracion() != null) {
-            String duracionTexto = actividad.getDuracion().contains(":") ? actividad.getDuracion() + " horas" : actividad.getDuracion() + " minutos";
-            cuerpo.append("<p><strong>Duración:</strong> ").append(duracionTexto).append("</p>");
-        } else {
-            System.out.println("ADVERTENCIA: Duración es NULL");
+            String duracionTexto = actividad.getDuracion().contains(":") ?
+                    actividad.getDuracion() + " horas" : actividad.getDuracion() + " minutos";
+            mensaje.append("\n\n*Duración estimada:* ").append(duracionTexto);
         }
 
-        if (actividad.getEnlaceReunion() != null && !actividad.getEnlaceReunion().isEmpty()) {
-            cuerpo.append("<p><strong>Enlace de reunión:</strong> <a href=\"").append(actividad.getEnlaceReunion()).append("\">").append(actividad.getEnlaceReunion()).append("</a></p>");
-        } else {
-            System.out.println("ADVERTENCIA: Enlace de reunión es NULL o vacío");
+        if (actividad.getModalidad() == ModalidadActividadEnum.VIRTUAL) {
+            mensaje.append("\n\n*Reunión Virtual*");
+            if (actividad.getEnlaceReunion() != null && !actividad.getEnlaceReunion().isEmpty()) {
+                mensaje.append("\n*Enlace:* ").append(actividad.getEnlaceReunion());
+            }
+        } else if (actividad.getModalidad() == ModalidadActividadEnum.PRESENCIAL) {
+            mensaje.append("\n\n*Reunión Presencial*");
+            if (actividad.getLugarReunion() != null && !actividad.getLugarReunion().isEmpty()) {
+                mensaje.append("\n*Lugar:* ").append(actividad.getLugarReunion());
+            }
         }
 
+        if (esReprogramacion) {
+            mensaje.append("\n\nAgradecemos su comprensión y flexibilidad. Si tiene alguna pregunta o necesita hacer algún ajuste adicional, no dude en contactarme.");
+        } else {
+            mensaje.append("\n\nSi necesita hacer algún cambio en el horario o tiene alguna pregunta previa, no dude en contactarme.");
+        }
+
+        mensaje.append("\n\nSaludos cordiales,");
         if (usuarioAsignado != null) {
-            cuerpo.append("<p><strong>Responsable:</strong> ").append(usuarioAsignado.getNombre()).append("</p>");
+            mensaje.append("\n").append(usuarioAsignado.getNombre());
         } else {
-            System.out.println("ADVERTENCIA: Usuario asignado es NULL");
+            mensaje.append("\nEquipo de Tracking Smart Solutions");
         }
-        cuerpo.append("<p>Esta reunión ha sido reprogramada. Por favor, tome nota de los nuevos horarios y confirme su asistencia.</p>");
-        cuerpo.append("</body></html>");
+        mensaje.append("\nTracking Smart Solutions");
 
-        String cuerpoFinal = cuerpo.toString();
-        return cuerpoFinal;
+        return mensaje.toString();
     }
-
 }

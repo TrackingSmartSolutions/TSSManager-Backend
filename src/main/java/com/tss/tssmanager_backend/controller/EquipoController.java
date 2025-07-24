@@ -138,7 +138,7 @@ public class EquipoController {
 
         if (clienteIdObj == null && clienteDefaultObj != null && clienteDefaultObj instanceof String) {
             String clienteDefaultStr = (String) clienteDefaultObj;
-            if ("AG".equals(clienteDefaultStr) || "BN".equals(clienteDefaultStr)) {
+            if ("AG".equals(clienteDefaultStr) || "BN".equals(clienteDefaultStr) || "PERDIDO".equals(clienteDefaultStr)) {
                 equipo.setClienteId(null);
                 equipo.setClienteDefault(clienteDefaultStr);
             } else {
@@ -147,12 +147,17 @@ public class EquipoController {
             }
         } else if (clienteIdObj instanceof String) {
             String clientIdStr = (String) clienteIdObj;
-            try {
-                equipo.setClienteId(Integer.parseInt(clientIdStr));
-                equipo.setClienteDefault(null);
-            } catch (NumberFormatException e) {
+            if ("AG".equals(clientIdStr) || "BN".equals(clientIdStr) || "PERDIDO".equals(clientIdStr)) {
                 equipo.setClienteId(null);
-                equipo.setClienteDefault(null);
+                equipo.setClienteDefault(clientIdStr);
+            } else {
+                try {
+                    equipo.setClienteId(Integer.parseInt(clientIdStr));
+                    equipo.setClienteDefault(null);
+                } catch (NumberFormatException e) {
+                    equipo.setClienteId(null);
+                    equipo.setClienteDefault(null);
+                }
             }
         } else if (clienteIdObj instanceof Integer) {
             equipo.setClienteId((Integer) clienteIdObj);

@@ -6,5 +6,6 @@ public enum UsoModeloEquipoEnum {
     OBD2,
     VEHICULO_BASICO,
     VEHICULO_AVANZADO,
-    DASHCAM
+    DASHCAM,
+    CANDADO
 }

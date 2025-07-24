@@ -14,13 +14,13 @@ public class ProveedorEquipo {
     @Column(name = "nombre", nullable = false)
     private String nombre;
 
-    @Column(name = "contacto_nombre", nullable = false)
+    @Column(name = "contacto_nombre")
     private String contactoNombre;
 
-    @Column(name = "telefono", nullable = false)
+    @Column(name = "telefono")
     private String telefono;
 
-    @Column(name = "correo", nullable = false)
+    @Column(name = "correo")
     private String correo;
 
     @Column(name = "sitio_web")

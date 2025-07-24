@@ -44,7 +44,7 @@ public class Empresa {
     @Enumerated(EnumType.STRING)
     private SectorEmpresaEnum sector;
 
-    @Column(name = "domicilio_fisico", nullable = false)
+    @Column(name = "domicilio_fisico")
     private String domicilioFisico;
 
     @Column(name = "domicilio_fiscal")

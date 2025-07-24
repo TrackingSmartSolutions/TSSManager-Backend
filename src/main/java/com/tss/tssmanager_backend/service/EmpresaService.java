@@ -461,10 +461,9 @@ public class EmpresaService {
     }
 
     private void validateEmpresa(Empresa empresa) {
-        if (empresa.getNombre() == null || empresa.getNombre().trim().isEmpty() ||
-                empresa.getDomicilioFisico() == null || empresa.getDomicilioFisico().trim().isEmpty()) {
-            logger.error("Validación fallida: Nombre y Domicilio Físico son obligatorios para empresa");
-            throw new IllegalArgumentException("Nombre y Domicilio Físico son obligatorios");
+        if (empresa.getNombre() == null || empresa.getNombre().trim().isEmpty()) {
+            logger.error("Validación fallida: Nombre es obligatorio para empresa");
+            throw new IllegalArgumentException("Nombre es obligatorio");
         }
     }
 

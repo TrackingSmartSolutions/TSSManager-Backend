@@ -127,4 +127,48 @@ public class TratoController {
                 .map(tratoService::convertToDTO)
                 .collect(Collectors.toList()));
     }
+
+    @PostMapping("/{tratoId}/actividades/{actividadId}/enviar-notificacion-email")
+    public ResponseEntity<String> enviarNotificacionEmail(@PathVariable Integer tratoId, @PathVariable Integer actividadId) {
+        try {
+            tratoService.enviarCorreoReunion(actividadId, tratoId);
+            return ResponseEntity.ok("Correo enviado exitosamente");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error al enviar correo: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{tratoId}/actividades/{actividadId}/enviar-notificacion-email-reprogramada")
+    public ResponseEntity<String> enviarNotificacionEmailReprogramada(@PathVariable Integer tratoId, @PathVariable Integer actividadId) {
+        try {
+            tratoService.enviarCorreoReunionReprogramada(actividadId, tratoId);
+            return ResponseEntity.ok("Correo de reprogramación enviado exitosamente");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error al enviar correo: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{tratoId}/contacto/verificar-datos")
+    public ResponseEntity<Map<String, Object>> verificarDatosContacto(@PathVariable Integer tratoId) {
+        try {
+            Map<String, Object> datos = tratoService.verificarDatosContacto(tratoId);
+            return ResponseEntity.ok(datos);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{tratoId}/generar-mensaje-whatsapp")
+    public ResponseEntity<Map<String, String>> generarMensajeWhatsApp(@PathVariable Integer tratoId, @RequestBody Map<String, Integer> request) {
+        try {
+            Integer actividadId = request.get("actividadId");
+            boolean esReprogramacion = request.getOrDefault("esReprogramacion", 0) == 1;
+            Map<String, String> resultado = tratoService.generarMensajeWhatsApp(tratoId, actividadId, esReprogramacion);
+            return ResponseEntity.ok(resultado);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+
 }

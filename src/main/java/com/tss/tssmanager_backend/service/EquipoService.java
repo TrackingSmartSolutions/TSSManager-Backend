@@ -66,7 +66,7 @@ public class EquipoService {
         equipo.setTipoActivacion(equipoDetails.getTipoActivacion());
         equipo.setPlataforma(equipoDetails.getPlataforma());
         equipo.setSimReferenciada(equipoDetails.getSimReferenciada());
-        equipo.setClienteDefault(equipoDetails.getClienteDefault()); // Actualizar clienteDefault
+        equipo.setClienteDefault(equipoDetails.getClienteDefault());
 
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
