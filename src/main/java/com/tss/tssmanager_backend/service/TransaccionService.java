@@ -70,12 +70,8 @@ public class TransaccionService {
         String formaPago = transaccion.getFormaPago();
         String nota = transaccion.getNotas();
 
-        int totalPagos = 1;
-        if (EsquemaTransaccionEnum.MENSUAL.equals(esquema)) {
-            totalPagos = 12;
-        } else if (EsquemaTransaccionEnum.ANUAL.equals(esquema)) {
-            totalPagos = 3;
-        }
+        // Usar el número de pagos personalizado o el por defecto
+        int totalPagos = transaccion.getNumeroPagos() != null ? transaccion.getNumeroPagos() : getDefaultPagos(esquema);
 
         for (int i = 0; i < totalPagos; i++) {
             CuentaPorPagar cuentaPorPagar = new CuentaPorPagar();
@@ -83,12 +79,7 @@ public class TransaccionService {
             cuentaPorPagar.setCuenta(transaccion.getCuenta());
 
             // Calcular fecha de pago según el esquema
-            LocalDate fechaPago = fechaPagoInicial;
-            if (EsquemaTransaccionEnum.MENSUAL.equals(esquema)) {
-                fechaPago = fechaPagoInicial.plusMonths(i);
-            } else if (EsquemaTransaccionEnum.ANUAL.equals(esquema)) {
-                fechaPago = fechaPagoInicial.plusYears(i);
-            }
+            LocalDate fechaPago = calcularFechaPago(fechaPagoInicial, esquema, i);
 
             cuentaPorPagar.setFechaPago(fechaPago);
             cuentaPorPagar.setMonto(monto);
@@ -103,6 +94,43 @@ public class TransaccionService {
         }
 
         cuentaPorPagarRepository.saveAll(cuentasPorPagar);
+    }
+
+    private int getDefaultPagos(EsquemaTransaccionEnum esquema) {
+        switch (esquema) {
+            case UNICA: return 1;
+            case SEMANAL: return 4;
+            case QUINCENAL: return 6;
+            case MENSUAL: return 12;
+            case BIMESTRAL: return 6;
+            case TRIMESTRAL: return 4;
+            case SEMESTRAL: return 4;
+            case ANUAL: return 3;
+            default: return 1;
+        }
+    }
+
+    private LocalDate calcularFechaPago(LocalDate fechaInicial, EsquemaTransaccionEnum esquema, int incremento) {
+        switch (esquema) {
+            case UNICA:
+                return fechaInicial;
+            case SEMANAL:
+                return fechaInicial.plusWeeks(incremento);
+            case QUINCENAL:
+                return fechaInicial.plusDays(incremento * 14);
+            case MENSUAL:
+                return fechaInicial.plusMonths(incremento);
+            case BIMESTRAL:
+                return fechaInicial.plusMonths(incremento * 2);
+            case TRIMESTRAL:
+                return fechaInicial.plusMonths(incremento * 3);
+            case SEMESTRAL:
+                return fechaInicial.plusMonths(incremento * 6);
+            case ANUAL:
+                return fechaInicial.plusYears(incremento);
+            default:
+                return fechaInicial;
+        }
     }
 
     @Transactional

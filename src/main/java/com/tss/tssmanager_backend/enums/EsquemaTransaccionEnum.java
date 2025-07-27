@@ -1,7 +1,12 @@
 package com.tss.tssmanager_backend.enums;
 
 public enum EsquemaTransaccionEnum {
-    ANUAL,
+    UNICA,
+    SEMANAL,
+    QUINCENAL,
     MENSUAL,
-    UNICA
+    BIMESTRAL,
+    TRIMESTRAL,
+    SEMESTRAL,
+    ANUAL
 }

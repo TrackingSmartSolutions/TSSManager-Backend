@@ -48,6 +48,9 @@ public class Transaccion {
     @Column(name = "notas")
     private String notas;
 
+    @Column(name = "numero_pagos")
+    private Integer numeroPagos;
+
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion;
 

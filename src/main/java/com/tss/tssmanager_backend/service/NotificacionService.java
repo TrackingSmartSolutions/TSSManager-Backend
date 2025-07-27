@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -212,6 +213,12 @@ public class NotificacionService {
         } catch (Exception e) {
             logger.error("Error al generar notificaciones de cuentas y SIMs: {}", e.getMessage());
         }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void generarNotificacionCuentasYSimsEnTransaccionSeparada() {
+        // Este método simplemente llama al método original pero en una transacción independiente
+        generarNotificacionCuentasYSims();
     }
 
     private void procesarCuentasPorCobrar(LocalDate hoy, LocalDate manana) {

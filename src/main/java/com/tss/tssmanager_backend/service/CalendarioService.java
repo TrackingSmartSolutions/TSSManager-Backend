@@ -136,7 +136,13 @@ public class CalendarioService {
             }
         }
 
-        notificacionService.generarNotificacionCuentasYSims();
+        try {
+            notificacionService.generarNotificacionCuentasYSimsEnTransaccionSeparada();
+        } catch (Exception e) {
+            // Log del error pero no fallar la consulta principal
+            System.err.println("Error generando notificaciones: " + e.getMessage());
+        }
+
         return eventos;
     }
 
