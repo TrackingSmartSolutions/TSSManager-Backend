@@ -3,6 +3,8 @@ package com.tss.tssmanager_backend.controller;
 import com.tss.tssmanager_backend.entity.CategoriaTransacciones;
 import com.tss.tssmanager_backend.entity.CuentasTransacciones;
 import com.tss.tssmanager_backend.entity.Transaccion;
+import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
+import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
 import com.tss.tssmanager_backend.repository.CategoriaTransaccionesRepository;
 import com.tss.tssmanager_backend.repository.CuentasTransaccionesRepository;
 import com.tss.tssmanager_backend.service.TransaccionService;
@@ -11,7 +13,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -28,20 +33,53 @@ public class TransaccionController {
 
 
     @PostMapping("/transacciones/crear")
-    public ResponseEntity<Transaccion> agregarTransaccion(@RequestBody Transaccion transaccion) {
+    public ResponseEntity<Transaccion> agregarTransaccion(@RequestBody Map<String, Object> request) {
         try {
+            Transaccion transaccion = new Transaccion();
 
-            if (transaccion.getCategoria() == null && transaccion.getCategoriaId() != null) {
-                CategoriaTransacciones categoria = categoriaTransaccionesRepository.findById(transaccion.getCategoriaId())
-                        .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + transaccion.getCategoriaId()));
+            // Mapear campos básicos
+            if (request.containsKey("fecha")) {
+                transaccion.setFecha(LocalDate.parse(request.get("fecha").toString()));
+            }
+            if (request.containsKey("tipo")) {
+                transaccion.setTipo(TipoTransaccionEnum.valueOf(request.get("tipo").toString()));
+            }
+            if (request.containsKey("monto")) {
+                transaccion.setMonto(new BigDecimal(request.get("monto").toString()));
+            }
+            if (request.containsKey("esquema")) {
+                transaccion.setEsquema(EsquemaTransaccionEnum.valueOf(request.get("esquema").toString()));
+            }
+            if (request.containsKey("numeroPagos")) {
+                transaccion.setNumeroPagos(Integer.parseInt(request.get("numeroPagos").toString()));
+            }
+            if (request.containsKey("fechaPago")) {
+                transaccion.setFechaPago(LocalDate.parse(request.get("fechaPago").toString()));
+            }
+            if (request.containsKey("formaPago")) {
+                transaccion.setFormaPago(request.get("formaPago").toString());
+            }
+            if (request.containsKey("notas")) {
+                transaccion.setNotas(request.get("notas").toString());
+            }
+
+            // Manejar categoría
+            if (request.containsKey("categoriaId")) {
+                CategoriaTransacciones categoria = categoriaTransaccionesRepository.findById(Integer.parseInt(request.get("categoriaId").toString()))
+                        .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada con ID: " + request.get("categoriaId")));
                 transaccion.setCategoria(categoria);
             }
 
-
-            if (transaccion.getCuenta() == null && transaccion.getCuentaId() != null) {
-                CuentasTransacciones cuenta = cuentasTransaccionesRepository.findById(transaccion.getCuentaId())
-                        .orElseThrow(() -> new IllegalArgumentException("Cuenta no encontrada con ID: " + transaccion.getCuentaId()));
+            // Manejar cuenta existente
+            if (request.containsKey("cuentaId") && request.get("cuentaId") != null && !request.get("cuentaId").toString().isEmpty()) {
+                CuentasTransacciones cuenta = cuentasTransaccionesRepository.findById(Integer.parseInt(request.get("cuentaId").toString()))
+                        .orElseThrow(() -> new IllegalArgumentException("Cuenta no encontrada con ID: " + request.get("cuentaId")));
                 transaccion.setCuenta(cuenta);
+            }
+
+            // Manejar nombre de cuenta para crear dinámicamente
+            if (request.containsKey("cuentaNombre") && request.get("cuentaNombre") != null && !request.get("cuentaNombre").toString().isEmpty()) {
+                transaccion.setNombreCuenta(request.get("cuentaNombre").toString());
             }
 
             Transaccion savedTransaccion = transaccionService.agregarTransaccion(transaccion);

@@ -46,9 +46,19 @@ public class TransaccionService {
     @Transactional
     public Transaccion agregarTransaccion(Transaccion transaccion) {
         if (transaccion.getFecha() == null || transaccion.getTipo() == null || transaccion.getCategoria() == null ||
-                transaccion.getCuenta() == null || transaccion.getMonto() == null || transaccion.getMonto().compareTo(BigDecimal.ZERO) <= 0 ||
+                transaccion.getMonto() == null || transaccion.getMonto().compareTo(BigDecimal.ZERO) <= 0 ||
                 transaccion.getFechaPago() == null || transaccion.getFormaPago() == null) {
             throw new IllegalArgumentException("Todos los campos obligatorios deben estar completos y el monto debe ser mayor a 0.");
+        }
+
+        // Si no tiene cuenta asignada pero tiene nombre de cuenta, crear/buscar la cuenta
+        if (transaccion.getCuenta() == null && transaccion.getNombreCuenta() != null) {
+            CuentasTransacciones cuenta = crearCuentaSiNoExiste(transaccion.getNombreCuenta(), transaccion.getCategoria());
+            transaccion.setCuenta(cuenta);
+        }
+
+        if (transaccion.getCuenta() == null) {
+            throw new IllegalArgumentException("La cuenta es obligatoria.");
         }
 
         transaccion.setFechaCreacion(LocalDateTime.now());
@@ -60,6 +70,21 @@ public class TransaccionService {
         }
 
         return savedTransaccion;
+    }
+
+    @Transactional
+    private CuentasTransacciones crearCuentaSiNoExiste(String nombreCuenta, CategoriaTransacciones categoria) {
+        // Verificar si la cuenta ya existe
+        CuentasTransacciones cuentaExistente = cuentaRepository.findByNombreAndCategoria(nombreCuenta, categoria);
+        if (cuentaExistente != null) {
+            return cuentaExistente;
+        }
+
+        // Crear nueva cuenta
+        CuentasTransacciones nuevaCuenta = new CuentasTransacciones();
+        nuevaCuenta.setNombre(nombreCuenta);
+        nuevaCuenta.setCategoria(categoria);
+        return cuentaRepository.save(nuevaCuenta);
     }
 
     private void generarCuentasPorPagar(Transaccion transaccion) {

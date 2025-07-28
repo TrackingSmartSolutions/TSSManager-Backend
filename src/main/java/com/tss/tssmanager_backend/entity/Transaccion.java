@@ -63,4 +63,7 @@ public class Transaccion {
     @Transient
     private Integer cuentaId;
 
+    @Transient
+    private String nombreCuenta;
+
 }
