@@ -9,5 +9,6 @@ public class CuentaPorPagarDTO {
     private Integer id;
     private LocalDate fechaPago;
     private BigDecimal monto;
+    private String formaPago;
     private Integer usuarioId;
 }

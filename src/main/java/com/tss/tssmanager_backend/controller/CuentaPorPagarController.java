@@ -32,7 +32,7 @@ public class CuentaPorPagarController {
     @PostMapping("/marcar-como-pagada")
     public ResponseEntity<Void> marcarComoPagada(@RequestBody CuentaPorPagarDTO request) {
         try {
-            cuentasPorPagarService.marcarComoPagada(request.getId(), request.getFechaPago(), request.getMonto(), request.getUsuarioId());
+            cuentasPorPagarService.marcarComoPagada(request.getId(), request.getFechaPago(), request.getMonto(), request.getFormaPago(), request.getUsuarioId());
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);

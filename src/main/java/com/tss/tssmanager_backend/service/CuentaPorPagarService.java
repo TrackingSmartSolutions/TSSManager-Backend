@@ -28,12 +28,13 @@ public class CuentaPorPagarService {
     }
 
     @Transactional
-    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal monto, Integer usuarioId) {
+    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal monto, String formaPago, Integer usuarioId) {
         CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
         cuenta.setEstatus("Pagado");
         cuenta.setFechaPago(fechaPago);
         cuenta.setMonto(monto);
+        cuenta.setFormaPago(formaPago);
 
         // Formatear LocalDateTime sin zona horaria
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
