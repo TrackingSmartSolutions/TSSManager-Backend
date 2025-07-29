@@ -1,15 +1,15 @@
 package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.dto.CuentaPorPagarDTO;
+import com.tss.tssmanager_backend.dto.RegenerarRequestDTO;
 import com.tss.tssmanager_backend.entity.CuentaPorPagar;
 import com.tss.tssmanager_backend.service.CuentaPorPagarService;
+import com.tss.tssmanager_backend.service.TransaccionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -50,6 +50,20 @@ public class CuentaPorPagarController {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/regenerar")
+    public ResponseEntity<Void> regenerarCuentasPorPagar(@RequestBody RegenerarRequestDTO request) {
+        try {
+            cuentasPorPagarService.regenerarCuentasPorPagarManual(
+                    request.getTransaccionId(),
+                    request.getFechaUltimoPago()
+            );
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            System.err.println("Error al regenerar cuentas por pagar: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

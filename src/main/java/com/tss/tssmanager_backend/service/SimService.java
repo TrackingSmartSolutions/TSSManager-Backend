@@ -1,15 +1,12 @@
 package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.SimDTO;
-import com.tss.tssmanager_backend.entity.Equipo;
-import com.tss.tssmanager_backend.entity.HistorialSaldosSim;
-import com.tss.tssmanager_backend.entity.Sim;
+import com.tss.tssmanager_backend.entity.*;
+import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
 import com.tss.tssmanager_backend.enums.PrincipalSimEnum;
 import com.tss.tssmanager_backend.enums.ResponsableSimEnum;
 import com.tss.tssmanager_backend.enums.TarifaSimEnum;
-import com.tss.tssmanager_backend.repository.EquipoRepository;
-import com.tss.tssmanager_backend.repository.HistorialSaldosSimRepository;
-import com.tss.tssmanager_backend.repository.SimRepository;
+import com.tss.tssmanager_backend.repository.*;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -33,6 +30,15 @@ public class SimService {
 
     @Autowired
     private HistorialSaldosSimRepository historialSaldosSimRepository;
+
+    @Autowired
+    private TransaccionService transaccionService;
+
+    @Autowired
+    private CategoriaTransaccionesRepository categoriaRepository;
+
+    @Autowired
+    private EmpresaRepository empresaRepository;
 
     @Transactional
     public Sim guardarSim(Sim sim) {
@@ -130,7 +136,71 @@ public class SimService {
             System.out.println("Desvinculando equipo de SIM con ID: " + savedSim.getId());
         }
 
+        // Crear transacción automática para SIMs de TSS
+        if (savedSim.getResponsable() == ResponsableSimEnum.TSS) {
+            try {
+                crearTransaccionAutomatica(savedSim);
+            } catch (Exception e) {
+                System.err.println("Error al crear transacción automática para SIM " + savedSim.getNumero() + ": " + e.getMessage());
+                // No fallar la creación de la SIM por un error en la transacción
+            }
+        }
+
         return savedSim;
+    }
+
+    private void crearTransaccionAutomatica(Sim sim) {
+        // Buscar o crear la categoría "Recarga de Saldos"
+        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcion("Recarga de Saldos");
+        CategoriaTransacciones categoria;
+
+        if (categoriaOpt.isPresent()) {
+            categoria = categoriaOpt.get();
+        } else {
+            categoria = new CategoriaTransacciones();
+            categoria.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
+            categoria.setDescripcion("Recarga de Saldos");
+            categoria = categoriaRepository.save(categoria);
+        }
+
+        // Determinar nombre de la cuenta
+        String nombreCuenta = "AG";
+        if (sim.getEquipo() != null && sim.getEquipo().getClienteId() != null) {
+            try {
+                Optional<Empresa> empresaOpt = empresaRepository.findById(sim.getEquipo().getClienteId());
+                if (empresaOpt.isPresent()) {
+                    nombreCuenta = empresaOpt.get().getNombre();
+                }
+            } catch (Exception e) {
+                System.err.println("Error obteniendo empresa: " + e.getMessage());
+                nombreCuenta = "AG";
+            }
+        }
+
+        BigDecimal monto = sim.getRecarga() != null ? sim.getRecarga() : new BigDecimal("50.00");
+
+        // Obtener fecha de pago basada en la vigencia de la SIM
+        LocalDate fechaPago;
+        if (sim.getVigencia() != null) {
+            fechaPago = sim.getVigencia().toLocalDate();
+        } else {
+            fechaPago = LocalDate.now().plusDays(30);
+        }
+
+        // Crear la transacción
+        Transaccion transaccion = new Transaccion();
+        transaccion.setFecha(LocalDate.now());
+        transaccion.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
+        transaccion.setCategoria(categoria);
+        transaccion.setNombreCuenta(nombreCuenta);
+        transaccion.setEsquema(EsquemaTransaccionEnum.MENSUAL);
+        transaccion.setNumeroPagos(1);
+        transaccion.setFechaPago(fechaPago);
+        transaccion.setMonto(monto);
+        transaccion.setFormaPago("01");
+        transaccion.setNotas(sim.getNumero());
+
+        transaccionService.agregarTransaccion(transaccion);
     }
 
     public List<Integer> obtenerGruposDisponibles() {

@@ -3,6 +3,7 @@ package com.tss.tssmanager_backend.dto;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Data
@@ -24,4 +25,6 @@ public class EventoCalendarioDTO {
     private String estado;
     private String esquema;
     private Boolean allDay;
+    private BigDecimal monto;
+    private String nota;
 }

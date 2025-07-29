@@ -16,8 +16,6 @@ public interface EmpresaRepository extends JpaRepository<Empresa, Integer> {
     List<Empresa> findByEstatus(EstatusEmpresaEnum estatus);
     List<Empresa> findByNombreContainingIgnoreCaseAndEstatus(String nombre, EstatusEmpresaEnum estatus);
 
-
-
     List<Empresa> findByPropietario_Id(Integer propietarioId);
 
     @Modifying

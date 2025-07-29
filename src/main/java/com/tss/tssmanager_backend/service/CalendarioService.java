@@ -2,7 +2,6 @@ package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.EventoCalendarioDTO;
 import com.tss.tssmanager_backend.entity.*;
-import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import com.tss.tssmanager_backend.enums.RolUsuarioEnum;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
@@ -25,8 +24,6 @@ public class CalendarioService {
     @Autowired
     private ActividadRepository actividadRepository;
     @Autowired
-    private SimRepository simRepository;
-    @Autowired
     private CuentaPorCobrarRepository cuentaPorCobrarRepository;
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
@@ -48,18 +45,16 @@ public class CalendarioService {
 
         // Consulta personalizada para Actividad
         List<Actividad> actividades;
-        boolean shouldShowRecargasAndCuentas = false;
         boolean shouldShowCuentas = false;
 
         if ("ROLE_EMPLEADO".equals(userRol)) {
             actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(userId, start, end);
-            shouldShowRecargasAndCuentas = true;
             shouldShowCuentas = false;
         } else if ("ROLE_ADMINISTRADOR".equals(userRol)) {
             // ADMINISTRADOR
             if (usuario == null || usuario.equals("Todos los usuarios")) {
                 actividades = actividadRepository.findByFechaLimiteBetween(start, end);
-                shouldShowRecargasAndCuentas = true;
+
                 shouldShowCuentas = true;
             } else {
                 Usuario assignedUser = usuarioRepository.findByNombre(usuario);
@@ -67,7 +62,6 @@ public class CalendarioService {
                     throw new RuntimeException("Usuario no encontrado: " + usuario);
                 }
                 actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(assignedUser.getId(), start, end);
-                shouldShowRecargasAndCuentas = true;
                 shouldShowCuentas = assignedUser.getRol() == RolUsuarioEnum.ADMINISTRADOR;
 
             }
@@ -77,24 +71,6 @@ public class CalendarioService {
         List<EventoCalendarioDTO> eventos = actividades.stream()
                 .map(this::convertActividadToEvento)
                 .collect(Collectors.toList());
-
-        // Solo agregar eventos adicionales (recargas, cuentas) si es administrador
-        if (shouldShowRecargasAndCuentas) {
-            eventos.addAll(simRepository.findAll().stream()
-                    .filter(sim -> sim.getVigencia() != null &&
-                            !sim.getVigencia().toLocalDate().isBefore(start) &&
-                            !sim.getVigencia().toLocalDate().isAfter(end))
-                    .map(sim -> EventoCalendarioDTO.builder()
-                            .titulo("Recarga - " + sim.getNumero() + " - " + (sim.getEquipo() != null ? sim.getEquipo().getImei() : "Sin IMEI"))
-                            .inicio(sim.getVigencia().toLocalDate().atStartOfDay().atZone(MEXICO_ZONE).toInstant())
-                            .fin(null)
-                            .allDay(true)
-                            .color("#f59e0b")
-                            .tipo("Recarga")
-                            .numeroSim(sim.getNumero())
-                            .imei(sim.getEquipo() != null ? sim.getEquipo().getImei() : null)
-                            .build())
-                    .collect(Collectors.toList()));
 
             if (shouldShowCuentas) {
                 // Agregar cuentas por cobrar - configuradas como eventos de todo el día
@@ -122,7 +98,7 @@ public class CalendarioService {
                                 !cuenta.getFechaPago().isBefore(start) &&
                                 !cuenta.getFechaPago().isAfter(end))
                         .map(cuenta -> EventoCalendarioDTO.builder()
-                                .titulo("Cuenta por Pagar - " + cuenta.getFolio() + " - " + cuenta.getCuenta().getNombre())
+                                .titulo(cuenta.getCuenta().getCategoria().getDescripcion() + " - " + cuenta.getCuenta().getNombre())
                                 .inicio(cuenta.getFechaPago().atStartOfDay().atZone(MEXICO_ZONE).toInstant())
                                 .fin(null)
                                 .allDay(true)
@@ -131,10 +107,12 @@ public class CalendarioService {
                                 .numeroCuenta(cuenta.getFolio())
                                 .cliente(cuenta.getCuenta().getNombre())
                                 .estado(cuenta.getEstatus())
+                                .monto(cuenta.getMonto())
+                                .nota(cuenta.getNota())
                                 .build())
                         .collect(Collectors.toList()));
             }
-        }
+
 
         try {
             notificacionService.generarNotificacionCuentasYSimsEnTransaccionSeparada();
