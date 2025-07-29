@@ -46,41 +46,50 @@ public class SimService {
             // Para SIMs de TSS
             if (sim.getId() != null) {
                 // Es una actualización - obtener SIM existente
-                Sim simExistente = simRepository.findById(sim.getId())
-                        .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada."));
+                if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
+                    sim.setGrupo(0);
+                    sim.setPrincipal(PrincipalSimEnum.NO);
+                } else {
+                    Sim simExistente = simRepository.findById(sim.getId())
+                            .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada."));
 
-                // Si cambia de NO principal a SI principal, generar nuevo grupo
-                if (simExistente.getPrincipal() == PrincipalSimEnum.NO &&
-                        sim.getPrincipal() == PrincipalSimEnum.SI) {
-                    sim.setGrupo(generarNuevoGrupo());
-                }
-                // Si cambia de SI principal a NO principal, debe especificar grupo
-                else if (simExistente.getPrincipal() == PrincipalSimEnum.SI &&
-                        sim.getPrincipal() == PrincipalSimEnum.NO) {
-                    if (sim.getGrupo() == null) {
-                        throw new IllegalStateException("Debe especificar un grupo para SIM no principal.");
+                    // Si cambia de NO principal a SI principal, generar nuevo grupo
+                    if (simExistente.getPrincipal() == PrincipalSimEnum.NO &&
+                            sim.getPrincipal() == PrincipalSimEnum.SI) {
+                        sim.setGrupo(generarNuevoGrupo());
                     }
-                    // Validar que el grupo seleccionado tenga espacio para SIMs no principales
-                    Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupoExcluding(sim.getGrupo(), sim.getId());
-                    if (nonPrincipalCount >= 5) {
-                        throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
+                    // Si cambia de SI principal a NO principal, debe especificar grupo
+                    else if (simExistente.getPrincipal() == PrincipalSimEnum.SI &&
+                            sim.getPrincipal() == PrincipalSimEnum.NO) {
+                        if (sim.getGrupo() == null) {
+                            throw new IllegalStateException("Debe especificar un grupo para SIM no principal.");
+                        }
+                        // Validar que el grupo seleccionado tenga espacio para SIMs no principales
+                        Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupoExcluding(sim.getGrupo(), sim.getId());
+                        if (nonPrincipalCount >= 5) {
+                            throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
+                        }
                     }
-                }
-                // Si sigue siendo principal, mantener su grupo actual
-                else if (sim.getPrincipal() == PrincipalSimEnum.SI) {
-                    sim.setGrupo(simExistente.getGrupo());
-                }
-                // Si sigue siendo no principal, validar el grupo
-                else if (sim.getPrincipal() == PrincipalSimEnum.NO && sim.getGrupo() != null) {
-                    // Validar que el grupo tenga espacio (excluyendo la SIM actual)
-                    Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupoExcluding(sim.getGrupo(), sim.getId());
-                    if (nonPrincipalCount >= 5) {
-                        throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
+                    // Si sigue siendo principal, mantener su grupo actual
+                    else if (sim.getPrincipal() == PrincipalSimEnum.SI) {
+                        sim.setGrupo(simExistente.getGrupo());
+                    }
+                    // Si sigue siendo no principal, validar el grupo
+                    else if (sim.getPrincipal() == PrincipalSimEnum.NO && sim.getGrupo() != null) {
+                        // Validar que el grupo tenga espacio (excluyendo la SIM actual)
+                        Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupoExcluding(sim.getGrupo(), sim.getId());
+                        if (nonPrincipalCount >= 5) {
+                            throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 5 SIMs no principales.");
+                        }
                     }
                 }
             } else {
                 // Es una creación nueva
-                if (sim.getPrincipal() == PrincipalSimEnum.SI) {
+                // Lógica especial para SIMs M2M Global 15
+                if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
+                    sim.setGrupo(0);
+                    sim.setPrincipal(PrincipalSimEnum.NO);
+                } else if (sim.getPrincipal() == PrincipalSimEnum.SI) {
                     sim.setGrupo(generarNuevoGrupo());
                 } else if (sim.getGrupo() != null) {
                     // Validar espacio en el grupo para SIM no principal
@@ -96,12 +105,6 @@ public class SimService {
                     if (principalCount + nonPrincipalCount >= 6) {
                         throw new IllegalStateException("El grupo seleccionado ya tiene el máximo de 6 SIMs.");
                     }
-
-                    // REMOVER esta validación que estaba causando el error:
-                    // if (principalCount >= 1) {
-                    //     throw new IllegalStateException("El grupo seleccionado ya tiene un SIM principal.");
-                    // }
-
                 } else {
                     throw new IllegalStateException("Debe especificar un grupo para SIM no principal.");
                 }
@@ -134,6 +137,9 @@ public class SimService {
         List<Integer> allGroups = simRepository.findAllGroups();
         return allGroups.stream()
                 .filter(group -> {
+                    // El grupo 0 no se incluye en grupos disponibles para selección normal
+                    if (group == 0) return false;
+
                     Long principalCount = simRepository.countPrincipalesByGrupo(group);
                     Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupo(group);
 
