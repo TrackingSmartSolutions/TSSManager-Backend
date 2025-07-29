@@ -172,7 +172,10 @@ public enum SectorEmpresaEnum {
     GUBERNAMENTAL_MUNICIPAL("93"),
     GUBERNAMENTAL_JUSTICIA("93"),
     GUBERNAMENTAL_SEGURIDAD("93"),
-    GUBERNAMENTAL_OTROS("93");
+    GUBERNAMENTAL_OTROS("93"),
+
+    PARTICULAR("99"),
+    ;
 
     private final String codigo;
 
