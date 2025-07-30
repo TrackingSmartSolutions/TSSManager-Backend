@@ -81,6 +81,11 @@ public class EquipoController {
         return ResponseEntity.ok(service.obtenerEstatus());
     }
 
+    @GetMapping("/dashboard")
+    public ResponseEntity<Map<String, Object>> obtenerDashboardData() {
+        return ResponseEntity.ok(service.obtenerDashboardData());
+    }
+
     private Equipo convertMapToEquipo(Map<String, Object> equipoMap) {
         Equipo equipo = new Equipo();
         equipo.setImei((String) equipoMap.get("imei"));
