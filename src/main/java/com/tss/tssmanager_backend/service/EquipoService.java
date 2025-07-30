@@ -175,7 +175,8 @@ public class EquipoService {
     }
 
     public List<EquiposEstatusDTO> obtenerEstatus() {
-        List<EquiposEstatus> estatusList = equiposEstatusRepository.findAll();
+
+        List<EquiposEstatus> estatusList = equiposEstatusRepository.findAllByOrderByFechaCheckDesc();
         return estatusList.stream().map(this::mapToDTO).collect(Collectors.toList());
     }
 

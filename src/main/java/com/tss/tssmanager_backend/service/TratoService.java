@@ -104,37 +104,70 @@ public class TratoService {
                 dto.setFases(generateFases(dto.getFase()));
             }
 
-
             if (row[20] != null) {
                 Integer actividadId = (Integer) row[20];
                 if (!actividadesMap.containsKey(actividadId)) {
                     ActividadDTO actividad = new ActividadDTO();
                     actividad.setId(actividadId);
                     actividad.setTratoId((Integer) row[21]);
-                    actividad.setTipo((TipoActividadEnum) row[22]);
-                    actividad.setSubtipoTarea((SubtipoTareaEnum) row[23]);
+
+                    if (row[22] != null) {
+                        String tipoStr = (String) row[22];
+                        actividad.setTipo(TipoActividadEnum.valueOf(tipoStr));
+                    }
+                    if (row[23] != null) {
+                        String subtipoStr = (String) row[23];
+                        actividad.setSubtipoTarea(SubtipoTareaEnum.valueOf(subtipoStr));
+                    }
+
                     actividad.setAsignadoAId((Integer) row[24]);
                     actividad.setFechaLimite((LocalDate) row[25]);
                     actividad.setHoraInicio((Time) row[26]);
                     actividad.setDuracion((String) row[27]);
-                    actividad.setModalidad((ModalidadActividadEnum) row[28]);
+                    if (row[28] != null) {
+                        String modalidadStr = (String) row[28];
+                        actividad.setModalidad(ModalidadActividadEnum.valueOf(modalidadStr));
+                    }
+
                     actividad.setLugarReunion((String) row[29]);
-                    actividad.setMedio((MedioReunionEnum) row[30]);
+                    if (row[30] != null) {
+                        String medioStr = (String) row[30];
+                        actividad.setMedio(MedioReunionEnum.valueOf(medioStr));
+                    }
+
                     actividad.setEnlaceReunion((String) row[31]);
-                    actividad.setFinalidad((FinalidadActividadEnum) row[32]);
-                    actividad.setEstatus((EstatusActividadEnum) row[33]);
+                    if (row[32] != null) {
+                        String finalidadStr = (String) row[32];
+                        actividad.setFinalidad(FinalidadActividadEnum.valueOf(finalidadStr));
+                    }
+                    if (row[33] != null) {
+                        String estatusStr = (String) row[33];
+                        actividad.setEstatus(EstatusActividadEnum.valueOf(estatusStr));
+                    }
+
                     actividad.setFechaCompletado(convertToInstant(row[34]));
                     actividad.setUsuarioCompletadoId((Integer) row[35]);
-                    actividad.setRespuesta((RespuestaEnum) row[36]);
-                    actividad.setInteres((InteresEnum) row[37]);
-                    actividad.setInformacion((InformacionEnum) row[38]);
-                    actividad.setSiguienteAccion((SiguienteAccionEnum) row[39]);
+                    if (row[36] != null) {
+                        String respuestaStr = (String) row[36];
+                        actividad.setRespuesta(RespuestaEnum.valueOf(respuestaStr));
+                    }
+                    if (row[37] != null) {
+                        String interesStr = (String) row[37];
+                        actividad.setInteres(InteresEnum.valueOf(interesStr));
+                    }
+                    if (row[38] != null) {
+                        String informacionStr = (String) row[38];
+                        actividad.setInformacion(InformacionEnum.valueOf(informacionStr));
+                    }
+                    if (row[39] != null) {
+                        String siguienteAccionStr = (String) row[39];
+                        actividad.setSiguienteAccion(SiguienteAccionEnum.valueOf(siguienteAccionStr));
+                    }
+
                     actividad.setNotas((String) row[40]);
                     actividad.setFechaCreacion(convertToInstant(row[41]));
                     actividad.setFechaModificacion(convertToInstant(row[42]));
                     actividad.setContactoId((Integer) row[43]);
-
-                    // Nombre del usuario asignado
                     actividad.setAsignadoANombre((String) row[44]);
 
                     actividadesMap.put(actividadId, actividad);
@@ -1403,7 +1436,7 @@ public class TratoService {
 
                 dto.setFechaUltimaActividad(convertToInstant(row[7]));
                 dto.setFechaCreacion(convertToInstant(row[8]));
-
+                dto.setFechaModificacion(convertToInstant(row[9]));
 
                 dto.setPropietarioNombre((String) row[10]);
                 dto.setEmpresaNombre((String) row[11]);
@@ -1418,13 +1451,20 @@ public class TratoService {
                 // Próxima actividad
                 dto.setProximaActividadTipo((String) row[15]);
                 if (row[16] != null) {
-                    dto.setProximaActividadFecha(
-                            ((Date) row[16]).toInstant()
-                                    .atZone(ZoneId.systemDefault())
-                                    .toLocalDate()
-                    );
+                    // Cambiar la conversión de Date a LocalDate
+                    if (row[16] instanceof java.sql.Date) {
+                        dto.setProximaActividadFecha(
+                                ((java.sql.Date) row[16]).toLocalDate()
+                        );
+                    } else if (row[16] instanceof Date) {
+                        dto.setProximaActividadFecha(
+                                ((Date) row[16]).toInstant()
+                                        .atZone(ZoneId.systemDefault())
+                                        .toLocalDate()
+                        );
+                    }
                 }
-
+                // Calcular si está desatendido
                 Instant fechaUltimaActividad = dto.getFechaUltimaActividad() != null ?
                         dto.getFechaUltimaActividad() : dto.getFechaCreacion();
                 long minutesInactive = ChronoUnit.MINUTES.between(fechaUltimaActividad, currentTime);
@@ -1434,6 +1474,7 @@ public class TratoService {
             } catch (Exception e) {
                 System.err.println("Error en convertToTratosBasicoDTOs: " + e.getMessage());
                 e.printStackTrace();
+                System.err.println("Row data: " + Arrays.toString(row));
             }
         }
 
@@ -1446,14 +1487,21 @@ public class TratoService {
             return null;
         }
 
-        if (dateObject instanceof Instant) {
-            return (Instant) dateObject;
-        } else if (dateObject instanceof Timestamp) {
-            return ((Timestamp) dateObject).toInstant();
-        } else if (dateObject instanceof Date) {
-            return ((Date) dateObject).toInstant();
-        } else {
-            System.err.println("Tipo de fecha no reconocido: " + dateObject.getClass().getName());
+        try {
+            if (dateObject instanceof Instant) {
+                return (Instant) dateObject;
+            } else if (dateObject instanceof Timestamp) {
+                return ((Timestamp) dateObject).toInstant();
+            } else if (dateObject instanceof java.sql.Date) {
+                return new Timestamp(((java.sql.Date) dateObject).getTime()).toInstant();
+            } else if (dateObject instanceof Date) {
+                return ((Date) dateObject).toInstant();
+            } else {
+                System.err.println("Tipo de fecha no reconocido: " + dateObject.getClass().getName());
+                return null;
+            }
+        } catch (Exception e) {
+            System.err.println("Error al convertir fecha: " + e.getMessage() + ", objeto: " + dateObject);
             return null;
         }
     }

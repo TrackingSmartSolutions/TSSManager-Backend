@@ -20,6 +20,7 @@ public class TratoBasicoDTO {
     private Integer propietarioId;
     private Instant fechaUltimaActividad;
     private Instant fechaCreacion;
+    private Instant fechaModificacion;
 
     // Datos para la lógica de actividades
     private Boolean isNeglected;

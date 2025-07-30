@@ -7,10 +7,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.sql.Date;
+import java.util.List;
 
 public interface EquiposEstatusRepository extends JpaRepository<EquiposEstatus, Integer> {
 
     @Modifying
     @Query("DELETE FROM EquiposEstatus e WHERE e.fechaCheck = :fechaCheck")
     int deleteByFechaCheck(@Param("fechaCheck") Date fechaCheck);
+    List<EquiposEstatus> findAllByOrderByFechaCheckDesc();
 }
