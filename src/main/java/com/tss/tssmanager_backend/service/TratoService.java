@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -51,9 +52,157 @@ public class TratoService {
 
     @Transactional(readOnly = true)
     public TratoDTO getTratoById(Integer id) {
-        Trato trato = tratoRepository.findTratoWithContactoAndTelefonos(id)
-                .orElseThrow(() -> new RuntimeException("Trato no encontrado con id: " + id));
-        return convertToDTO(trato);
+        List<Object[]> result = tratoRepository.findTratoCompleteById(id);
+
+        if (result.isEmpty()) {
+            throw new RuntimeException("Trato no encontrado con id: " + id);
+        }
+
+        return convertToCompleteTratoDTOFromQuery(result, id);
+    }
+
+    private TratoDTO convertToCompleteTratoDTOFromQuery(List<Object[]> results, Integer tratoId) {
+        TratoDTO dto = null;
+        Map<Integer, ActividadDTO> actividadesMap = new HashMap<>();
+        List<NotaTratoDTO> notas = new ArrayList<>();
+
+        for (Object[] row : results) {
+
+            if (dto == null) {
+                dto = new TratoDTO();
+                dto.setId((Integer) row[0]);
+                dto.setNombre((String) row[1]);
+                dto.setEmpresaId((Integer) row[2]);
+                dto.setNumeroUnidades((Integer) row[3]);
+                dto.setIngresosEsperados((BigDecimal) row[4]);
+                dto.setDescripcion((String) row[5]);
+                dto.setPropietarioId((Integer) row[6]);
+                dto.setFechaCierre(((Timestamp) row[7]).toLocalDateTime());
+                dto.setNoTrato((String) row[8]);
+                dto.setProbabilidad((Integer) row[9]);
+                dto.setFase((String) row[10]);
+                dto.setCorreosAutomaticosActivos((Boolean) row[11]);
+                dto.setFechaCreacion(convertToInstant(row[12]));
+                dto.setFechaModificacion(convertToInstant(row[13]));
+                dto.setFechaUltimaActividad(convertToInstant(row[14]));
+
+
+                dto.setPropietarioNombre((String) row[15]);
+                dto.setEmpresaNombre((String) row[16]);
+                dto.setContactoId((Integer) row[17]);
+
+                // Información de contacto
+                if (row[18] != null) {
+                    ContactoDTO contacto = new ContactoDTO();
+                    contacto.setId((Integer) row[17]);
+                    contacto.setNombre((String) row[18]);
+                    contacto.setCelular((String) row[19]);
+                    // Los teléfonos y correos se agregan después si existen
+                    dto.setContacto(contacto);
+                }
+
+                dto.setFases(generateFases(dto.getFase()));
+            }
+
+
+            if (row[20] != null) {
+                Integer actividadId = (Integer) row[20];
+                if (!actividadesMap.containsKey(actividadId)) {
+                    ActividadDTO actividad = new ActividadDTO();
+                    actividad.setId(actividadId);
+                    actividad.setTratoId((Integer) row[21]);
+                    actividad.setTipo((TipoActividadEnum) row[22]);
+                    actividad.setSubtipoTarea((SubtipoTareaEnum) row[23]);
+                    actividad.setAsignadoAId((Integer) row[24]);
+                    actividad.setFechaLimite((LocalDate) row[25]);
+                    actividad.setHoraInicio((Time) row[26]);
+                    actividad.setDuracion((String) row[27]);
+                    actividad.setModalidad((ModalidadActividadEnum) row[28]);
+                    actividad.setLugarReunion((String) row[29]);
+                    actividad.setMedio((MedioReunionEnum) row[30]);
+                    actividad.setEnlaceReunion((String) row[31]);
+                    actividad.setFinalidad((FinalidadActividadEnum) row[32]);
+                    actividad.setEstatus((EstatusActividadEnum) row[33]);
+                    actividad.setFechaCompletado(convertToInstant(row[34]));
+                    actividad.setUsuarioCompletadoId((Integer) row[35]);
+                    actividad.setRespuesta((RespuestaEnum) row[36]);
+                    actividad.setInteres((InteresEnum) row[37]);
+                    actividad.setInformacion((InformacionEnum) row[38]);
+                    actividad.setSiguienteAccion((SiguienteAccionEnum) row[39]);
+                    actividad.setNotas((String) row[40]);
+                    actividad.setFechaCreacion(convertToInstant(row[41]));
+                    actividad.setFechaModificacion(convertToInstant(row[42]));
+                    actividad.setContactoId((Integer) row[43]);
+
+                    // Nombre del usuario asignado
+                    actividad.setAsignadoANombre((String) row[44]);
+
+                    actividadesMap.put(actividadId, actividad);
+                }
+            }
+
+            // Procesar notas si existen
+            if (row[45] != null) {
+                NotaTratoDTO nota = new NotaTratoDTO();
+                nota.setId((Integer) row[45]);
+                nota.setTratoId((Integer) row[46]);
+                nota.setUsuarioId((Integer) row[47]);
+                nota.setNota(((String) row[48]).replaceAll("^\"|\"$", "").replaceAll("\\\\\"", "\""));
+                nota.setFechaCreacion(convertToInstant(row[49]));
+                nota.setEditadoPor((Integer) row[50]);
+                nota.setFechaEdicion(convertToInstant(row[51]));
+                nota.setAutorNombre((String) row[52]);
+                nota.setEditadoPorNombre((String) row[53]);
+
+                // Evitar duplicados
+                if (notas.stream().noneMatch(n -> n.getId().equals(nota.getId()))) {
+                    notas.add(nota);
+                }
+            }
+        }
+
+        if (dto != null) {
+            // Organizar actividades
+            List<ActividadDTO> todasActividades = new ArrayList<>(actividadesMap.values());
+            dto.setActividades(todasActividades);
+
+            // Separar actividades abiertas por tipo
+            List<ActividadDTO> abiertas = todasActividades.stream()
+                    .filter(a -> EstatusActividadEnum.ABIERTA.equals(a.getEstatus()))
+                    .collect(Collectors.toList());
+
+            List<ActividadDTO> tareas = abiertas.stream()
+                    .filter(a -> TipoActividadEnum.TAREA.equals(a.getTipo()))
+                    .collect(Collectors.toList());
+
+            List<ActividadDTO> llamadas = abiertas.stream()
+                    .filter(a -> TipoActividadEnum.LLAMADA.equals(a.getTipo()))
+                    .collect(Collectors.toList());
+
+            List<ActividadDTO> reuniones = abiertas.stream()
+                    .filter(a -> TipoActividadEnum.REUNION.equals(a.getTipo()))
+                    .collect(Collectors.toList());
+
+            dto.setActividadesAbiertas(new ActividadesAbiertasDTO(tareas, llamadas, reuniones));
+
+            // Historial de interacciones
+            List<ActividadDTO> historial = todasActividades.stream()
+                    .filter(a -> EstatusActividadEnum.CERRADA.equals(a.getEstatus()))
+                    .collect(Collectors.toList());
+            dto.setHistorialInteracciones(historial);
+
+            // Agregar notas
+            dto.setNotas(notas.stream()
+                    .map(this::convertNotaTratoToDTO)
+                    .collect(Collectors.toList()));
+        }
+
+        return dto;
+    }
+
+    private NotaTratoDTO convertNotaTratoToDTO(NotaTratoDTO notaDTO) {
+        notaDTO.setNota(notaDTO.getNota().replaceAll("^\"|\"$", "").replaceAll("\\\\\"", "\""));
+        return notaDTO;
     }
 
     @Transactional
@@ -1255,21 +1404,22 @@ public class TratoService {
                 dto.setFechaUltimaActividad(convertToInstant(row[7]));
                 dto.setFechaCreacion(convertToInstant(row[8]));
 
-                dto.setPropietarioNombre((String) row[9]);
-                dto.setEmpresaNombre((String) row[10]);
-                dto.setContactoId((Integer) row[11]);
+
+                dto.setPropietarioNombre((String) row[10]);
+                dto.setEmpresaNombre((String) row[11]);
+                dto.setContactoId((Integer) row[12]);
 
                 // Datos de actividades
-                Integer actividadesCount = ((Number) row[12]).intValue();
-                Integer actividadesAbiertasCount = ((Number) row[13]).intValue();
+                Integer actividadesCount = ((Number) row[13]).intValue();
+                Integer actividadesAbiertasCount = ((Number) row[14]).intValue();
                 dto.setHasActivities(actividadesCount > 0);
                 dto.setActividadesAbiertasCount(actividadesAbiertasCount);
 
                 // Próxima actividad
-                dto.setProximaActividadTipo((String) row[14]);
-                if (row[15] != null) {
+                dto.setProximaActividadTipo((String) row[15]);
+                if (row[16] != null) {
                     dto.setProximaActividadFecha(
-                            ((Date) row[15]).toInstant()
+                            ((Date) row[16]).toInstant()
                                     .atZone(ZoneId.systemDefault())
                                     .toLocalDate()
                     );
@@ -1282,9 +1432,8 @@ public class TratoService {
 
                 tratos.add(dto);
             } catch (Exception e) {
-                System.err.println("Error en filtrarTratosBasico: " + e.getMessage());
+                System.err.println("Error en convertToTratosBasicoDTOs: " + e.getMessage());
                 e.printStackTrace();
-
             }
         }
 

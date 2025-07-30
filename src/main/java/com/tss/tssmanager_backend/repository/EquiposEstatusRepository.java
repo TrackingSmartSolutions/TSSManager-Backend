@@ -4,11 +4,13 @@ import com.tss.tssmanager_backend.entity.EquiposEstatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
-import java.util.Date;
+import java.sql.Date;
 
 public interface EquiposEstatusRepository extends JpaRepository<EquiposEstatus, Integer> {
+
     @Modifying
     @Query("DELETE FROM EquiposEstatus e WHERE e.fechaCheck = :fechaCheck")
-    void deleteByFechaCheck(Date fechaCheck);
+    int deleteByFechaCheck(@Param("fechaCheck") Date fechaCheck);
 }

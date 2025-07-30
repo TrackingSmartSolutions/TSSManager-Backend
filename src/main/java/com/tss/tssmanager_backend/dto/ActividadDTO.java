@@ -14,6 +14,7 @@ public class ActividadDTO {
     private TipoActividadEnum tipo;
     private SubtipoTareaEnum subtipoTarea;
     private Integer asignadoAId;
+    private String asignadoANombre;
     private LocalDate fechaLimite;
     private Time horaInicio;
     private String duracion;

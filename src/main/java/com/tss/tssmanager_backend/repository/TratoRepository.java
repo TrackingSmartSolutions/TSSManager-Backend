@@ -153,6 +153,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
         t.fase,
         t.fecha_ultima_actividad,
         t.fecha_creacion,
+        t.fecha_modificacion,  -- AGREGAR ESTE CAMPO TAMBIÉN
         u.nombre as propietario_nombre,
         e.nombre as empresa_nombre,
         t.contacto_id,
@@ -186,6 +187,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
         t.fase,
         t.fecha_ultima_actividad,
         t.fecha_creacion,
+        t.fecha_modificacion,  -- AGREGAR ESTE CAMPO
         u.nombre as propietario_nombre,
         e.nombre as empresa_nombre,
         t.contacto_id,
@@ -206,4 +208,39 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
             @Param("startDate") Instant startDate,
             @Param("endDate") Instant endDate
     );
+
+    @Query(value = """
+    SELECT 
+        t.id, t.nombre, t.empresa_id, t.numero_unidades, t.ingresos_esperados,
+        t.descripcion, t.propietario_id, t.fecha_cierre, t.no_trato, t.probabilidad,
+        t.fase, t.correos_automaticos_activos, t.fecha_creacion, t.fecha_modificacion, 
+        t.fecha_ultima_actividad,
+        u.nombre as propietario_nombre,
+        e.nombre as empresa_nombre,
+        c.id as contacto_id, c.nombre as contacto_nombre, c.celular as contacto_celular,
+        -- Actividades
+        a.id as actividad_id, a.trato_id, a.tipo, a.subtipo_tarea, a.asignado_a_id,
+        a.fecha_limite, a.hora_inicio, a.duracion, a.modalidad, a.lugar_reunion,
+        a.medio, a.enlace_reunion, a.finalidad, a.estatus, a.fecha_completado,
+        a.usuario_completado_id, a.respuesta, a.interes, a.informacion,
+        a.siguiente_accion, a.notas as actividad_notas, a.fecha_creacion as actividad_fecha_creacion,
+        a.fecha_modificacion as actividad_fecha_modificacion, a.contacto_id as actividad_contacto_id,
+        ua.nombre as asignado_nombre,
+        -- Notas
+        n.id as nota_id, n.trato_id as nota_trato_id, n.usuario_id as nota_usuario_id,
+        n.nota, n.fecha_creacion as nota_fecha_creacion, n.editado_por, n.fecha_edicion,
+        un.nombre as nota_autor_nombre, ue.nombre as nota_editor_nombre
+    FROM "Tratos" t
+    LEFT JOIN "Usuarios" u ON t.propietario_id = u.id
+    LEFT JOIN "Empresas" e ON t.empresa_id = e.id
+    LEFT JOIN "Contactos" c ON t.contacto_id = c.id
+    LEFT JOIN "Actividades" a ON t.id = a.trato_id
+    LEFT JOIN "Usuarios" ua ON a.asignado_a_id = ua.id
+    LEFT JOIN "Notas_Tratos" n ON t.id = n.trato_id
+    LEFT JOIN "Usuarios" un ON n.usuario_id = un.id
+    LEFT JOIN "Usuarios" ue ON n.editado_por = ue.id
+    WHERE t.id = :tratoId
+    ORDER BY a.fecha_limite ASC, n.fecha_creacion DESC
+    """, nativeQuery = true)
+    List<Object[]> findTratoCompleteById(@Param("tratoId") Integer tratoId);
 }

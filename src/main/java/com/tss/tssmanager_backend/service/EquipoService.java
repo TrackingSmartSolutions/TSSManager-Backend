@@ -155,17 +155,21 @@ public class EquipoService {
 
     @Transactional
     public void guardarEstatus(List<Map<String, Object>> estatusList) {
-        // Eliminar estatus anteriores del mismo día
-        Date fechaActual = new Date(System.currentTimeMillis());
+        // Crear fecha solo con año, mes y día (sin hora)
+        LocalDate today = LocalDate.now();
+        Date fechaActual = Date.valueOf(today);
+
+        // Eliminar registros anteriores del mismo día
         equiposEstatusRepository.deleteByFechaCheck(fechaActual);
 
-        // Guardar nuevos estatus
         estatusList.forEach(estatus -> {
             EquiposEstatus es = new EquiposEstatus();
-            es.setEquipo(repository.findById((Integer) estatus.get("equipoId")).orElseThrow());
+            es.setEquipo(repository.findById((Integer) estatus.get("equipoId"))
+                    .orElseThrow(() -> new EntityNotFoundException("Equipo no encontrado con ID: " + estatus.get("equipoId"))));
             es.setEstatus(EstatusReporteEquipoEnum.valueOf((String) estatus.get("status")));
             es.setMotivo((String) estatus.get("motivo"));
             es.setFechaCheck(fechaActual);
+
             equiposEstatusRepository.save(es);
         });
     }
