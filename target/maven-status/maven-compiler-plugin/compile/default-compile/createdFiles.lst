@@ -154,6 +154,7 @@ com\tss\tssmanager_backend\enums\EstatusEmpresaEnum.class
 com\tss\tssmanager_backend\entity\EquiposEstatus.class
 com\tss\tssmanager_backend\entity\PlantillaImportacion.class
 com\tss\tssmanager_backend\enums\RolUsuarioEnum.class
+com\tss\tssmanager_backend\dto\TratoBasicoDTO.class
 com\tss\tssmanager_backend\repository\UnidadCotizacionRepository.class
 com\tss\tssmanager_backend\enums\PrincipalSimEnum.class
 com\tss\tssmanager_backend\controller\ReporteController.class
@@ -178,12 +179,12 @@ com\tss\tssmanager_backend\service\SolicitudFacturaNotaService$2.class
 com\tss\tssmanager_backend\entity\PlantillaCorreo.class
 com\tss\tssmanager_backend\repository\HistorialImportacionRepository.class
 com\tss\tssmanager_backend\enums\EstatusPagoEnum.class
+com\tss\tssmanager_backend\config\CacheConfig.class
 com\tss\tssmanager_backend\repository\TransaccionRepository.class
 com\tss\tssmanager_backend\dto\TipoDatosDTO.class
 com\tss\tssmanager_backend\controller\CotizacionController.class
 com\tss\tssmanager_backend\dto\EventoCalendarioDTO$EventoCalendarioDTOBuilder.class
 com\tss\tssmanager_backend\enums\ResponsableSimEnum.class
-com\tss\tssmanager_backend\dto\CuentaPorPagarResponseDTO.class
 com\tss\tssmanager_backend\repository\AlmacenamientoRepository.class
 com\tss\tssmanager_backend\service\CuentaPorPagarService.class
 com\tss\tssmanager_backend\security\SecurityConfig.class
