@@ -52,7 +52,7 @@ public class TratoService {
 
     @Transactional(readOnly = true)
     public TratoDTO getTratoById(Integer id) {
-        List<Object[]> result = tratoRepository.findTratoCompleteById(id);
+        List<Object[]> result = tratoRepository.findTratoCompleteByIdWithAllData(id);
 
         if (result.isEmpty()) {
             throw new RuntimeException("Trato no encontrado con id: " + id);
@@ -86,108 +86,122 @@ public class TratoService {
                 dto.setFechaModificacion(convertToInstant(row[13]));
                 dto.setFechaUltimaActividad(convertToInstant(row[14]));
 
-
                 dto.setPropietarioNombre((String) row[15]);
                 dto.setEmpresaNombre((String) row[16]);
-                dto.setContactoId((Integer) row[17]);
+
+                // Agregar información adicional de empresa si existe
+                if (row[17] != null) dto.setDomicilio((String) row[17]);
+                if (row[18] != null) dto.setSitioWeb((String) row[18]);
+                if (row[19] != null) dto.setSector((String) row[19]);
+
+                dto.setContactoId((Integer) row[20]);
 
                 // Información de contacto
-                if (row[18] != null) {
+                if (row[21] != null) {
                     ContactoDTO contacto = new ContactoDTO();
-                    contacto.setId((Integer) row[17]);
-                    contacto.setNombre((String) row[18]);
-                    contacto.setCelular((String) row[19]);
-                    // Los teléfonos y correos se agregan después si existen
-                    dto.setContacto(contacto);
-                }
+                    contacto.setId((Integer) row[20]);
+                    contacto.setNombre((String) row[21]);
+                    contacto.setCelular((String) row[22]);
 
+                    String telefono = (String) row[23];
+                    String correo = (String) row[24];
+
+                    dto.setContacto(new ContactoDTO(
+                            (String) row[21],
+                            telefono != null ? telefono : "",
+                            (String) row[22],
+                            correo != null ? correo : ""
+                    ));
+
+                    dto.getContacto().setId((Integer) row[20]);
+                }
                 dto.setFases(generateFases(dto.getFase()));
             }
 
-            if (row[20] != null) {
-                Integer actividadId = (Integer) row[20];
+            if (row[25] != null) {
+                Integer actividadId = (Integer) row[25];
                 if (!actividadesMap.containsKey(actividadId)) {
                     ActividadDTO actividad = new ActividadDTO();
                     actividad.setId(actividadId);
-                    actividad.setTratoId((Integer) row[21]);
+                    actividad.setTratoId((Integer) row[26]);
 
-                    if (row[22] != null) {
-                        String tipoStr = (String) row[22];
+                    if (row[27] != null) {
+                        String tipoStr = (String) row[27];
                         actividad.setTipo(TipoActividadEnum.valueOf(tipoStr));
                     }
-                    if (row[23] != null) {
-                        String subtipoStr = (String) row[23];
+                    if (row[28] != null) {
+                        String subtipoStr = (String) row[28];
                         actividad.setSubtipoTarea(SubtipoTareaEnum.valueOf(subtipoStr));
                     }
 
-                    actividad.setAsignadoAId((Integer) row[24]);
-                    actividad.setFechaLimite((LocalDate) row[25]);
-                    actividad.setHoraInicio((Time) row[26]);
-                    actividad.setDuracion((String) row[27]);
-                    if (row[28] != null) {
-                        String modalidadStr = (String) row[28];
+                    actividad.setAsignadoAId((Integer) row[29]);
+                    actividad.setFechaLimite(convertToLocalDate(row[30]));
+                    actividad.setHoraInicio((Time) row[31]);
+                    actividad.setDuracion((String) row[32]);
+
+                    if (row[33] != null) {
+                        String modalidadStr = (String) row[33];
                         actividad.setModalidad(ModalidadActividadEnum.valueOf(modalidadStr));
                     }
 
-                    actividad.setLugarReunion((String) row[29]);
-                    if (row[30] != null) {
-                        String medioStr = (String) row[30];
+                    actividad.setLugarReunion((String) row[34]);
+                    if (row[35] != null) {
+                        String medioStr = (String) row[35];
                         actividad.setMedio(MedioReunionEnum.valueOf(medioStr));
                     }
 
-                    actividad.setEnlaceReunion((String) row[31]);
-                    if (row[32] != null) {
-                        String finalidadStr = (String) row[32];
+                    actividad.setEnlaceReunion((String) row[36]);
+                    if (row[37] != null) {
+                        String finalidadStr = (String) row[37];
                         actividad.setFinalidad(FinalidadActividadEnum.valueOf(finalidadStr));
                     }
-                    if (row[33] != null) {
-                        String estatusStr = (String) row[33];
+                    if (row[38] != null) {
+                        String estatusStr = (String) row[38];
                         actividad.setEstatus(EstatusActividadEnum.valueOf(estatusStr));
                     }
 
-                    actividad.setFechaCompletado(convertToInstant(row[34]));
-                    actividad.setUsuarioCompletadoId((Integer) row[35]);
-                    if (row[36] != null) {
-                        String respuestaStr = (String) row[36];
+                    actividad.setFechaCompletado(convertToInstant(row[39]));
+                    actividad.setUsuarioCompletadoId((Integer) row[40]);
+
+                    if (row[41] != null) {
+                        String respuestaStr = (String) row[41];
                         actividad.setRespuesta(RespuestaEnum.valueOf(respuestaStr));
                     }
-                    if (row[37] != null) {
-                        String interesStr = (String) row[37];
+                    if (row[42] != null) {
+                        String interesStr = (String) row[42];
                         actividad.setInteres(InteresEnum.valueOf(interesStr));
                     }
-                    if (row[38] != null) {
-                        String informacionStr = (String) row[38];
+                    if (row[43] != null) {
+                        String informacionStr = (String) row[43];
                         actividad.setInformacion(InformacionEnum.valueOf(informacionStr));
                     }
-                    if (row[39] != null) {
-                        String siguienteAccionStr = (String) row[39];
+                    if (row[44] != null) {
+                        String siguienteAccionStr = (String) row[44];
                         actividad.setSiguienteAccion(SiguienteAccionEnum.valueOf(siguienteAccionStr));
                     }
 
-                    actividad.setNotas((String) row[40]);
-                    actividad.setFechaCreacion(convertToInstant(row[41]));
-                    actividad.setFechaModificacion(convertToInstant(row[42]));
-                    actividad.setContactoId((Integer) row[43]);
-                    actividad.setAsignadoANombre((String) row[44]);
+                    actividad.setNotas((String) row[45]);
+                    actividad.setFechaCreacion(convertToInstant(row[46]));
+                    actividad.setFechaModificacion(convertToInstant(row[47]));
+                    actividad.setContactoId((Integer) row[48]);
+                    actividad.setAsignadoANombre((String) row[49]);
 
                     actividadesMap.put(actividadId, actividad);
                 }
             }
 
-            // Procesar notas si existen
-            if (row[45] != null) {
+            if (row[50] != null) {
                 NotaTratoDTO nota = new NotaTratoDTO();
-                nota.setId((Integer) row[45]);
-                nota.setTratoId((Integer) row[46]);
-                nota.setUsuarioId((Integer) row[47]);
-                nota.setNota(((String) row[48]).replaceAll("^\"|\"$", "").replaceAll("\\\\\"", "\""));
-                nota.setFechaCreacion(convertToInstant(row[49]));
-                nota.setEditadoPor((Integer) row[50]);
-                nota.setFechaEdicion(convertToInstant(row[51]));
-                nota.setAutorNombre((String) row[52]);
-                nota.setEditadoPorNombre((String) row[53]);
+                nota.setId((Integer) row[50]);
+                nota.setTratoId((Integer) row[51]);
+                nota.setUsuarioId((Integer) row[52]);
+                nota.setNota(((String) row[53]).replaceAll("^\"|\"$", "").replaceAll("\\\\\"", "\""));
+                nota.setFechaCreacion(convertToInstant(row[54]));
+                nota.setEditadoPor((Integer) row[55]);
+                nota.setFechaEdicion(convertToInstant(row[56]));
+                nota.setAutorNombre((String) row[57]);
+                nota.setEditadoPorNombre((String) row[58]);
 
-                // Evitar duplicados
                 if (notas.stream().noneMatch(n -> n.getId().equals(nota.getId()))) {
                     notas.add(nota);
                 }
@@ -195,7 +209,6 @@ public class TratoService {
         }
 
         if (dto != null) {
-            // Organizar actividades
             List<ActividadDTO> todasActividades = new ArrayList<>(actividadesMap.values());
             dto.setActividades(todasActividades);
 
@@ -224,7 +237,6 @@ public class TratoService {
                     .collect(Collectors.toList());
             dto.setHistorialInteracciones(historial);
 
-            // Agregar notas
             dto.setNotas(notas.stream()
                     .map(this::convertNotaTratoToDTO)
                     .collect(Collectors.toList()));
@@ -1452,17 +1464,7 @@ public class TratoService {
                 dto.setProximaActividadTipo((String) row[15]);
                 if (row[16] != null) {
                     // Cambiar la conversión de Date a LocalDate
-                    if (row[16] instanceof java.sql.Date) {
-                        dto.setProximaActividadFecha(
-                                ((java.sql.Date) row[16]).toLocalDate()
-                        );
-                    } else if (row[16] instanceof Date) {
-                        dto.setProximaActividadFecha(
-                                ((Date) row[16]).toInstant()
-                                        .atZone(ZoneId.systemDefault())
-                                        .toLocalDate()
-                        );
-                    }
+                    dto.setProximaActividadFecha(convertToLocalDate(row[16]));
                 }
                 // Calcular si está desatendido
                 Instant fechaUltimaActividad = dto.getFechaUltimaActividad() != null ?
@@ -1529,5 +1531,32 @@ public class TratoService {
 
         List<TratoDTO> pageContent = allTratos.subList(start, end);
         return new PageImpl<>(pageContent, pageable, allTratos.size());
+    }
+
+    // Método auxiliar para conversión segura de fechas a LocalDate
+    private LocalDate convertToLocalDate(Object dateObject) {
+        if (dateObject == null) {
+            return null;
+        }
+
+        try {
+            if (dateObject instanceof LocalDate) {
+                return (LocalDate) dateObject;
+            } else if (dateObject instanceof java.sql.Date) {
+                return ((java.sql.Date) dateObject).toLocalDate();
+            } else if (dateObject instanceof java.util.Date) {
+                return ((java.util.Date) dateObject).toInstant()
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate();
+            } else if (dateObject instanceof Timestamp) {
+                return ((Timestamp) dateObject).toLocalDateTime().toLocalDate();
+            } else {
+                System.err.println("Tipo de fecha no reconocido para LocalDate: " + dateObject.getClass().getName());
+                return null;
+            }
+        } catch (Exception e) {
+            System.err.println("Error al convertir fecha a LocalDate: " + e.getMessage() + ", objeto: " + dateObject);
+            return null;
+        }
     }
 }
