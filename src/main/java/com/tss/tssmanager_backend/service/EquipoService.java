@@ -204,10 +204,10 @@ public class EquipoService {
                 .filter(e -> e.getTipo() == TipoEquipoEnum.VENDIDO || e.getTipo() == TipoEquipoEnum.DEMO)
                 .collect(Collectors.toList());
 
-        // Conteos por plataforma
+        // Conteos por plataforma (incluyendo los que no tienen plataforma)
         Map<String, Long> conteosPorPlataforma = obtenerTodosLosEquiposCache().stream()
                 .collect(Collectors.groupingBy(
-                        e -> e.getPlataforma().toString(),
+                        e -> e.getPlataforma() != null ? e.getPlataforma().toString() : "SIN_PLATAFORMA",
                         Collectors.counting()
                 ));
 
