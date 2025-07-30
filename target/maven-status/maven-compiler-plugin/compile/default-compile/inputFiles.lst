@@ -33,6 +33,7 @@ C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\CotizacionDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\CuentaPorCobrarDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\CuentaPorPagarDTO.java
+C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\CuentaPorPagarResponseDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\EmpresaConContactoDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\EmpresaDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\EquiposEstatusDTO.java
@@ -50,6 +51,7 @@ C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\PlantillaCorreoDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\PlantillaImportacionDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\PropietarioDTO.java
+C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\RegenerarRequestDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\ReporteDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\ResultadoExportacionDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\ResultadoImportacionDTO.java

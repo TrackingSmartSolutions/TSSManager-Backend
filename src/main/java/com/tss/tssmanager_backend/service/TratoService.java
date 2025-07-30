@@ -8,13 +8,20 @@ import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -373,40 +380,162 @@ public class TratoService {
         return fases;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<TratoDTO> filtrarTratos(Integer empresaId, Integer propietarioId, Instant startDate, Instant endDate) {
-        List<Trato> tratos;
-        Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10); // 10 years ago
+        // Establecer fechas por defecto si no se proporcionan
+        Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10);
         Instant end = (endDate != null) ? endDate : Instant.now();
 
-        // Obtener el usuario actual para determinar si es empleado
         Integer currentUserId = getCurrentUserId();
-        RolUsuarioEnum currentUserRole = getCurrentUserRole(); // Necesitarás implementar este método
+        RolUsuarioEnum currentUserRole = getCurrentUserRole();
 
-        if (empresaId != null && propietarioId != null) {
-            tratos = tratoRepository.findByEmpresaIdAndPropietarioIdAndFechaCreacionBetween(empresaId, propietarioId, start, end);
-        } else if (empresaId != null) {
-            tratos = tratoRepository.findByEmpresaIdAndFechaCreacionBetween(empresaId, start, end);
-        } else if (propietarioId != null) {
-            // Si es empleado, buscar tratos donde sea propietario O tenga actividades asignadas
-            if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
-                tratos = tratoRepository.findByPropietarioIdOrAsignadoIdAndFechaCreacionBetween(propietarioId, start, end);
-            } else {
-                tratos = tratoRepository.findByPropietarioIdAndFechaCreacionBetween(propietarioId, start, end);
-            }
+        List<Object[]> results;
+
+        // Usar query optimizada según el rol
+        if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
+            results = tratoRepository.findTratosForEmpleado(currentUserId, start, end);
         } else {
-            // Si no hay filtros específicos y es empleado, aplicar la misma lógica
-            if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
-                tratos = tratoRepository.findByPropietarioIdOrAsignadoIdAndFechaCreacionBetween(currentUserId, start, end);
-            } else {
-                tratos = tratoRepository.findByFechaCreacionBetween(start, end);
-            }
+            results = tratoRepository.findTratosOptimized(empresaId, propietarioId, start, end);
         }
-        return tratos.stream().map(this::convertToDTO).collect(Collectors.toList());
+
+        // Convertir resultados a DTOs de forma optimizada
+        List<TratoDTO> tratos = convertToTratosDTOOptimized(results);
+
+        // Cargar actividades por lotes solo para los tratos que las necesiten
+        loadActivitiesInBatch(tratos);
+
+        return tratos;
     }
 
     private RolUsuarioEnum getCurrentUserRole() {
         return ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getRol();
+    }
+
+    private List<TratoDTO> convertToTratosDTOOptimized(List<Object[]> results) {
+        List<TratoDTO> tratos = new ArrayList<>();
+        Instant currentTime = Instant.now();
+
+        for (Object[] row : results) {
+            try {
+                TratoDTO dto = new TratoDTO();
+
+                // Mapear campos básicos directamente desde la query
+                dto.setId((Integer) row[0]);
+                dto.setNombre((String) row[1]);
+                dto.setEmpresaId((Integer) row[2]);
+                dto.setNumeroUnidades((Integer) row[3]);
+                dto.setIngresosEsperados((BigDecimal) row[4]);
+                dto.setDescripcion((String) row[5]);
+                dto.setPropietarioId((Integer) row[6]);
+                dto.setFechaCierre(((Timestamp) row[7]).toLocalDateTime());
+                dto.setNoTrato((String) row[8]);
+                dto.setProbabilidad((Integer) row[9]);
+                dto.setFase((String) row[10]);
+                dto.setCorreosAutomaticosActivos((Boolean) row[11]);
+
+                // Usar conversión segura para fechas
+                dto.setFechaCreacion(convertToInstant(row[12]));
+                dto.setFechaModificacion(convertToInstant(row[13]));
+                dto.setFechaUltimaActividad(convertToInstant(row[14]));
+
+                // Datos relacionados ya obtenidos en la query
+                dto.setPropietarioNombre((String) row[15]);
+                dto.setEmpresaNombre((String) row[16]);
+                dto.setContactoId((Integer) row[17]);
+
+                // Configurar información de contacto básica
+                if (row[18] != null) {
+                    ContactoDTO contacto = new ContactoDTO();
+                    contacto.setNombre((String) row[18]);
+                    dto.setContacto(contacto);
+                }
+
+                // Determinar si está desatendido basado en los datos de la query
+                Long actividadesAbiertasCount = ((Number) row[19]).longValue();
+                Boolean hasActivities = (Boolean) row[20];
+
+                Instant fechaUltimaActividad = dto.getFechaUltimaActividad() != null ?
+                        dto.getFechaUltimaActividad() : dto.getFechaCreacion();
+
+                long minutesInactive = ChronoUnit.MINUTES.between(fechaUltimaActividad, currentTime);
+                dto.setIsNeglected(!hasActivities && minutesInactive > 10080);
+                dto.setHasActivities(hasActivities);
+
+                // Inicializar listas vacías (se llenarán después si es necesario)
+                dto.setActividades(new ArrayList<>());
+                dto.setActividadesAbiertas(new ActividadesAbiertasDTO(
+                        new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
+                dto.setHistorialInteracciones(new ArrayList<>());
+                dto.setNotas(new ArrayList<>());
+                dto.setFases(generateFases(dto.getFase()));
+
+                tratos.add(dto);
+            } catch (Exception e) {
+                System.err.println("Error en convertToTratosDTOOptimized: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        return tratos;
+    }
+
+    private void loadActivitiesInBatch(List<TratoDTO> tratos) {
+        if (tratos.isEmpty()) return;
+
+        // Obtener IDs de tratos que tienen actividades
+        List<Integer> tratoIdsWithActivities = tratos.stream()
+                .filter(TratoDTO::getHasActivities)
+                .map(TratoDTO::getId)
+                .collect(Collectors.toList());
+
+        if (tratoIdsWithActivities.isEmpty()) return;
+
+        // Cargar todas las actividades de una vez
+        List<Actividad> allActivities = tratoRepository.findActivitiesByTratoIds(tratoIdsWithActivities);
+
+        // Agrupar actividades por trato
+        Map<Integer, List<Actividad>> activitiesByTrato = allActivities.stream()
+                .collect(Collectors.groupingBy(Actividad::getTratoId));
+
+        // Asignar actividades a cada trato
+        for (TratoDTO trato : tratos) {
+            List<Actividad> tratoActivities = activitiesByTrato.get(trato.getId());
+            if (tratoActivities != null && !tratoActivities.isEmpty()) {
+
+                // Convertir actividades a DTOs
+                List<ActividadDTO> actividadesDTOs = tratoActivities.stream()
+                        .map(this::convertToDTO)
+                        .collect(Collectors.toList());
+
+                trato.setActividades(actividadesDTOs);
+
+                // Separar actividades abiertas por tipo
+                List<ActividadDTO> abiertas = actividadesDTOs.stream()
+                        .filter(a -> EstatusActividadEnum.ABIERTA.equals(a.getEstatus()))
+                        .collect(Collectors.toList());
+
+                List<ActividadDTO> tareas = abiertas.stream()
+                        .filter(a -> TipoActividadEnum.TAREA.equals(a.getTipo()))
+                        .collect(Collectors.toList());
+
+                List<ActividadDTO> llamadas = abiertas.stream()
+                        .filter(a -> TipoActividadEnum.LLAMADA.equals(a.getTipo()))
+                        .collect(Collectors.toList());
+
+                List<ActividadDTO> reuniones = abiertas.stream()
+                        .filter(a -> TipoActividadEnum.REUNION.equals(a.getTipo()))
+                        .collect(Collectors.toList());
+
+                trato.setActividadesAbiertas(new ActividadesAbiertasDTO(tareas, llamadas, reuniones));
+
+                // Historial de interacciones (actividades cerradas)
+                List<ActividadDTO> historial = actividadesDTOs.stream()
+                        .filter(a -> EstatusActividadEnum.CERRADA.equals(a.getEstatus()))
+                        .collect(Collectors.toList());
+
+                trato.setHistorialInteracciones(historial);
+            }
+        }
     }
 
     @Transactional(readOnly = true)
@@ -1085,5 +1214,123 @@ public class TratoService {
         mensaje.append("\nTracking Smart Solutions");
 
         return mensaje.toString();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TratoBasicoDTO> filtrarTratosBasico(Integer empresaId, Integer propietarioId,
+                                                    Instant startDate, Instant endDate) {
+        Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10);
+        Instant end = (endDate != null) ? endDate : Instant.now();
+
+        Integer currentUserId = getCurrentUserId();
+        RolUsuarioEnum currentUserRole = getCurrentUserRole();
+
+        List<Object[]> results;
+
+        if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
+            results = tratoRepository.findTratosBasicoForEmpleado(currentUserId, start, end);
+        } else {
+            results = tratoRepository.findTratosBasico(empresaId, propietarioId, start, end);
+        }
+
+        return convertToTratosBasicoDTOs(results);
+    }
+
+    private List<TratoBasicoDTO> convertToTratosBasicoDTOs(List<Object[]> results) {
+        List<TratoBasicoDTO> tratos = new ArrayList<>();
+        Instant currentTime = Instant.now();
+
+        for (Object[] row : results) {
+            try {
+                TratoBasicoDTO dto = new TratoBasicoDTO();
+
+                dto.setId((Integer) row[0]);
+                dto.setNombre((String) row[1]);
+                dto.setPropietarioId((Integer) row[2]);
+                dto.setFechaCierre(((Timestamp) row[3]).toLocalDateTime());
+                dto.setNoTrato((String) row[4]);
+                dto.setIngresoEsperado((BigDecimal) row[5]);
+                dto.setFase((String) row[6]);
+
+                dto.setFechaUltimaActividad(convertToInstant(row[7]));
+                dto.setFechaCreacion(convertToInstant(row[8]));
+
+                dto.setPropietarioNombre((String) row[9]);
+                dto.setEmpresaNombre((String) row[10]);
+                dto.setContactoId((Integer) row[11]);
+
+                // Datos de actividades
+                Integer actividadesCount = ((Number) row[12]).intValue();
+                Integer actividadesAbiertasCount = ((Number) row[13]).intValue();
+                dto.setHasActivities(actividadesCount > 0);
+                dto.setActividadesAbiertasCount(actividadesAbiertasCount);
+
+                // Próxima actividad
+                dto.setProximaActividadTipo((String) row[14]);
+                if (row[15] != null) {
+                    dto.setProximaActividadFecha(
+                            ((Date) row[15]).toInstant()
+                                    .atZone(ZoneId.systemDefault())
+                                    .toLocalDate()
+                    );
+                }
+
+                Instant fechaUltimaActividad = dto.getFechaUltimaActividad() != null ?
+                        dto.getFechaUltimaActividad() : dto.getFechaCreacion();
+                long minutesInactive = ChronoUnit.MINUTES.between(fechaUltimaActividad, currentTime);
+                dto.setIsNeglected(!dto.getHasActivities() && minutesInactive > 10080);
+
+                tratos.add(dto);
+            } catch (Exception e) {
+                System.err.println("Error en filtrarTratosBasico: " + e.getMessage());
+                e.printStackTrace();
+
+            }
+        }
+
+        return tratos;
+    }
+
+    // Método helper para conversión segura de fechas
+    private Instant convertToInstant(Object dateObject) {
+        if (dateObject == null) {
+            return null;
+        }
+
+        if (dateObject instanceof Instant) {
+            return (Instant) dateObject;
+        } else if (dateObject instanceof Timestamp) {
+            return ((Timestamp) dateObject).toInstant();
+        } else if (dateObject instanceof Date) {
+            return ((Date) dateObject).toInstant();
+        } else {
+            System.err.println("Tipo de fecha no reconocido: " + dateObject.getClass().getName());
+            return null;
+        }
+    }
+
+    // Método para cargar trato completo cuando se necesite
+    @Transactional(readOnly = true)
+    public TratoDTO getTratoConDetalles(Integer id) {
+        Trato trato = tratoRepository.findTratoWithContactoAndTelefonos(id)
+                .orElseThrow(() -> new RuntimeException("Trato no encontrado con id: " + id));
+        return convertToDTO(trato);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TratoDTO> filtrarTratosPaginados(Integer empresaId, Integer propietarioId,
+                                                 Instant startDate, Instant endDate, Pageable pageable) {
+
+        List<TratoDTO> allTratos = filtrarTratos(empresaId, propietarioId, startDate, endDate);
+
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), allTratos.size());
+
+        if (start >= allTratos.size()) {
+            return new PageImpl<>(new ArrayList<>(), pageable, allTratos.size());
+        }
+
+        List<TratoDTO> pageContent = allTratos.subList(start, end);
+        return new PageImpl<>(pageContent, pageable, allTratos.size());
     }
 }

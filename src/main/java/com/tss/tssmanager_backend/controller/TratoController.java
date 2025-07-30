@@ -1,14 +1,15 @@
 package com.tss.tssmanager_backend.controller;
 
-import com.tss.tssmanager_backend.dto.TratoCountDTO;
-import com.tss.tssmanager_backend.dto.TratoDTO;
-import com.tss.tssmanager_backend.dto.ActividadDTO;
-import com.tss.tssmanager_backend.dto.NotaTratoDTO;
+import com.tss.tssmanager_backend.dto.*;
 import com.tss.tssmanager_backend.entity.Actividad;
 import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import com.tss.tssmanager_backend.repository.ActividadRepository;
 import com.tss.tssmanager_backend.service.TratoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -31,12 +32,66 @@ public class TratoController {
     private ActividadRepository actividadRepository;
 
     @GetMapping("/filtrar")
-    public List<TratoDTO> filtrarTratos(
+    public ResponseEntity<?> filtrarTratos(
+            @RequestParam(required = false) Integer empresaId,
+            @RequestParam(required = false) Integer propietarioId,
+            @RequestParam(required = false) Instant startDate,
+            @RequestParam(required = false) Instant endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size,
+            @RequestParam(defaultValue = "false") boolean enablePagination) {
+
+        try {
+            if (enablePagination) {
+                // Versión paginada para casos con muchos datos
+                Page<TratoDTO> result = tratoService.filtrarTratosPaginados(
+                        empresaId, propietarioId, startDate, endDate,
+                        PageRequest.of(page, size, Sort.by("fechaModificacion").descending())
+                );
+                return ResponseEntity.ok(result);
+            } else {
+                List<TratoDTO> result = tratoService.filtrarTratos(empresaId, propietarioId, startDate, endDate);
+                return ResponseEntity.ok(result);
+            }
+        } catch (Exception e) {
+            // Log del error para debugging
+            System.err.println("Error en filtrarTratos: " + e.getMessage());
+            e.printStackTrace();
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "error", "Error interno del servidor",
+                            "message", "No se pudieron cargar los tratos. Intente nuevamente.",
+                            "timestamp", Instant.now()
+                    ));
+        }
+    }
+
+    @GetMapping("/filtrar/basico")
+    public ResponseEntity<List<TratoBasicoDTO>> filtrarTratosBasico(
             @RequestParam(required = false) Integer empresaId,
             @RequestParam(required = false) Integer propietarioId,
             @RequestParam(required = false) Instant startDate,
             @RequestParam(required = false) Instant endDate) {
-        return tratoService.filtrarTratos(empresaId, propietarioId, startDate, endDate);
+
+        try {
+            List<TratoBasicoDTO> result = tratoService.filtrarTratosBasico(
+                    empresaId, propietarioId, startDate, endDate);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            System.err.println("Error en filtrarTratosBasico: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/{id}/detalles")
+    public ResponseEntity<TratoDTO> getTratoDetalles(@PathVariable Integer id) {
+        try {
+            TratoDTO trato = tratoService.getTratoConDetalles(id);
+            return ResponseEntity.ok(trato);
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @Transactional

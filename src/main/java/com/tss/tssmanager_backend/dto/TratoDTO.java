@@ -38,5 +38,7 @@ public class TratoDTO {
 
     private boolean escalado;
     private String nuevoAdministradorNombre;
+    private Boolean isNeglected;
+    private Boolean hasActivities;
 }
 

@@ -55,6 +55,7 @@ com\tss\tssmanager_backend\service\ConfiguracionEmpresaService.class
 com\tss\tssmanager_backend\dto\EmpresaDTO.class
 com\tss\tssmanager_backend\controller\PlantillaCorreoController.class
 com\tss\tssmanager_backend\dto\SimDTO.class
+com\tss\tssmanager_backend\dto\RegenerarRequestDTO.class
 com\tss\tssmanager_backend\dto\EstadisticasCopiasDTO$EstadisticasCopiasDTOBuilder.class
 com\tss\tssmanager_backend\repository\ContactoRepository.class
 com\tss\tssmanager_backend\dto\FacturaDTO.class
@@ -147,6 +148,7 @@ com\tss\tssmanager_backend\enums\TipoEquipoEnum.class
 com\tss\tssmanager_backend\service\CotizacionService.class
 com\tss\tssmanager_backend\entity\SolicitudFacturaNota.class
 com\tss\tssmanager_backend\service\CopiaSeguridadService$1.class
+com\tss\tssmanager_backend\service\TransaccionService$1.class
 com\tss\tssmanager_backend\dto\TipoDatosDTO$TipoDatosDTOBuilder.class
 com\tss\tssmanager_backend\enums\EstatusEmpresaEnum.class
 com\tss\tssmanager_backend\entity\EquiposEstatus.class
@@ -169,6 +171,7 @@ com\tss\tssmanager_backend\dto\SolicitudFacturaNotaDTO.class
 com\tss\tssmanager_backend\dto\SolicitudLimpiezaDTO.class
 com\tss\tssmanager_backend\repository\CuentaPorCobrarRepository.class
 com\tss\tssmanager_backend\dto\ConfiguracionCopiasDTO.class
+com\tss\tssmanager_backend\service\CuentaPorPagarService$1.class
 com\tss\tssmanager_backend\dto\SolicitudExportacionDTO.class
 com\tss\tssmanager_backend\controller\EmpresaController.class
 com\tss\tssmanager_backend\service\SolicitudFacturaNotaService$2.class
@@ -180,6 +183,7 @@ com\tss\tssmanager_backend\dto\TipoDatosDTO.class
 com\tss\tssmanager_backend\controller\CotizacionController.class
 com\tss\tssmanager_backend\dto\EventoCalendarioDTO$EventoCalendarioDTOBuilder.class
 com\tss\tssmanager_backend\enums\ResponsableSimEnum.class
+com\tss\tssmanager_backend\dto\CuentaPorPagarResponseDTO.class
 com\tss\tssmanager_backend\repository\AlmacenamientoRepository.class
 com\tss\tssmanager_backend\service\CuentaPorPagarService.class
 com\tss\tssmanager_backend\security\SecurityConfig.class
