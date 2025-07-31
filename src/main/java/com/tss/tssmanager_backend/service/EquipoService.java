@@ -13,7 +13,7 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.cache.annotation.Cacheable;
+
 
 import java.sql.Date;
 import java.time.LocalDate;
@@ -191,31 +191,5 @@ public class EquipoService {
         return dto;
     }
 
-    @Cacheable(value = "equipos", key = "'all'")
-    public List<Equipo> obtenerTodosLosEquiposCache() {
-        return (List<Equipo>) repository.findAll();
-    }
-
-    public Map<String, Object> obtenerDashboardData() {
-        Map<String, Object> response = new HashMap<>();
-
-        // Datos básicos para vista inicial
-        List<Equipo> equiposParaCheck = obtenerTodosLosEquiposCache().stream()
-                .filter(e -> e.getTipo() == TipoEquipoEnum.VENDIDO || e.getTipo() == TipoEquipoEnum.DEMO)
-                .collect(Collectors.toList());
-
-        // Conteos por plataforma (incluyendo los que no tienen plataforma)
-        Map<String, Long> conteosPorPlataforma = obtenerTodosLosEquiposCache().stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.getPlataforma() != null ? e.getPlataforma().toString() : "SIN_PLATAFORMA",
-                        Collectors.counting()
-                ));
-
-        response.put("equiposParaCheck", equiposParaCheck);
-        response.put("conteosPorPlataforma", conteosPorPlataforma);
-        response.put("ultimoEstatus", obtenerEstatus());
-
-        return response;
-    }
 
 }

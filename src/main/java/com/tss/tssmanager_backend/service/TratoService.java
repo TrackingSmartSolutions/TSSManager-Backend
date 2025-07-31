@@ -670,6 +670,14 @@ public class TratoService {
             }
         }
 
+        // Ordenar tratos por fecha de cierre (más próxima primero)
+        tratos.sort((t1, t2) -> {
+            if (t1.getFechaCierre() == null && t2.getFechaCierre() == null) return 0;
+            if (t1.getFechaCierre() == null) return 1;
+            if (t2.getFechaCierre() == null) return -1;
+            return t1.getFechaCierre().compareTo(t2.getFechaCierre());
+        });
+
         return tratos;
     }
 

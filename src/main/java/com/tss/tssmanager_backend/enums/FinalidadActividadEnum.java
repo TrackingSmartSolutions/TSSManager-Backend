@@ -10,5 +10,6 @@ public enum FinalidadActividadEnum {
     CERRADO_GANADO,
     RESPUESTA_POR_CORREO,
     INTERES_FUTURO,
-    CERRADO_PERDIDO
+    CERRADO_PERDIDO,
+    SEGUIMIENTO
 }
