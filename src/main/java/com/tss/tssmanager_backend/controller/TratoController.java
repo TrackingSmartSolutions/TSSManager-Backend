@@ -254,4 +254,21 @@ public class TratoController {
         }
     }
 
+    @PostMapping("/{tratoId}/interacciones")
+    public ResponseEntity<Map<String, Object>> crearInteraccionGenerica(
+            @PathVariable Integer tratoId,
+            @RequestBody InteraccionGenericaDTO interaccionDTO) {
+        try {
+            Map<String, Object> response = tratoService.crearInteraccionGenerica(tratoId, interaccionDTO);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+
+    }
+
+    @PutMapping("/actividades/{id}/editar")
+    public ActividadDTO editarInteraccion(@PathVariable Integer id, @RequestBody ActividadDTO actividadDTO) {
+        return tratoService.editarInteraccion(id, actividadDTO);
+    }
 }

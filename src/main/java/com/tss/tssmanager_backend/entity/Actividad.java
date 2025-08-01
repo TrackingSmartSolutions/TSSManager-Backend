@@ -30,7 +30,7 @@ public class Actividad {
     @Column(name = "asignado_a_id", nullable = false)
     private Integer asignadoAId;
 
-    @Column(name = "fecha_limite", nullable = false)
+    @Column(name = "fecha_limite")
     private LocalDate fechaLimite;
 
     @Column(name = "hora_inicio")
@@ -54,7 +54,7 @@ public class Actividad {
     private String enlaceReunion;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "finalidad", nullable = false)
+    @Column(name = "finalidad")
     private FinalidadActividadEnum finalidad;
 
     @Enumerated(EnumType.STRING)

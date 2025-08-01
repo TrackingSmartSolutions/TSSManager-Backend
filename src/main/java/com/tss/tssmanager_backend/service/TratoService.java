@@ -881,6 +881,7 @@ public class TratoService {
                                 interaccion.setFechaCompletado(a.getFechaCompletado());
                                 interaccion.setUsuarioCompletadoId(a.getUsuarioCompletadoId());
                                 interaccion.setRespuesta(a.getRespuesta());
+
                                 return interaccion;
                             })
                             .collect(Collectors.toList())
@@ -1654,5 +1655,56 @@ public class TratoService {
         return inicio1.isBefore(fin2) && inicio2.isBefore(fin1);
     }
 
-    
+    @Transactional
+    public Map<String, Object> crearInteraccionGenerica(Integer tratoId, InteraccionGenericaDTO interaccionDTO) {
+        Actividad actividadTemporal = new Actividad();
+        actividadTemporal.setTratoId(tratoId);
+        actividadTemporal.setTipo(interaccionDTO.getTipo());
+        actividadTemporal.setAsignadoAId(getCurrentUserId());
+        actividadTemporal.setEstatus(EstatusActividadEnum.CERRADA);
+        actividadTemporal.setFechaCompletado(Instant.now());
+        actividadTemporal.setUsuarioCompletadoId(getCurrentUserId());
+        actividadTemporal.setRespuesta(interaccionDTO.getRespuesta());
+        actividadTemporal.setInteres(interaccionDTO.getInteres());
+        actividadTemporal.setInformacion(interaccionDTO.getInformacion());
+        actividadTemporal.setSiguienteAccion(interaccionDTO.getSiguienteAccion());
+        actividadTemporal.setMedio(interaccionDTO.getMedio());
+        actividadTemporal.setNotas(interaccionDTO.getNotas());
+        actividadTemporal.setFechaCreacion(Instant.now());
+        actividadTemporal.setFechaModificacion(Instant.now());
+
+        Actividad savedActividad = actividadRepository.save(actividadTemporal);
+
+        Trato trato = tratoRepository.findById(tratoId).orElseThrow(() -> new RuntimeException("Trato no encontrado"));
+        trato.setFechaUltimaActividad(Instant.now());
+        tratoRepository.save(trato);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "Interacción registrada exitosamente");
+        response.put("actividadId", savedActividad.getId());
+
+        return response;
+    }
+
+    @Transactional
+    public ActividadDTO editarInteraccion(Integer id, ActividadDTO actividadDTO) {
+        Actividad actividad = actividadRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Interacción no encontrada"));
+
+        if (!EstatusActividadEnum.CERRADA.equals(actividad.getEstatus())) {
+            throw new RuntimeException("Solo se pueden editar interacciones completadas");
+        }
+
+        actividad.setRespuesta(actividadDTO.getRespuesta());
+        actividad.setInteres(actividadDTO.getInteres());
+        actividad.setInformacion(actividadDTO.getInformacion());
+        actividad.setSiguienteAccion(actividadDTO.getSiguienteAccion());
+        actividad.setNotas(actividadDTO.getNotas());
+        actividad.setMedio(actividadDTO.getMedio());
+        actividad.setFechaModificacion(Instant.now());
+
+        Actividad updatedActividad = actividadRepository.save(actividad);
+        return convertToDTO(updatedActividad);
+    }
 }
