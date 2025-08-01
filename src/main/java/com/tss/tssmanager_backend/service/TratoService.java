@@ -1653,4 +1653,6 @@ public class TratoService {
         }
         return inicio1.isBefore(fin2) && inicio2.isBefore(fin1);
     }
+
+    
 }

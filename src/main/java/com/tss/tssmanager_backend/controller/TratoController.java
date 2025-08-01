@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.sql.Time;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
@@ -174,8 +175,8 @@ public class TratoController {
             @RequestParam(required = false) Instant fecha) {
 
         LocalDate targetDate = (fecha != null)
-                ? fecha.atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now(ZoneOffset.UTC);
+                ? fecha.atZone(ZoneId.of("America/Mexico_City")).toLocalDate()
+                : LocalDate.now(ZoneId.of("America/Mexico_City"));
 
         List<Actividad> actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteAndEstatus(
                 asignadoAId, targetDate, EstatusActividadEnum.ABIERTA);
