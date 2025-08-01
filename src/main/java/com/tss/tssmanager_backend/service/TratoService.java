@@ -18,10 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -45,6 +42,9 @@ public class TratoService {
     private EntityManager entityManager;
     @Autowired
     private EmailService emailService;
+
+
+    private static final int MARGEN_CONFLICTO_MINUTOS = 10;
 
     public List<TratoDTO> listarTratos() {
         return tratoRepository.findAll().stream().map(this::convertToDTO).collect(Collectors.toList());
@@ -406,6 +406,19 @@ public class TratoService {
 
     @Transactional
     public ActividadDTO programarActividad(ActividadDTO actividadDTO) {
+        if (actividadDTO.getFechaLimite() != null && actividadDTO.getHoraInicio() != null) {
+            boolean hayConflicto = existeConflictoHorario(
+                    actividadDTO.getAsignadoAId(),
+                    actividadDTO.getFechaLimite(),
+                    actividadDTO.getHoraInicio(),
+                    actividadDTO.getDuracion(),
+                    null
+            );
+
+            if (hayConflicto) {
+                throw new RuntimeException("Ya existe una actividad programada en este horario para el usuario asignado.");
+            }
+        }
         Actividad actividad = new Actividad();
         actividad.setTratoId(actividadDTO.getTratoId());
         actividad.setTipo(actividadDTO.getTipo());
@@ -419,6 +432,7 @@ public class TratoService {
         actividad.setMedio(actividadDTO.getMedio());
         actividad.setEnlaceReunion(actividadDTO.getEnlaceReunion());
         actividad.setFinalidad(actividadDTO.getFinalidad());
+        actividad.setNotas(actividadDTO.getNotas());
         actividad.setEstatus(EstatusActividadEnum.ABIERTA);
         actividad.setFechaCreacion(Instant.now());
         actividad.setFechaModificacion(Instant.now());
@@ -449,6 +463,19 @@ public class TratoService {
         Actividad actividad = actividadRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Actividad no encontrada con id: " + id));
 
+        LocalDate nuevaFecha = actividadDTO.getFechaLimite() != null ? actividadDTO.getFechaLimite() : actividad.getFechaLimite();
+        Time nuevaHora = actividadDTO.getHoraInicio() != null ? actividadDTO.getHoraInicio() : actividad.getHoraInicio();
+        String nuevaDuracion = actividadDTO.getDuracion() != null ? actividadDTO.getDuracion() : actividad.getDuracion();
+        Integer nuevoAsignado = actividadDTO.getAsignadoAId() != null ? actividadDTO.getAsignadoAId() : actividad.getAsignadoAId();
+
+        if (nuevaFecha != null && nuevaHora != null) {
+            boolean hayConflicto = existeConflictoHorario(nuevoAsignado, nuevaFecha, nuevaHora, nuevaDuracion, id);
+
+            if (hayConflicto) {
+                throw new RuntimeException("Ya existe una actividad programada en este horario para el usuario asignado.");
+            }
+        }
+
         if (actividad.getFechaModificacion() != null) {
             long tiempoTranscurrido = Instant.now().toEpochMilli() - actividad.getFechaModificacion().toEpochMilli();
             if (tiempoTranscurrido < 5000) {
@@ -467,6 +494,7 @@ public class TratoService {
         actividad.setFinalidad(actividadDTO.getFinalidad() != null ? actividadDTO.getFinalidad() : actividad.getFinalidad());
         actividad.setSubtipoTarea(actividadDTO.getSubtipoTarea() != null ? actividadDTO.getSubtipoTarea() : actividad.getSubtipoTarea());
         actividad.setContactoId(actividadDTO.getContactoId() != null ? actividadDTO.getContactoId() : actividad.getContactoId());
+        actividad.setNotas(actividadDTO.getNotas() != null ? actividadDTO.getNotas() : actividad.getNotas());
 
         if (EstatusActividadEnum.CERRADA.equals(actividad.getEstatus())) {
             throw new RuntimeException("No se puede reprogramar una actividad cerrada.");
@@ -1566,5 +1594,63 @@ public class TratoService {
             System.err.println("Error al convertir fecha a LocalDate: " + e.getMessage() + ", objeto: " + dateObject);
             return null;
         }
+    }
+
+    public boolean existeConflictoHorario(Integer asignadoAId, LocalDate fecha, Time horaInicio, String duracion, Integer actividadIdExcluir) {
+        try {
+            List<Actividad> actividadesDelDia = actividadRepository.findByAsignadoAIdAndFechaLimiteAndEstatus(
+                    asignadoAId, fecha, EstatusActividadEnum.ABIERTA);
+
+            if (actividadesDelDia.isEmpty()) return false;
+
+            LocalTime horaInicioNueva = horaInicio.toLocalTime();
+            LocalTime horaFinNueva = calcularHoraFin(horaInicioNueva, duracion);
+
+            for (Actividad actividad : actividadesDelDia) {
+                // Excluir la misma actividad en caso de reprogramación
+                if (actividadIdExcluir != null && actividad.getId().equals(actividadIdExcluir)) {
+                    continue;
+                }
+
+                if (actividad.getHoraInicio() != null) {
+                    LocalTime horaInicioExistente = actividad.getHoraInicio().toLocalTime();
+                    LocalTime horaFinExistente = calcularHoraFin(horaInicioExistente, actividad.getDuracion());
+
+                    // Verificar solapamiento
+                    if (hayConflicto(horaInicioNueva, horaFinNueva, horaInicioExistente, horaFinExistente)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            System.err.println("Error verificando conflicto de horario: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private LocalTime calcularHoraFin(LocalTime horaInicio, String duracion) {
+        if (duracion == null || duracion.isEmpty()) {
+            return horaInicio.plusMinutes(30); // Duración por defecto
+        }
+
+        try {
+            String[] partes = duracion.split(":");
+            int horas = Integer.parseInt(partes[0]);
+            int minutos = partes.length > 1 ? Integer.parseInt(partes[1]) : 0;
+            return horaInicio.plusHours(horas).plusMinutes(minutos);
+        } catch (Exception e) {
+            return horaInicio.plusMinutes(30);
+        }
+    }
+
+
+    private boolean hayConflicto(LocalTime inicio1, LocalTime fin1, LocalTime inicio2, LocalTime fin2) {
+        long diferenciaMinutos = Math.abs(Duration.between(inicio1, inicio2).toMinutes());
+
+        if (diferenciaMinutos >= MARGEN_CONFLICTO_MINUTOS) {
+            return false;
+        }
+        return inicio1.isBefore(fin2) && inicio2.isBefore(fin1);
     }
 }

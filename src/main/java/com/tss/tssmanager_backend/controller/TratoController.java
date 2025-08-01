@@ -14,9 +14,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.sql.Time;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -225,5 +227,30 @@ public class TratoController {
         }
     }
 
+    @GetMapping("/verificar-conflicto-horario")
+    public ResponseEntity<Map<String, Boolean>> verificarConflictoHorario(
+            @RequestParam Integer asignadoAId,
+            @RequestParam String fecha,
+            @RequestParam String hora,
+            @RequestParam(required = false) String duracion,
+            @RequestParam(required = false) Integer actividadIdExcluir) {
+
+        try {
+            LocalDate fechaActividad = LocalDate.parse(fecha);
+            Time horaActividad = Time.valueOf(hora);
+
+            boolean hayConflicto = tratoService.existeConflictoHorario(
+                    asignadoAId, fechaActividad, horaActividad, duracion, actividadIdExcluir);
+
+            Map<String, Boolean> response = new HashMap<>();
+            response.put("hayConflicto", hayConflicto);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Boolean> response = new HashMap<>();
+            response.put("hayConflicto", false);
+            return ResponseEntity.ok(response);
+        }
+    }
 
 }

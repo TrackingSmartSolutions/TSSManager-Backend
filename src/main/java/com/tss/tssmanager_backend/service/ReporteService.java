@@ -44,15 +44,13 @@ public class ReporteService {
                 .map(e -> new ReporteDTO.ActividadCount(e.getKey(), e.getValue(), getColor(e.getKey())))
                 .collect(Collectors.toList()));
 
-        // Gráfica de Empresas Contactadas
+        // Gráfica de Empresas Contactada
         reporte.setEmpresas(actividades.stream()
-                .map(Actividad::getTratoId)
-                .distinct()
-                .map(tratoId -> {
-                    String empresaNombre = actividadRepository.findEmpresaNameByTratoId(tratoId);
-                    long count = actividades.stream().filter(a -> a.getTratoId().equals(tratoId)).count();
-                    return new ReporteDTO.EmpresaCount(empresaNombre, (int) count);
-                })
+                .collect(Collectors.groupingBy(
+                        a -> actividadRepository.findEmpresaNameByTratoId(a.getTratoId()),
+                        Collectors.counting()
+                )).entrySet().stream()
+                .map(e -> new ReporteDTO.EmpresaCount(e.getKey(), e.getValue().intValue()))
                 .collect(Collectors.toList()));
 
         // Notas de Interacciones (usando actividades completadas)
