@@ -514,6 +514,26 @@ public class TratoService {
         return convertToDTO(updatedActividad);
     }
 
+    @Transactional
+    public void eliminarActividad(Integer id) {
+        Actividad actividad = actividadRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Actividad no encontrada con id: " + id));
+        if (EstatusActividadEnum.CERRADA.equals(actividad.getEstatus())) {
+            throw new RuntimeException("No se puede eliminar una actividad que ya está completada");
+        }
+        Integer tratoId = actividad.getTratoId();
+
+        actividadRepository.delete(actividad);
+
+        if (tratoId != null) {
+            Trato trato = tratoRepository.findById(tratoId).orElse(null);
+            if (trato != null) {
+                trato.setFechaModificacion(Instant.now());
+                tratoRepository.save(trato);
+            }
+        }
+    }
+
     public NotaTratoDTO agregarNota(Integer tratoId, String nota) {
         NotaTrato notaTrato = new NotaTrato();
         notaTrato.setTratoId(tratoId);
@@ -1707,4 +1727,5 @@ public class TratoService {
         Actividad updatedActividad = actividadRepository.save(actividad);
         return convertToDTO(updatedActividad);
     }
+
 }

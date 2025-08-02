@@ -271,4 +271,20 @@ public class TratoController {
     public ActividadDTO editarInteraccion(@PathVariable Integer id, @RequestBody ActividadDTO actividadDTO) {
         return tratoService.editarInteraccion(id, actividadDTO);
     }
+
+    @DeleteMapping("/actividades/{id}")
+    public ResponseEntity<Map<String, Object>> eliminarActividad(@PathVariable Integer id) {
+        try {
+            tratoService.eliminarActividad(id);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Actividad eliminada exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
 }
