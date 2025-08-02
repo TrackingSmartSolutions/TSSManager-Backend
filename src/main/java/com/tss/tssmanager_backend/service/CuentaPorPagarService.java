@@ -1,14 +1,17 @@
 package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.entity.CuentaPorPagar;
+import com.tss.tssmanager_backend.entity.Sim;
 import com.tss.tssmanager_backend.entity.Transaccion;
 import com.tss.tssmanager_backend.repository.CuentaPorPagarRepository;
+import com.tss.tssmanager_backend.repository.SimRepository;
 import com.tss.tssmanager_backend.repository.TransaccionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -26,12 +29,15 @@ public class CuentaPorPagarService {
     @Autowired
     private TransaccionService transaccionService;
 
+    @Autowired
+    private SimRepository simRepository;
+
     public List<CuentaPorPagar> obtenerTodas() {
         return cuentasPorPagarRepository.findAll();
     }
 
     @Transactional
-    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal monto, String formaPago, Integer usuarioId) {
+    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal monto, String formaPago, Integer usuarioId, boolean regenerarAutomaticamente) {
         CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
 
@@ -50,6 +56,7 @@ public class CuentaPorPagarService {
                 "Marcada como pagada el " + fechaFormateada);
 
         cuentasPorPagarRepository.save(cuenta);
+        actualizarVigenciaSim(cuenta, fechaPago);
 
         // Crear transacción asociada (registro del pago)
         Transaccion transaccionPago = new Transaccion();
@@ -66,7 +73,12 @@ public class CuentaPorPagarService {
         transaccionPago.setFechaModificacion(LocalDateTime.now());
         transaccionRepository.save(transaccionPago);
 
-        verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal);
+        verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal, regenerarAutomaticamente);
+    }
+
+    @Transactional
+    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal monto, String formaPago, Integer usuarioId) {
+        marcarComoPagada(id, fechaPago, monto, formaPago, usuarioId, false);
     }
 
     @Transactional
@@ -77,8 +89,28 @@ public class CuentaPorPagarService {
         cuentasPorPagarRepository.deleteById(id);
     }
 
+    private void actualizarVigenciaSim(CuentaPorPagar cuenta, LocalDate fechaPago) {
+        if (cuenta.getSim() != null) {
+            try {
+                Sim sim = cuenta.getSim();
+                Transaccion transaccion = cuenta.getTransaccion();
+
+                // Calcular nueva vigencia basada en el esquema
+                LocalDate nuevaVigencia = calcularProximaFechaPago(fechaPago, transaccion.getEsquema());
+
+                // Actualizar vigencia de la SIM
+                sim.setVigencia(Date.valueOf(nuevaVigencia));
+                simRepository.save(sim);
+
+                System.out.println("Vigencia de SIM " + sim.getNumero() + " actualizada a: " + nuevaVigencia);
+            } catch (Exception e) {
+                System.err.println("Error al actualizar vigencia de SIM: " + e.getMessage());
+            }
+        }
+    }
+
     @Transactional
-    private void verificarYRegenerarSiEsNecesario(CuentaPorPagar cuentaPagada, Transaccion transaccionOriginal) {
+    private void verificarYRegenerarSiEsNecesario(CuentaPorPagar cuentaPagada, Transaccion transaccionOriginal, boolean regenerarAutomaticamente) {
         // Verificar si quedan cuentas pendientes DESPUÉS de marcar esta como pagada
         boolean hayPendientes = cuentasPorPagarRepository
                 .existsByTransaccionIdAndEstatusNot(transaccionOriginal.getId(), "Pagado");
@@ -87,6 +119,10 @@ public class CuentaPorPagarService {
 
         if (!hayPendientes && esUltimaCuentaDeLaSerie && !transaccionOriginal.getEsquema().name().equals("UNICA")) {
             System.out.println("Última cuenta de la serie pagada para transacción " + transaccionOriginal.getId());
+
+            if (regenerarAutomaticamente) {
+                regenerarCuentasPorPagar(transaccionOriginal, cuentaPagada.getFechaPago());
+            }
 
         }
     }
@@ -102,6 +138,12 @@ public class CuentaPorPagarService {
     @Transactional
     private void regenerarCuentasPorPagar(Transaccion transaccionOriginal, LocalDate fechaUltimoPago) {
         try {
+            Sim simAsociada = null;
+            List<CuentaPorPagar> cuentasOriginales = cuentasPorPagarRepository.findByTransaccionId(transaccionOriginal.getId());
+            if (!cuentasOriginales.isEmpty()) {
+                simAsociada = cuentasOriginales.get(0).getSim();
+            }
+
             Transaccion nuevaTransaccion = new Transaccion();
             nuevaTransaccion.setFecha(fechaUltimoPago);
             nuevaTransaccion.setTipo(transaccionOriginal.getTipo());
@@ -115,18 +157,30 @@ public class CuentaPorPagarService {
 
             nuevaTransaccion.setFormaPago(transaccionOriginal.getFormaPago());
             nuevaTransaccion.setNotas(transaccionOriginal.getNotas());
-
             nuevaTransaccion.setNumeroPagos(transaccionOriginal.getNumeroPagos());
-
             nuevaTransaccion.setFechaCreacion(LocalDateTime.now());
             nuevaTransaccion.setFechaModificacion(LocalDateTime.now());
 
             transaccionService.agregarTransaccion(nuevaTransaccion);
 
-            System.out.println("Cuentas por pagar regeneradas manualmente:");
+            // Si había una SIM asociada, asociarla a las nuevas cuentas por pagar
+            if (simAsociada != null) {
+                List<CuentaPorPagar> nuevasCuentas = cuentasPorPagarRepository.findByTransaccionId(nuevaTransaccion.getId());
+                for (CuentaPorPagar nuevaCuenta : nuevasCuentas) {
+                    nuevaCuenta.setSim(simAsociada);
+                    cuentasPorPagarRepository.save(nuevaCuenta);
+                }
+
+                System.out.println("SIM " + simAsociada.getNumero() + " asociada a " + nuevasCuentas.size() + " nuevas cuentas por pagar");
+            }
+
+            System.out.println("Cuentas por pagar regeneradas automáticamente:");
             System.out.println("- Transacción original: " + transaccionOriginal.getId());
             System.out.println("- Nueva serie: " + nuevaTransaccion.getNumeroPagos() + " pagos");
             System.out.println("- Primera fecha de pago: " + proximaFechaPago);
+            if (simAsociada != null) {
+                System.out.println("- SIM asociada: " + simAsociada.getNumero());
+            }
 
         } catch (Exception e) {
             System.err.println("Error al regenerar cuentas por pagar: " + e.getMessage());

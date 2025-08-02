@@ -435,6 +435,7 @@ public class EmpresaService {
         dto.setFechaCreacion(contacto.getFechaCreacion());
         dto.setFechaModificacion(contacto.getFechaModificacion());
         dto.setFechaUltimaActividad(contacto.getFechaUltimaActividad());
+        dto.setEmpresaId(contacto.getEmpresa().getId());
         dto.setCorreos(contacto.getCorreos().stream()
                 .map(correo -> {
                     CorreoDTO correoDTO = new CorreoDTO();

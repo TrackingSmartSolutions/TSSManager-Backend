@@ -39,9 +39,20 @@ public class ReporteService {
         reporte.setActividades(actividades.stream()
                 .collect(Collectors.groupingBy(
                         a -> a.getTipo().name(),
-                        Collectors.collectingAndThen(Collectors.counting(), Long::intValue)
+                        Collectors.groupingBy(
+                                a -> getMedio(a),
+                                Collectors.counting()
+                        )
                 )).entrySet().stream()
-                .map(e -> new ReporteDTO.ActividadCount(e.getKey(), e.getValue(), getColor(e.getKey())))
+                .flatMap(tipoEntry ->
+                        tipoEntry.getValue().entrySet().stream()
+                                .map(medioEntry -> new ReporteDTO.ActividadCount(
+                                        medioEntry.getKey(),
+                                        medioEntry.getValue().intValue(),
+                                        getColor(tipoEntry.getKey()),
+                                        tipoEntry.getKey()
+                                ))
+                )
                 .collect(Collectors.toList()));
 
         // Gráfica de Empresas Contactada
@@ -78,5 +89,35 @@ public class ReporteService {
             case "MENSAJES": return "#96ceb4";
             default: return "#45b7d1";
         }
+    }
+
+    private String getMedio(Actividad actividad) {
+        String tipo = actividad.getTipo().name();
+        String medio = actividad.getMedio() != null ? actividad.getMedio().name() : "SIN_MEDIO";
+
+        if ("TAREAS".equals(tipo)) {
+            switch (medio) {
+                case "ACTIVIDAD": return "Actividad";
+                case "CORREO": return "Correo";
+                case "MENSAJE": return "Mensaje";
+                default: return "Otros";
+            }
+        }
+        else if ("LLAMADAS".equals(tipo)) {
+            switch (medio) {
+                case "TELEFONO": return "Teléfono";
+                case "WHATSAPP": return "WhatsApp";
+                default: return "Otros";
+            }
+        }
+        else if ("REUNIONES".equals(tipo)) {
+            switch (medio) {
+                case "VIRTUAL": return "Virtual";
+                case "PRESENCIAL": return "Presencial";
+                default: return "Otros";
+            }
+        }
+
+        return medio;
     }
 }

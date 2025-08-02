@@ -66,4 +66,21 @@ public class CuentaPorPagarController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    @PostMapping("/marcar-como-pagada-calendario")
+    public ResponseEntity<Void> marcarComoPagadaDesdeCalendario(@RequestBody CuentaPorPagarDTO dto) {
+        try {
+            cuentasPorPagarService.marcarComoPagada(
+                    dto.getId(),
+                    dto.getFechaPago(),
+                    dto.getMonto(),
+                    dto.getFormaPago(),
+                    dto.getUsuarioId(),
+                    true
+            );
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
 }

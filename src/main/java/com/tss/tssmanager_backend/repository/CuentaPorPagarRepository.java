@@ -12,4 +12,5 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
     boolean existsByTransaccionIdAndEstatusNot(Integer transaccionId, String estatus);
     @Query("SELECT c FROM CuentaPorPagar c WHERE c.fechaPago BETWEEN :start AND :end")
     List<CuentaPorPagar> findByFechaPagoBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
+    List<CuentaPorPagar> findByTransaccionId(Integer transaccionId);
 }

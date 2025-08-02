@@ -17,13 +17,14 @@ public class ReporteDTO {
         private String name;
         private int value;
         private String color;
+        private String tipo;
 
-        public ActividadCount(String name, int value, String color) {
+        public ActividadCount(String name, int value, String color, String tipo) {
             this.name = name;
             this.value = value;
             this.color = color;
+            this.tipo = tipo;
         }
-
     }
     @Data
     public static class EmpresaCount {

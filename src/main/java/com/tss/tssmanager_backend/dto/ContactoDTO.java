@@ -23,6 +23,7 @@ public class ContactoDTO {
     private String telefono;
     private String whatsapp;
     private String email;
+    private Integer empresaId;
 
     public ContactoDTO() {
     }

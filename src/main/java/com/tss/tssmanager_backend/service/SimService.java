@@ -40,6 +40,9 @@ public class SimService {
     @Autowired
     private EmpresaRepository empresaRepository;
 
+    @Autowired
+    private CuentaPorPagarRepository cuentaPorPagarRepository;
+
     @Transactional
     public Sim guardarSim(Sim sim) {
         if (sim.getResponsable() == ResponsableSimEnum.CLIENTE) {
@@ -201,6 +204,21 @@ public class SimService {
         transaccion.setNotas(sim.getNumero());
 
         transaccionService.agregarTransaccion(transaccion);
+
+        try {
+            // Buscar las cuentas por pagar recién creadas para esta transacción
+            List<CuentaPorPagar> cuentasCreadas = cuentaPorPagarRepository.findByTransaccionId(transaccion.getId());
+
+            // Asociar la SIM a todas las cuentas por pagar de esta transacción
+            for (CuentaPorPagar cuenta : cuentasCreadas) {
+                cuenta.setSim(sim);
+                cuentaPorPagarRepository.save(cuenta);
+            }
+
+            System.out.println("SIM " + sim.getNumero() + " asociada a " + cuentasCreadas.size() + " cuentas por pagar");
+        } catch (Exception e) {
+            System.err.println("Error al asociar SIM a cuentas por pagar: " + e.getMessage());
+        }
     }
 
     public List<Integer> obtenerGruposDisponibles() {

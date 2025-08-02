@@ -9,6 +9,7 @@ import java.time.Instant;
 @Data
 @Builder
 public class EventoCalendarioDTO {
+    private String id;
     private String titulo;
     private Instant inicio;
     private Instant fin;

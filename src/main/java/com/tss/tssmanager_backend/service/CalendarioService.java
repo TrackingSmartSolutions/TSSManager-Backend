@@ -92,24 +92,31 @@ public class CalendarioService {
                                 .build())
                         .collect(Collectors.toList()));
 
-                // Agregar cuentas por pagar - configuradas como eventos de todo el día
                 eventos.addAll(cuentaPorPagarRepository.findAll().stream()
                         .filter(cuenta -> cuenta.getFechaPago() != null &&
                                 !cuenta.getFechaPago().isBefore(start) &&
                                 !cuenta.getFechaPago().isAfter(end))
-                        .map(cuenta -> EventoCalendarioDTO.builder()
-                                .titulo(cuenta.getCuenta().getCategoria().getDescripcion() + " - " + cuenta.getCuenta().getNombre())
-                                .inicio(cuenta.getFechaPago().atStartOfDay().atZone(MEXICO_ZONE).toInstant())
-                                .fin(null)
-                                .allDay(true)
-                                .color("#8b5cf6")
-                                .tipo("Cuenta por Pagar")
-                                .numeroCuenta(cuenta.getFolio())
-                                .cliente(cuenta.getCuenta().getNombre())
-                                .estado(cuenta.getEstatus())
-                                .monto(cuenta.getMonto())
-                                .nota(cuenta.getNota())
-                                .build())
+                        .map(cuenta -> {
+                            EventoCalendarioDTO.EventoCalendarioDTOBuilder builder = EventoCalendarioDTO.builder()
+                                    .titulo(cuenta.getCuenta().getCategoria().getDescripcion() + " - " + cuenta.getCuenta().getNombre())
+                                    .inicio(cuenta.getFechaPago().atStartOfDay().atZone(MEXICO_ZONE).toInstant())
+                                    .fin(null)
+                                    .allDay(true)
+                                    .color("#8b5cf6")
+                                    .tipo("Cuenta por Pagar")
+                                    .numeroCuenta(cuenta.getFolio())
+                                    .cliente(cuenta.getCuenta().getNombre())
+                                    .estado(cuenta.getEstatus())
+                                    .monto(cuenta.getMonto())
+                                    .nota(cuenta.getNota())
+                                    .id(cuenta.getId().toString());
+
+                            if (cuenta.getSim() != null) {
+                                builder.numeroSim(cuenta.getSim().getNumero());
+                            }
+
+                            return builder.build();
+                        })
                         .collect(Collectors.toList()));
             }
 

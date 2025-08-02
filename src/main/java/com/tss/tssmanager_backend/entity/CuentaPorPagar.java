@@ -49,4 +49,8 @@ public class CuentaPorPagar {
     @ManyToOne
     @JoinColumn(name = "transaccion_id", nullable = false)
     private Transaccion transaccion;
+
+    @ManyToOne
+    @JoinColumn(name = "sim_id")
+    private Sim sim;
 }
