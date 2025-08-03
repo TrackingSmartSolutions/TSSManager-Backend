@@ -18,9 +18,6 @@ public interface SimRepository extends JpaRepository<Sim, Integer> {
     @Query("SELECT DISTINCT s.grupo FROM Sim s WHERE s.grupo IS NOT NULL")
     List<Integer> findAllGroups();
 
-    @Query("SELECT MAX(s.grupo) FROM Sim s WHERE s.grupo IS NOT NULL")
-    Integer findMaxGrupo();
-
     @Query("SELECT COUNT(s) FROM Sim s WHERE s.grupo = :grupo AND s.principal = 'SI'")
     Long countPrincipalesByGrupo(Integer grupo);
 
@@ -40,6 +37,9 @@ public interface SimRepository extends JpaRepository<Sim, Integer> {
     List<Sim> findAllWithEquipo();
 
     Optional<Sim> findByNumero(String numero);
+
+    @Query("SELECT MAX(s.grupo) FROM Sim s WHERE s.grupo != 99 AND s.grupo != 0")
+    Integer findMaxGrupoExcludingClientes();
 
 
 }

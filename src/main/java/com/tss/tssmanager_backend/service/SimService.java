@@ -294,7 +294,7 @@ public class SimService {
     }
 
     private Integer generarNuevoGrupo() {
-        Integer maxGroup = simRepository.findMaxGrupo();
+        Integer maxGroup = simRepository.findMaxGrupoExcludingClientes();
         return (maxGroup != null ? maxGroup : 0) + 1;
     }
 
