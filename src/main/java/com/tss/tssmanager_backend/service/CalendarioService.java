@@ -63,7 +63,6 @@ public class CalendarioService {
 
         if ("ROLE_EMPLEADO".equals(userRol)) {
             List<Actividad> actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(userId, start, end);
-            // Procesar las actividades dentro de la transacción
             eventos.addAll(processActividadesInTransaction(actividades));
         } else if ("ROLE_ADMINISTRADOR".equals(userRol)) {
             if (usuario == null || usuario.equals("Todos los usuarios")) {
@@ -111,7 +110,6 @@ public class CalendarioService {
                 .collect(Collectors.toList());
     }
 
-    // Métodos separados para mejor performance
     private List<EventoCalendarioDTO> convertCuentasPorCobrar(List<CuentaPorCobrar> cuentas) {
         return cuentas.stream()
                 .map(cuenta -> EventoCalendarioDTO.builder()
@@ -155,7 +153,6 @@ public class CalendarioService {
     }
 
     private EventoCalendarioDTO convertActividadToEvento(Actividad actividad) {
-        // Buscar el usuario solo cuando sea necesario, pero fuera del stream
         Usuario asignadoA = usuarioCache.computeIfAbsent(actividad.getAsignadoAId(),
                 id -> usuarioRepository.findById(id).orElseThrow(() -> new RuntimeException("Usuario no encontrado")));
 
