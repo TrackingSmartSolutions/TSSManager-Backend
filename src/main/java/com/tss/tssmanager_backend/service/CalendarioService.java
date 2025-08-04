@@ -124,7 +124,6 @@ public class CalendarioService {
         try {
             notificacionService.generarNotificacionCuentasYSimsEnTransaccionSeparada();
         } catch (Exception e) {
-            // Log del error pero no fallar la consulta principal
             System.err.println("Error generando notificaciones: " + e.getMessage());
         }
 
@@ -136,15 +135,18 @@ public class CalendarioService {
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
         String title = actividad.getTipo().name() + " - " + actividad.getTrato().getNombre();
 
-        Instant inicio = actividad.getFechaLimite().atStartOfDay().atZone(MEXICO_ZONE).toInstant();
+        Instant inicio;
         Instant fin;
         boolean allDay = false;
 
         if (actividad.getHoraInicio() == null) {
+            inicio = actividad.getFechaLimite().atStartOfDay().atZone(MEXICO_ZONE).toInstant();
             fin = null;
             allDay = true;
         } else {
-            fin = actividad.getFechaLimite().atTime(actividad.getHoraInicio().toLocalTime()).atZone(MEXICO_ZONE).toInstant();
+            inicio = actividad.getFechaLimite().atTime(actividad.getHoraInicio().toLocalTime()).atZone(MEXICO_ZONE).toInstant();
+            // Agregar 10 minutos a la hora de inicio para crear la hora de fin
+            fin = actividad.getFechaLimite().atTime(actividad.getHoraInicio().toLocalTime().plusMinutes(10)).atZone(MEXICO_ZONE).toInstant();
             allDay = false;
         }
 
