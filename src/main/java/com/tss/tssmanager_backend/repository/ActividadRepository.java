@@ -26,14 +26,23 @@ public interface ActividadRepository extends JpaRepository<Actividad, Integer> {
             LocalDate fechaLimite,
             EstatusActividadEnum estatus
     );
-    @Query("SELECT a FROM Actividad a WHERE a.asignadoAId = :asignadoAId AND a.fechaLimite BETWEEN :start AND :end")
+    @Query("SELECT a FROM Actividad a JOIN FETCH a.trato WHERE a.asignadoAId = :asignadoAId AND a.fechaLimite BETWEEN :start AND :end")
     List<Actividad> findByAsignadoAIdAndFechaLimiteBetween(
             @Param("asignadoAId") Integer asignadoAId,
             @Param("start") LocalDate start,
             @Param("end") LocalDate end);
-    List<Actividad> findByFechaLimiteBetween(LocalDate start, LocalDate end);
 
-    List<Actividad> findByFechaLimite(LocalDate fecha);
+    @Query("SELECT a FROM Actividad a JOIN FETCH a.trato WHERE a.fechaLimite BETWEEN :start AND :end")
+    List<Actividad> findByFechaLimiteBetween(
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end);
 
-    List<Actividad> findByFechaLimiteBetweenAndEstatus(LocalDate start, LocalDate end, EstatusActividadEnum estatus);
+    @Query("SELECT a FROM Actividad a JOIN FETCH a.trato WHERE a.fechaLimite = :fecha")
+    List<Actividad> findByFechaLimite(@Param("fecha") LocalDate fecha);
+
+    @Query("SELECT a FROM Actividad a JOIN FETCH a.trato WHERE a.fechaLimite BETWEEN :start AND :end AND a.estatus = :estatus")
+    List<Actividad> findByFechaLimiteBetweenAndEstatus(
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end,
+            @Param("estatus") EstatusActividadEnum estatus);
 }
