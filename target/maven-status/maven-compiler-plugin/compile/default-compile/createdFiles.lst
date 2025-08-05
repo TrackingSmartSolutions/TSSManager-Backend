@@ -159,6 +159,7 @@ com\tss\tssmanager_backend\repository\UnidadCotizacionRepository.class
 com\tss\tssmanager_backend\enums\PrincipalSimEnum.class
 com\tss\tssmanager_backend\controller\ReporteController.class
 com\tss\tssmanager_backend\service\SolicitudFacturaNotaService$3.class
+com\tss\tssmanager_backend\controller\ImageUploadController.class
 com\tss\tssmanager_backend\controller\ConfiguracionEmpresaController.class
 com\tss\tssmanager_backend\dto\UsuarioDTO.class
 com\tss\tssmanager_backend\enums\UsoModeloEquipoEnum.class
@@ -213,6 +214,7 @@ com\tss\tssmanager_backend\service\ModeloEquipoService.class
 com\tss\tssmanager_backend\enums\TipoActividadEnum.class
 com\tss\tssmanager_backend\entity\ConfiguracionCopias.class
 com\tss\tssmanager_backend\repository\PlantillaCorreoRepository.class
+com\tss\tssmanager_backend\dto\InteraccionGenericaDTO.class
 com\tss\tssmanager_backend\service\NotificacionService.class
 com\tss\tssmanager_backend\dto\ReporteDTO$ActividadCount.class
 com\tss\tssmanager_backend\dto\ContactoDTO.class

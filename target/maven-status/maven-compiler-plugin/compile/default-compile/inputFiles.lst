@@ -14,6 +14,7 @@ C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\controller\EmailController.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\controller\EmpresaController.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\controller\EquipoController.java
+C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\controller\ImageUploadController.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\controller\ModeloEquipoController.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\controller\NotificacionController.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\controller\PlantillaCorreoController.java
@@ -45,6 +46,7 @@ C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\GoogleDriveAuthDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\HistorialExportacionDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\HistorialImportacionDTO.java
+C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\InteraccionGenericaDTO.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\LoginRequest.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\LoginResponse.java
 C:\Users\Ricardo\Documents\TSSProjects\tssmanager-backend\src\main\java\com\tss\tssmanager_backend\dto\NotaTratoDTO.java
