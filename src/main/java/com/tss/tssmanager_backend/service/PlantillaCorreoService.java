@@ -88,9 +88,16 @@ public class PlantillaCorreoService {
                     throw new IllegalArgumentException("Solo se permiten archivos PDF, JPG, PNG, DOC o DOCX");
                 }
 
+                // Extraer el nombre sin extensión para usarlo como public_id
+                String nombreOriginal = adjunto.getOriginalFilename();
+                String nombreSinExtension = nombreOriginal.substring(0, nombreOriginal.lastIndexOf('.'));
+                String publicId = "plantillas_correos/" + nombreSinExtension + "_" + System.currentTimeMillis();
+
                 Map uploadResult = cloudinary.uploader().upload(adjunto.getBytes(), ObjectUtils.asMap(
                         "resource_type", "raw",
-                        "folder", "plantillas_correos"
+                        "public_id", publicId,
+                        "use_filename", true,
+                        "unique_filename", false
                 ));
 
                 Adjunto nuevoAdjunto = new Adjunto();
@@ -148,9 +155,16 @@ public class PlantillaCorreoService {
                     throw new IllegalArgumentException("Solo se permiten archivos PDF, JPG, PNG, DOC o DOCX");
                 }
 
+                // Extraer el nombre sin extensión para usarlo como public_id
+                String nombreOriginal = adjunto.getOriginalFilename();
+                String nombreSinExtension = nombreOriginal.substring(0, nombreOriginal.lastIndexOf('.'));
+                String publicId = "plantillas_correos/" + nombreSinExtension + "_" + System.currentTimeMillis();
+
                 Map uploadResult = cloudinary.uploader().upload(adjunto.getBytes(), ObjectUtils.asMap(
                         "resource_type", "raw",
-                        "folder", "plantillas_correos"
+                        "public_id", publicId,
+                        "use_filename", true,
+                        "unique_filename", false
                 ));
 
                 Adjunto nuevoAdjunto = new Adjunto();

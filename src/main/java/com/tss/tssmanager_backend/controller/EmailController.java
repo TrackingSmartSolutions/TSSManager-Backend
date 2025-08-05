@@ -60,7 +60,9 @@ public class EmailController {
 
                         // Guardar archivo temporalmente
                         Files.copy(archivo.getInputStream(), rutaArchivo, StandardCopyOption.REPLACE_EXISTING);
-                        rutasArchivosAdjuntos.add(rutaArchivo.toString());
+                        String cloudinaryUrl = emailService.uploadTempFileToCloudinary(rutaArchivo);
+                        rutasArchivosAdjuntos.add(cloudinaryUrl);
+                        Files.deleteIfExists(rutaArchivo);
 
                     } catch (IOException e) {
                         System.err.println("Error al procesar archivo adjunto: " + e.getMessage());
@@ -70,15 +72,6 @@ public class EmailController {
         }
 
         EmailRecord emailRecord = emailService.enviarCorreo(destinatario, asunto, cuerpo, rutasArchivosAdjuntos, tratoId);
-
-        // Limpiar archivos temporales después del envío
-        for (String ruta : rutasArchivosAdjuntos) {
-            try {
-                Files.deleteIfExists(Paths.get(ruta));
-            } catch (IOException e) {
-                System.err.println("Error al eliminar archivo temporal: " + e.getMessage());
-            }
-        }
 
         if (emailRecord.isExito()) {
             return ResponseEntity.status(HttpStatus.CREATED).body(emailRecord);
@@ -134,7 +127,10 @@ public class EmailController {
 
                             // Guardar archivo temporalmente
                             Files.copy(archivo.getInputStream(), rutaArchivo, StandardCopyOption.REPLACE_EXISTING);
-                            rutasArchivosAdjuntos.add(rutaArchivo.toString());
+                            String cloudinaryUrl = emailService.uploadTempFileToCloudinary(rutaArchivo);
+                            rutasArchivosAdjuntos.add(cloudinaryUrl);
+
+                            Files.deleteIfExists(rutaArchivo);
 
                         } catch (IOException e) {
                             System.err.println("Error al procesar archivo adjunto adicional: " + e.getMessage());
@@ -151,16 +147,6 @@ public class EmailController {
                     tratoId
             );
 
-            // Limpiar archivos temporales después del envío (solo los locales)
-            for (String ruta : rutasArchivosAdjuntos) {
-                if (!ruta.startsWith("http")) {
-                    try {
-                        Files.deleteIfExists(Paths.get(ruta));
-                    } catch (IOException e) {
-                        System.err.println("Error al eliminar archivo temporal: " + e.getMessage());
-                    }
-                }
-            }
 
             if (emailRecord.isExito()) {
                 return ResponseEntity.status(HttpStatus.CREATED).body(emailRecord);

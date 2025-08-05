@@ -6,7 +6,9 @@ public enum MedioReunionEnum {
     TEAMS,
     WHATSAPP,
     TELEFONO,
+    CORREO,
+    ACTIVIDAD,
+    PRESENCIAL,
     OUTLOOK,
     GMAIL,
-    PRESENCIAL
 }
