@@ -7,7 +7,7 @@ RUN apk add --no-cache maven
 # Establece el directorio de trabajo
 WORKDIR /app
 
-# Copia solo el pom.xml 
+# Copia solo el pom.xml
 COPY pom.xml .
 
 # Descarga las dependencias
@@ -40,8 +40,9 @@ USER spring:spring
 # Expone el puerto
 EXPOSE 8080
 
-# Configuración JVM
-ENV JAVA_OPTS="-XX:+UseG1GC \
+# Configuración JVM optimizada para Koyeb Free (512MB RAM total)
+ENV JAVA_OPTS="-XX:+UnlockExperimentalVMOptions \
+               -XX:+UseG1GC \
                -XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=65.0 \
                -XX:InitialRAMPercentage=40.0 \
