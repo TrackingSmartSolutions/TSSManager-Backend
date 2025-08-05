@@ -41,8 +41,7 @@ USER spring:spring
 EXPOSE 8080
 
 # Configuración JVM optimizada para Koyeb Free (512MB RAM total)
-ENV JAVA_OPTS="-XX:+UnlockExperimentalVMOptions \
-               -XX:+UseG1GC \
+ENV JAVA_OPTS="-XX:+UseG1GC \
                -XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=65.0 \
                -XX:InitialRAMPercentage=40.0 \
@@ -56,15 +55,9 @@ ENV JAVA_OPTS="-XX:+UnlockExperimentalVMOptions \
                -XX:MaxDirectMemorySize=48m \
                -XX:NewRatio=2 \
                -XX:SurvivorRatio=8 \
-               -XX:G1HeapRegionSize=4m \
-               -XX:G1NewSizePercent=25 \
-               -XX:G1MaxNewSizePercent=35 \
-               -XX:G1MixedGCCountTarget=4 \
-               -XX:G1HeapWastePercent=5 \
                -XX:+DisableExplicitGC \
                -XX:+UseStringDeduplication \
                -XX:+OptimizeStringConcat \
-               -XX:+UseCGroupMemoryLimitForHeap \
                -Djava.awt.headless=true \
                -Djava.security.egd=file:/dev/./urandom \
                -Dspring.backgroundpreinitializer.ignore=true \
