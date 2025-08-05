@@ -306,7 +306,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
         c.nombre as contacto_nombre,
         CASE WHEN act_count.total > 0 THEN act_count.total ELSE 0 END as actividades_count,
         CASE WHEN act_count.total > 0 THEN true ELSE false END as has_activities
-    FROM tratos t
+    FROM "Tratos" t
     LEFT JOIN usuarios u ON t.propietario_id = u.id
     LEFT JOIN empresas e ON t.empresa_id = e.id
     LEFT JOIN contactos c ON t.contacto_id = c.id
@@ -353,7 +353,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
         COALESCE(act_abiertas.total, 0) as actividades_abiertas_count,
         prox_act.tipo as proxima_actividad_tipo,
         prox_act.fecha_limite as proxima_actividad_fecha
-    FROM tratos t
+    FROM "Tratos" t
     LEFT JOIN usuarios u ON t.propietario_id = u.id
     LEFT JOIN empresas e ON t.empresa_id = e.id
     LEFT JOIN contactos c ON t.contacto_id = c.id
