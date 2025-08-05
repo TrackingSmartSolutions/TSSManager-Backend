@@ -46,13 +46,13 @@ ENV JAVA_OPTS="-XX:+UseG1GC \
                -XX:MaxRAMPercentage=65.0 \
                -XX:InitialRAMPercentage=40.0 \
                -Xms96m \
-               -Xmx320m \
-               -XX:MaxMetaspaceSize=96m \
-               -XX:MetaspaceSize=48m \
-               -XX:CompressedClassSpaceSize=48m \
-               -XX:ReservedCodeCacheSize=24m \
-               -XX:InitialCodeCacheSize=12m \
-               -XX:MaxDirectMemorySize=48m \
+               -Xmx280m \
+               -XX:MaxMetaspaceSize=160m \
+               -XX:MetaspaceSize=128m \
+               -XX:CompressedClassSpaceSize=32m \
+               -XX:ReservedCodeCacheSize=32m \
+               -XX:InitialCodeCacheSize=16m \
+               -XX:MaxDirectMemorySize=32m \
                -XX:NewRatio=2 \
                -XX:SurvivorRatio=8 \
                -XX:+DisableExplicitGC \
