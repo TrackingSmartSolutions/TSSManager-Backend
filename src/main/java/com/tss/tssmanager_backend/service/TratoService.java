@@ -8,6 +8,8 @@ import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -44,7 +46,27 @@ public class TratoService {
     private EmailService emailService;
 
 
-    private static final int MARGEN_CONFLICTO_MINUTOS = 10;
+    private static final int MARGEN_CONFLICTO_MINUTOS = 9;
+
+    @Cacheable(value = "tratos", key = "#id")
+    public Trato findById(Integer id) {
+        return tratoRepository.findById(id).orElse(null);
+    }
+
+    @Cacheable(value = "tratos", key = "'empresa_' + #empresaId")
+    public List<Trato> findByEmpresaId(Integer empresaId) {
+        return tratoRepository.findByEmpresaId(empresaId);
+    }
+
+    @CacheEvict(value = "tratos", key = "#trato.id")
+    public Trato save(Trato trato) {
+        return tratoRepository.save(trato);
+    }
+
+    @CacheEvict(value = "tratos", allEntries = true)
+    public void clearCache() {
+        // Método para limpiar todo el cache de tratos
+    }
 
     public List<TratoDTO> listarTratos() {
         return tratoRepository.findAll().stream().map(this::convertToDTO).collect(Collectors.toList());
@@ -234,6 +256,17 @@ public class TratoService {
             // Historial de interacciones
             List<ActividadDTO> historial = todasActividades.stream()
                     .filter(a -> EstatusActividadEnum.CERRADA.equals(a.getEstatus()))
+                    .sorted((a1, a2) -> {
+                        // Ordenar por fecha de completado descendente (más reciente primero)
+                        if (a1.getFechaCompletado() != null && a2.getFechaCompletado() != null) {
+                            return a2.getFechaCompletado().compareTo(a1.getFechaCompletado());
+                        }
+                        // Si no hay fecha de completado, usar fecha de creación
+                        if (a1.getFechaCreacion() != null && a2.getFechaCreacion() != null) {
+                            return a2.getFechaCreacion().compareTo(a1.getFechaCreacion());
+                        }
+                        return 0;
+                    })
                     .collect(Collectors.toList());
             dto.setHistorialInteracciones(historial);
 
@@ -604,6 +637,16 @@ public class TratoService {
         actividad.setFechaModificacion(Instant.now());
 
         Actividad updatedActividad = actividadRepository.save(actividad);
+
+        if (actividadDTO.getNotas() != null && !actividadDTO.getNotas().trim().isEmpty()) {
+            NotaTrato notaTrato = new NotaTrato();
+            notaTrato.setTratoId(actividad.getTratoId());
+            notaTrato.setUsuarioId(getCurrentUserId());
+            notaTrato.setNota(actividadDTO.getNotas().trim());
+            notaTrato.setFechaCreacion(Instant.now());
+            notaTratoRepository.save(notaTrato);
+        }
+
         return convertToDTO(updatedActividad);
     }
 
@@ -624,7 +667,6 @@ public class TratoService {
 
     @Transactional(readOnly = true)
     public List<TratoDTO> filtrarTratos(Integer empresaId, Integer propietarioId, Instant startDate, Instant endDate) {
-        // Establecer fechas por defecto si no se proporcionan
         Instant start = (startDate != null) ? startDate : Instant.now().minusSeconds(60 * 60 * 24 * 365 * 10);
         Instant end = (endDate != null) ? endDate : Instant.now();
 
@@ -633,9 +675,13 @@ public class TratoService {
 
         List<Object[]> results;
 
-        // Usar query optimizada según el rol
         if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
-            results = tratoRepository.findTratosForEmpleado(currentUserId, start, end);
+            // Para empleados: filtrar por empresa Y por ser propietario o tener actividades asignadas
+            if (empresaId != null) {
+                results = tratoRepository.findTratosForEmpleadoByEmpresa(currentUserId, empresaId, start, end);
+            } else {
+                results = tratoRepository.findTratosForEmpleado(currentUserId, start, end);
+            }
         } else {
             results = tratoRepository.findTratosOptimized(empresaId, propietarioId, start, end);
         }
@@ -896,6 +942,15 @@ public class TratoService {
             dto.setHistorialInteracciones(
                     actividades.stream()
                             .filter(a -> EstatusActividadEnum.CERRADA.equals(a.getEstatus()))
+                            .sorted((a1, a2) -> {
+                                if (a1.getFechaCompletado() != null && a2.getFechaCompletado() != null) {
+                                    return a2.getFechaCompletado().compareTo(a1.getFechaCompletado());
+                                }
+                                if (a1.getFechaCreacion() != null && a2.getFechaCreacion() != null) {
+                                    return a2.getFechaCreacion().compareTo(a1.getFechaCreacion());
+                                }
+                                return 0;
+                            })
                             .map(a -> {
                                 ActividadDTO interaccion = convertToDTO(a);
                                 interaccion.setFechaCompletado(a.getFechaCompletado());
@@ -1479,7 +1534,11 @@ public class TratoService {
         List<Object[]> results;
 
         if (RolUsuarioEnum.EMPLEADO.equals(currentUserRole)) {
-            results = tratoRepository.findTratosBasicoForEmpleado(currentUserId, start, end);
+            if (empresaId != null) {
+                results = tratoRepository.findTratosBasicoForEmpleadoByEmpresa(currentUserId, empresaId, start, end);
+            } else {
+                results = tratoRepository.findTratosBasicoForEmpleado(currentUserId, start, end);
+            }
         } else {
             results = tratoRepository.findTratosBasico(empresaId, propietarioId, start, end);
         }
@@ -1695,6 +1754,15 @@ public class TratoService {
 
         Actividad savedActividad = actividadRepository.save(actividadTemporal);
 
+        if (interaccionDTO.getNotas() != null && !interaccionDTO.getNotas().trim().isEmpty()) {
+            NotaTrato notaTrato = new NotaTrato();
+            notaTrato.setTratoId(tratoId);
+            notaTrato.setUsuarioId(getCurrentUserId());
+            notaTrato.setNota(interaccionDTO.getNotas().trim());
+            notaTrato.setFechaCreacion(Instant.now());
+            notaTratoRepository.save(notaTrato);
+        }
+
         Trato trato = tratoRepository.findById(tratoId).orElseThrow(() -> new RuntimeException("Trato no encontrado"));
         trato.setFechaUltimaActividad(Instant.now());
         tratoRepository.save(trato);
@@ -1725,7 +1793,40 @@ public class TratoService {
         actividad.setFechaModificacion(Instant.now());
 
         Actividad updatedActividad = actividadRepository.save(actividad);
+
+        // Actualizar o crear nota si hay cambios en las notas
+        if (actividadDTO.getNotas() != null) {
+            // Buscar si ya existe una nota para esta actividad
+            List<NotaTrato> notasExistentes = notaTratoRepository.findByTratoIdOrderByFechaCreacionDesc(
+                    actividad.getTratoId().longValue());
+
+            // Buscar la nota más reciente del mismo usuario con el mismo contenido anterior
+            Optional<NotaTrato> notaExistente = notasExistentes.stream()
+                    .filter(nota -> nota.getUsuarioId().equals(getCurrentUserId()))
+                    .filter(nota -> nota.getFechaCreacion().isAfter(
+                            actividad.getFechaCreacion().minusSeconds(300))) // 5 minutos de tolerancia
+                    .findFirst();
+
+            if (notaExistente.isPresent() && !actividadDTO.getNotas().trim().isEmpty()) {
+                // Actualizar nota existente
+                NotaTrato nota = notaExistente.get();
+                nota.setNota(actividadDTO.getNotas().trim());
+                nota.setEditadoPor(getCurrentUserId());
+                nota.setFechaEdicion(Instant.now());
+                notaTratoRepository.save(nota);
+            } else if (!actividadDTO.getNotas().trim().isEmpty()) {
+                // Crear nueva nota
+                NotaTrato notaTrato = new NotaTrato();
+                notaTrato.setTratoId(actividad.getTratoId());
+                notaTrato.setUsuarioId(getCurrentUserId());
+                notaTrato.setNota(actividadDTO.getNotas().trim());
+                notaTrato.setFechaCreacion(Instant.now());
+                notaTratoRepository.save(notaTrato);
+            }
+        }
+
         return convertToDTO(updatedActividad);
     }
+
 
 }

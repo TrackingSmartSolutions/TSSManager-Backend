@@ -8,6 +8,8 @@ import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -47,6 +49,21 @@ public class NotificacionService {
     private CuentaPorPagarRepository cuentaPorPagarRepository;
     @Autowired
     private EmpresaRepository empresaRepository;
+
+    @Cacheable(value = "notificaciones", key = "'usuario_' + #usuarioId + '_estatus_' + #estatus")
+    public List<Notificacion> findByUsuarioIdAndEstatus(Integer usuarioId, EstatusNotificacionEnum estatus) {
+        return notificacionRepository.findByUsuarioIdAndEstatus(usuarioId, estatus);
+    }
+
+    @Cacheable(value = "notificaciones", key = "'count_usuario_' + #usuarioId")
+    public Integer countNoLeidasByUsuarioId(Integer usuarioId) {
+        return notificacionRepository.countByUsuarioIdAndEstatus(usuarioId, EstatusNotificacionEnum.NO_LEIDA);
+    }
+
+    @CacheEvict(value = "notificaciones", allEntries = true)
+    public Notificacion save(Notificacion notificacion) {
+        return notificacionRepository.save(notificacion);
+    }
 
     @PostConstruct
     public void inicializarNotificaciones() {

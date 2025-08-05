@@ -7,6 +7,8 @@ import com.tss.tssmanager_backend.repository.UsuarioRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,25 @@ public class UsuarioService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Cacheable(value = "usuarios", key = "#id")
+    public Usuario findById(Integer id) {
+        return usuarioRepository.findById(id).orElse(null);
+    }
+
+    @Cacheable(value = "usuarios", key = "#nombreUsuario")
+    public Usuario findByNombreUsuario(String nombreUsuario) {
+        return usuarioRepository.findByNombreUsuario(nombreUsuario);
+    }
+
+    @CacheEvict(value = "usuarios", key = "#usuario.id")
+    public Usuario save(Usuario usuario) {
+        return usuarioRepository.save(usuario);
+    }
+
+    @CacheEvict(value = "usuarios", allEntries = true)
+    public void clearCache() {
+    }
 
     @Transactional(readOnly = true)
     public List<UsuarioDTO> listarUsuarios() {

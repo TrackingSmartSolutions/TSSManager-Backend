@@ -36,14 +36,53 @@ public class PlantillaCorreoService {
         return repositorio.findById(id);
     }
 
+    private String limpiarContenidoHTML(String contenidoHTML) {
+        if (contenidoHTML == null) return null;
+
+        // Limpiar y normalizar el contenido HTML
+        return contenidoHTML
+                .replaceAll("\\s+", " ") // Normalizar espacios
+                .trim();
+    }
+
+    private boolean validarContenidoNoVacio(String contenidoHTML) {
+        if (contenidoHTML == null || contenidoHTML.trim().isEmpty()) {
+            return false;
+        }
+
+        // Extraer solo el texto sin HTML para validar que no esté vacío
+        String textoSinHTML = contenidoHTML.replaceAll("<[^>]*>", "").trim();
+        return !textoSinHTML.isEmpty();
+    }
+
     @Transactional
     public PlantillaCorreo guardarPlantilla(PlantillaCorreo plantilla, MultipartFile[] adjuntos) throws IOException {
+
+        if (!validarContenidoNoVacio(plantilla.getMensaje())) {
+            throw new IllegalArgumentException("El contenido de la plantilla no puede estar vacío");
+        }
+        plantilla.setMensaje(limpiarContenidoHTML(plantilla.getMensaje()));
         plantilla.setFechaCreacion(LocalDateTime.now());
 
         if (adjuntos != null && adjuntos.length > 0) {
+            // Validar tamaño total primero
+            long totalSize = 0;
+            for (MultipartFile adjunto : adjuntos) {
+                totalSize += adjunto.getSize();
+            }
+
+            if (totalSize > 10 * 1024 * 1024) {
+                throw new IllegalArgumentException(
+                        String.format("El tamaño total de los archivos excede el límite de 10MB. Tamaño actual: %.2f MB",
+                                totalSize / (1024.0 * 1024.0)));
+            }
+
             for (MultipartFile adjunto : adjuntos) {
                 if (adjunto.getSize() > 5 * 1024 * 1024) {
-                    throw new IllegalArgumentException("El archivo no debe superar los 5MB");
+                    throw new IllegalArgumentException(
+                            String.format("El archivo '%s' excede el límite de 5MB por archivo. Tamaño: %.2f MB",
+                                    adjunto.getOriginalFilename(),
+                                    adjunto.getSize() / (1024.0 * 1024.0)));
                 }
                 if (!adjunto.getContentType().matches("application/(pdf)|image/(jpg|jpeg|png)|application/(msword|vnd.openxmlformats-officedocument.wordprocessingml.document)")) {
                     throw new IllegalArgumentException("Solo se permiten archivos PDF, JPG, PNG, DOC o DOCX");
@@ -69,6 +108,10 @@ public class PlantillaCorreoService {
         PlantillaCorreo plantilla = repositorio.findById(id)
                 .orElseThrow(() -> new RuntimeException("Plantilla no encontrada"));
 
+        if (!validarContenidoNoVacio(detallesPlantilla.getMensaje())) {
+            throw new IllegalArgumentException("El contenido de la plantilla no puede estar vacío");
+        }
+
         plantilla.setNombre(detallesPlantilla.getNombre());
         plantilla.setAsunto(detallesPlantilla.getAsunto());
         plantilla.setMensaje(detallesPlantilla.getMensaje());
@@ -80,11 +123,26 @@ public class PlantillaCorreoService {
         }
 
         // Manejar nuevos adjuntos
+        // Manejar nuevos adjuntos
         if (adjuntos != null && adjuntos.length > 0) {
-            // No limpiamos todos los adjuntos aquí, solo añadimos los nuevos
+            // Validar tamaño total de nuevos archivos
+            long totalSizeNuevos = 0;
+            for (MultipartFile adjunto : adjuntos) {
+                totalSizeNuevos += adjunto.getSize();
+            }
+
+            if (totalSizeNuevos > 10 * 1024 * 1024) {
+                throw new IllegalArgumentException(
+                        String.format("El tamaño total de los nuevos archivos excede el límite de 10MB. Tamaño: %.2f MB",
+                                totalSizeNuevos / (1024.0 * 1024.0)));
+            }
+
             for (MultipartFile adjunto : adjuntos) {
                 if (adjunto.getSize() > 5 * 1024 * 1024) {
-                    throw new IllegalArgumentException("El archivo no debe superar los 5MB");
+                    throw new IllegalArgumentException(
+                            String.format("El archivo '%s' excede el límite de 5MB por archivo. Tamaño: %.2f MB",
+                                    adjunto.getOriginalFilename(),
+                                    adjunto.getSize() / (1024.0 * 1024.0)));
                 }
                 if (!adjunto.getContentType().matches("application/(pdf)|image/(jpg|jpeg|png)|application/(msword|vnd.openxmlformats-officedocument.wordprocessingml.document)")) {
                     throw new IllegalArgumentException("Solo se permiten archivos PDF, JPG, PNG, DOC o DOCX");

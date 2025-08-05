@@ -6,11 +6,12 @@ import com.tss.tssmanager_backend.entity.EquiposEstatus;
 import com.tss.tssmanager_backend.enums.EstatusEquipoEnum;
 import com.tss.tssmanager_backend.enums.EstatusReporteEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoActivacionEquipoEnum;
-import com.tss.tssmanager_backend.enums.TipoEquipoEnum;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
 import com.tss.tssmanager_backend.repository.EquiposEstatusRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,31 @@ public class EquipoService {
 
     public Iterable<Equipo> obtenerTodosLosEquipos() {
         return repository.findAll();
+    }
+
+    @Cacheable(value = "equipos", key = "#id")
+    public Equipo findById(Integer id) {
+        return repository.findById(id).orElse(null);
+    }
+
+    @Cacheable(value = "equipos", key = "#imei")
+    public Optional<Equipo> findByImei(String imei) {
+        return repository.findByImei(imei);
+    }
+
+    @Cacheable(value = "equipos", key = "'cliente_' + #clienteId")
+    public List<Equipo> findByClienteId(Long clienteId) {
+        return repository.findByClienteId(clienteId);
+    }
+
+    @Cacheable(value = "equipos", key = "'tipo_' + #tipo + '_estatus_' + #estatus")
+    public List<Equipo> findByTipoAndEstatus(String tipo, String estatus) {
+        return repository.findByTipoAndEstatus(tipo, estatus);
+    }
+
+    @CacheEvict(value = "equipos", key = "#equipo.id")
+    public Equipo save(Equipo equipo) {
+        return repository.save(equipo);
     }
 
     public Equipo obtenerEquipo(Integer id) {

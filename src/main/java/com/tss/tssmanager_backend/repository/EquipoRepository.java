@@ -15,5 +15,12 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
     @Query("SELECT e FROM Equipo e WHERE e.imei = :imei")
     Optional<Equipo> findByImei(@Param("imei") String imei);
 
+    // Método para buscar equipos por cliente ID
+    @Query("SELECT e FROM Equipo e WHERE e.clienteId = :clienteId")
+    List<Equipo> findByClienteId(@Param("clienteId") Long clienteId);
+
+    // Método para buscar equipos por tipo y estatus
+    @Query("SELECT e FROM Equipo e WHERE e.tipo = :tipo AND e.estatus = :estatus")
+    List<Equipo> findByTipoAndEstatus(@Param("tipo") String tipo, @Param("estatus") String estatus);
 
 }

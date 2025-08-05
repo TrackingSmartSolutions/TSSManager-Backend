@@ -31,21 +31,33 @@ public class PlantillaCorreoController {
     }
 
     @PostMapping
-    public ResponseEntity<PlantillaCorreo> crearPlantilla(
+    public ResponseEntity<?> crearPlantilla(
             @RequestPart("plantilla") PlantillaCorreo plantilla,
-            @RequestPart(value = "adjuntos", required = false) MultipartFile[] adjuntos) throws IOException {
-        PlantillaCorreo savedPlantilla = servicio.guardarPlantilla(plantilla, adjuntos);
-        return ResponseEntity.ok(savedPlantilla);
+            @RequestPart(value = "adjuntos", required = false) MultipartFile[] adjuntos) {
+        try {
+            PlantillaCorreo savedPlantilla = servicio.guardarPlantilla(plantilla, adjuntos);
+            return ResponseEntity.ok(savedPlantilla);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body("Error al procesar los archivos");
+        }
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<PlantillaCorreoDTO> actualizarPlantilla(
+    public ResponseEntity<?> actualizarPlantilla(
             @PathVariable Integer id,
             @RequestPart("plantilla") PlantillaCorreo plantilla,
             @RequestPart(value = "adjuntos", required = false) MultipartFile[] adjuntos,
-            @RequestPart(value = "adjuntosToRemove", required = false) String adjuntosToRemove) throws IOException {
-        PlantillaCorreoDTO updatedPlantilla = servicio.actualizarPlantilla(id, plantilla, adjuntos, adjuntosToRemove);
-        return ResponseEntity.ok(updatedPlantilla);
+            @RequestPart(value = "adjuntosToRemove", required = false) String adjuntosToRemove) {
+        try {
+            PlantillaCorreoDTO updatedPlantilla = servicio.actualizarPlantilla(id, plantilla, adjuntos, adjuntosToRemove);
+            return ResponseEntity.ok(updatedPlantilla);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body("Error al procesar los archivos");
+        }
     }
 
     @DeleteMapping("/{id}")

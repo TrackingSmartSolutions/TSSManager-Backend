@@ -6,6 +6,7 @@ import com.tss.tssmanager_backend.dto.CorreoDTO;
 import com.tss.tssmanager_backend.dto.PropietarioDTO;
 import com.tss.tssmanager_backend.dto.TelefonoDTO;
 import com.tss.tssmanager_backend.entity.*;
+import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
 import com.tss.tssmanager_backend.enums.RolContactoEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
@@ -13,6 +14,8 @@ import com.tss.tssmanager_backend.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -44,6 +47,41 @@ public class EmpresaService {
 
     @Autowired
     private TratoRepository tratoRepository;
+
+    @Cacheable(value = "empresas", key = "#id")
+    public Empresa findById(Integer id) {
+        return empresaRepository.findById(id).orElse(null);
+    }
+
+    @Cacheable(value = "empresas", key = "'propietario_' + #propietarioId")
+    public List<Empresa> findByPropietarioId(Integer propietarioId) {
+        return empresaRepository.findByPropietario_Id(propietarioId);
+    }
+
+    @Cacheable(value = "empresas", key = "'estatus_' + #estatus")
+    public List<Empresa> findByEstatus(EstatusEmpresaEnum estatus) {
+        return empresaRepository.findByEstatus(estatus);
+    }
+
+    @CacheEvict(value = "empresas", key = "#empresa.id")
+    public Empresa save(Empresa empresa) {
+        return empresaRepository.save(empresa);
+    }
+
+    @CacheEvict(value = "empresas", allEntries = true)
+    public void clearCache() {
+        // Método para limpiar todo el cache de empresas
+    }
+
+    @Cacheable(value = "contactos", key = "'empresa_' + #empresaId")
+    public List<Contacto> findByEmpresaId(Integer empresaId) {
+        return contactoRepository.findByEmpresaId(empresaId);
+    }
+
+    @CacheEvict(value = "contactos", key = "#contacto.id")
+    public Contacto save(Contacto contacto) {
+        return contactoRepository.save(contacto);
+    }
 
     @Transactional
     public EmpresaDTO agregarEmpresaConContactos(Empresa empresa, List<ContactoDTO> contactosDTO) {

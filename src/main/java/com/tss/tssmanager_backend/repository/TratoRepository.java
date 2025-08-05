@@ -282,4 +282,114 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
     ORDER BY a.fecha_limite ASC, n.fecha_creacion DESC
     """, nativeQuery = true)
     List<Object[]> findTratoCompleteByIdWithAllData(@Param("tratoId") Integer tratoId);
+
+    @Query(value = """
+    SELECT DISTINCT 
+        t.id,
+        t.nombre,
+        t.empresa_id,
+        t.numero_unidades,
+        t.ingresos_esperados,
+        t.descripcion,
+        t.propietario_id,
+        t.fecha_cierre,
+        t.no_trato,
+        t.probabilidad,
+        t.fase,
+        t.correos_automaticos_activos,
+        t.fecha_creacion,
+        t.fecha_modificacion,
+        t.fecha_ultima_actividad,
+        u.nombre as propietario_nombre,
+        e.nombre as empresa_nombre,
+        c.id as contacto_id,
+        c.nombre as contacto_nombre,
+        CASE WHEN act_count.total > 0 THEN act_count.total ELSE 0 END as actividades_count,
+        CASE WHEN act_count.total > 0 THEN true ELSE false END as has_activities
+    FROM tratos t
+    LEFT JOIN usuarios u ON t.propietario_id = u.id
+    LEFT JOIN empresas e ON t.empresa_id = e.id
+    LEFT JOIN contactos c ON t.contacto_id = c.id
+    LEFT JOIN (
+        SELECT trato_id, COUNT(*) as total
+        FROM actividades
+        GROUP BY trato_id
+    ) act_count ON t.id = act_count.trato_id
+    WHERE t.empresa_id = :empresaId
+      AND (t.fecha_creacion BETWEEN :startDate AND :endDate)
+      AND (
+          t.propietario_id = :usuarioId 
+          OR EXISTS (
+              SELECT 1 FROM actividades a 
+              WHERE a.trato_id = t.id 
+              AND a.asignado_a_id = :usuarioId
+          )
+      )
+    ORDER BY t.fecha_cierre ASC
+""", nativeQuery = true)
+    List<Object[]> findTratosForEmpleadoByEmpresa(
+            @Param("usuarioId") Integer usuarioId,
+            @Param("empresaId") Integer empresaId,
+            @Param("startDate") Instant startDate,
+            @Param("endDate") Instant endDate
+    );
+
+    @Query(value = """
+    SELECT DISTINCT
+        t.id,
+        t.nombre,
+        t.propietario_id,
+        t.fecha_cierre,
+        t.no_trato,
+        t.ingresos_esperados,
+        t.fase,
+        t.fecha_ultima_actividad,
+        t.fecha_creacion,
+        t.fecha_modificacion,
+        u.nombre as propietario_nombre,
+        e.nombre as empresa_nombre,
+        c.id as contacto_id,
+        COALESCE(act_count.total, 0) as actividades_count,
+        COALESCE(act_abiertas.total, 0) as actividades_abiertas_count,
+        prox_act.tipo as proxima_actividad_tipo,
+        prox_act.fecha_limite as proxima_actividad_fecha
+    FROM tratos t
+    LEFT JOIN usuarios u ON t.propietario_id = u.id
+    LEFT JOIN empresas e ON t.empresa_id = e.id
+    LEFT JOIN contactos c ON t.contacto_id = c.id
+    LEFT JOIN (
+        SELECT trato_id, COUNT(*) as total
+        FROM actividades
+        GROUP BY trato_id
+    ) act_count ON t.id = act_count.trato_id
+    LEFT JOIN (
+        SELECT trato_id, COUNT(*) as total
+        FROM actividades
+        WHERE estatus = 'ABIERTA'
+        GROUP BY trato_id
+    ) act_abiertas ON t.id = act_abiertas.trato_id
+    LEFT JOIN (
+        SELECT DISTINCT ON (trato_id) trato_id, tipo, fecha_limite
+        FROM actividades
+        WHERE estatus = 'ABIERTA'
+        ORDER BY trato_id, fecha_limite ASC
+    ) prox_act ON t.id = prox_act.trato_id
+    WHERE t.empresa_id = :empresaId
+      AND (t.fecha_creacion BETWEEN :startDate AND :endDate)
+      AND (
+          t.propietario_id = :usuarioId 
+          OR EXISTS (
+              SELECT 1 FROM actividades a 
+              WHERE a.trato_id = t.id 
+              AND a.asignado_a_id = :usuarioId
+          )
+      )
+    ORDER BY t.fecha_cierre ASC
+""", nativeQuery = true)
+    List<Object[]> findTratosBasicoForEmpleadoByEmpresa(
+            @Param("usuarioId") Integer usuarioId,
+            @Param("empresaId") Integer empresaId,
+            @Param("startDate") Instant startDate,
+            @Param("endDate") Instant endDate
+    );
 }

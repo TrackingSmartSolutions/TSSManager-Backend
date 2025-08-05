@@ -16,6 +16,8 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Base64;
@@ -44,7 +46,7 @@ public class EmailService {
                     .from(fromEmail)
                     .to(destinatario)
                     .subject(asunto)
-                    .html(cuerpo);
+                    .html(procesarImagenesEmbebidas(cuerpo));
 
             // Manejo de adjuntos
             List<com.resend.services.emails.model.Attachment> attachments = new ArrayList<>();
@@ -98,8 +100,7 @@ public class EmailService {
         emailRecord.setAsunto(asunto);
         emailRecord.setCuerpo(cuerpo);
         emailRecord.setArchivosAdjuntos(rutasArchivosAdjuntos != null ? String.join(",", rutasArchivosAdjuntos) : null);
-        emailRecord.setFechaEnvio(LocalDateTime.now());
-        emailRecord.setTratoId(tratoId);
+        emailRecord.setFechaEnvio(ZonedDateTime.now(ZoneId.of("America/Mexico_City")).toLocalDateTime());        emailRecord.setTratoId(tratoId);
         emailRecord.setExito(exito);
         emailRecord.setResendEmailId(resendEmailId);
 
@@ -294,5 +295,12 @@ public class EmailService {
 
     public List<EmailRecord> obtenerCorreosPorTratoId(Integer tratoId) {
         return emailRecordRepository.findByTratoId(tratoId);
+    }
+
+    private String procesarImagenesEmbebidas(String cuerpoHtml) {
+        if (cuerpoHtml == null || !cuerpoHtml.contains("data:image")) {
+            return cuerpoHtml;
+        }
+        return cuerpoHtml;
     }
 }
