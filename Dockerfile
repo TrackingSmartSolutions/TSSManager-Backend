@@ -40,39 +40,42 @@ USER spring:spring
 # Expone el puerto
 EXPOSE 8080
 
-# Configuración JVM para contenedores
+# Configuración JVM
 ENV JAVA_OPTS="-XX:+UseG1GC \
                -XX:+UseContainerSupport \
-               -XX:MaxRAMPercentage=75.0 \
-               -XX:+OptimizeStringConcat \
-               -XX:+UseStringDeduplication \
-               -XX:+UnlockExperimentalVMOptions \
-               -XX:+EnableJVMCI \
-               -XX:+UseJVMCICompiler \
-               -Xms512m \
-               -Xmx2g \
-               -XX:NewRatio=3 \
+               -XX:MaxRAMPercentage=65.0 \
+               -XX:InitialRAMPercentage=40.0 \
+               -Xms96m \
+               -Xmx320m \
+               -XX:MaxMetaspaceSize=96m \
+               -XX:MetaspaceSize=48m \
+               -XX:CompressedClassSpaceSize=48m \
+               -XX:ReservedCodeCacheSize=24m \
+               -XX:InitialCodeCacheSize=12m \
+               -XX:MaxDirectMemorySize=48m \
+               -XX:NewRatio=2 \
                -XX:SurvivorRatio=8 \
-               -XX:MaxMetaspaceSize=256m \
-               -XX:CompressedClassSpaceSize=128m \
+               -XX:G1HeapRegionSize=4m \
+               -XX:G1NewSizePercent=25 \
+               -XX:G1MaxNewSizePercent=35 \
+               -XX:G1MixedGCCountTarget=4 \
+               -XX:G1HeapWastePercent=5 \
                -XX:+DisableExplicitGC \
-               -XX:+AlwaysPreTouch \
-               -XX:+UseNUMA \
-               -XX:+ParallelRefProcEnabled \
-               -XX:+UnlockDiagnosticVMOptions \
-               -XX:+LogVMOutput \
-               -XX:+UseAES \
-               -XX:+UseAESIntrinsics \
-               -XX:+UseSHA \
-               -XX:+UseSHA1Intrinsics \
-               -XX:+UseSHA256Intrinsics \
+               -XX:+UseStringDeduplication \
+               -XX:+OptimizeStringConcat \
+               -XX:+UseCGroupMemoryLimitForHeap \
+               -Djava.awt.headless=true \
                -Djava.security.egd=file:/dev/./urandom \
                -Dspring.backgroundpreinitializer.ignore=true \
+               -Dspring.jpa.hibernate.ddl-auto=validate \
+               -Dspring.jpa.show-sql=false \
+               -Dlogging.level.root=WARN \
+               -Dspring.jpa.properties.hibernate.jdbc.batch_size=10 \
                -Dfile.encoding=UTF-8 \
                -Duser.timezone=America/Mexico_City"
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+# Health check más liviano
+HEALTHCHECK --interval=45s --timeout=5s --start-period=60s --retries=2 \
     CMD curl -f http://localhost:8080/actuator/health || exit 1
 
 # Comando para ejecutar la aplicación
