@@ -307,12 +307,12 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
         CASE WHEN act_count.total > 0 THEN act_count.total ELSE 0 END as actividades_count,
         CASE WHEN act_count.total > 0 THEN true ELSE false END as has_activities
     FROM "Tratos" t
-    LEFT JOIN usuarios u ON t.propietario_id = u.id
-    LEFT JOIN empresas e ON t.empresa_id = e.id
-    LEFT JOIN contactos c ON t.contacto_id = c.id
+    LEFT JOIN "Usuarios" u ON t.propietario_id = u.id
+    LEFT JOIN "Empresas" e ON t.empresa_id = e.id
+    LEFT JOIN "Contactos" c ON t.contacto_id = c.id
     LEFT JOIN (
         SELECT trato_id, COUNT(*) as total
-        FROM actividades
+        FROM "Actividades"
         GROUP BY trato_id
     ) act_count ON t.id = act_count.trato_id
     WHERE t.empresa_id = :empresaId
@@ -320,7 +320,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
       AND (
           t.propietario_id = :usuarioId 
           OR EXISTS (
-              SELECT 1 FROM actividades a 
+              SELECT 1 FROM "Actividades" a 
               WHERE a.trato_id = t.id 
               AND a.asignado_a_id = :usuarioId
           )
@@ -354,23 +354,23 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
         prox_act.tipo as proxima_actividad_tipo,
         prox_act.fecha_limite as proxima_actividad_fecha
     FROM "Tratos" t
-    LEFT JOIN usuarios u ON t.propietario_id = u.id
-    LEFT JOIN empresas e ON t.empresa_id = e.id
-    LEFT JOIN contactos c ON t.contacto_id = c.id
+    LEFT JOIN "Usuarios" u ON t.propietario_id = u.id
+    LEFT JOIN "Empresas" e ON t.empresa_id = e.id
+    LEFT JOIN "Contactos" c ON t.contacto_id = c.id
     LEFT JOIN (
         SELECT trato_id, COUNT(*) as total
-        FROM actividades
+        FROM "Actividades"
         GROUP BY trato_id
     ) act_count ON t.id = act_count.trato_id
     LEFT JOIN (
         SELECT trato_id, COUNT(*) as total
-        FROM actividades
+        FROM "Actividades"
         WHERE estatus = 'ABIERTA'
         GROUP BY trato_id
     ) act_abiertas ON t.id = act_abiertas.trato_id
     LEFT JOIN (
         SELECT DISTINCT ON (trato_id) trato_id, tipo, fecha_limite
-        FROM actividades
+        FROM "Actividades"
         WHERE estatus = 'ABIERTA'
         ORDER BY trato_id, fecha_limite ASC
     ) prox_act ON t.id = prox_act.trato_id
@@ -379,7 +379,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
       AND (
           t.propietario_id = :usuarioId 
           OR EXISTS (
-              SELECT 1 FROM actividades a 
+              SELECT 1 FROM "Actividades" a 
               WHERE a.trato_id = t.id 
               AND a.asignado_a_id = :usuarioId
           )
