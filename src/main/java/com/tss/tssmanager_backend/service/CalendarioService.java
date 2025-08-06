@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.EventoCalendarioDTO;
 import com.tss.tssmanager_backend.entity.*;
+import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import com.tss.tssmanager_backend.enums.RolUsuarioEnum;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
@@ -48,12 +49,18 @@ public class CalendarioService {
         boolean shouldShowCuentas = false;
 
         if ("ROLE_EMPLEADO".equals(userRol)) {
-            actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(userId, start, end);
+            actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(userId, start, end)
+                    .stream()
+                    .filter(actividad -> actividad.getEstatus() != EstatusActividadEnum.CERRADA)
+                    .collect(Collectors.toList());
             shouldShowCuentas = false;
         } else if ("ROLE_ADMINISTRADOR".equals(userRol)) {
             // ADMINISTRADOR
             if (usuario == null || usuario.equals("Todos los usuarios")) {
-                actividades = actividadRepository.findByFechaLimiteBetween(start, end);
+                actividades = actividadRepository.findByFechaLimiteBetween(start, end)
+                        .stream()
+                        .filter(actividad -> actividad.getEstatus() != EstatusActividadEnum.CERRADA)
+                        .collect(Collectors.toList());
 
                 shouldShowCuentas = true;
             } else {
@@ -61,12 +68,18 @@ public class CalendarioService {
                 if (assignedUser == null) {
                     throw new RuntimeException("Usuario no encontrado: " + usuario);
                 }
-                actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(assignedUser.getId(), start, end);
+                actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(assignedUser.getId(), start, end)
+                        .stream()
+                        .filter(actividad -> actividad.getEstatus() != EstatusActividadEnum.CERRADA)
+                        .collect(Collectors.toList());
                 shouldShowCuentas = assignedUser.getRol() == RolUsuarioEnum.ADMINISTRADOR;
 
             }
         } else {
-            actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(userId, start, end);
+            actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteBetween(userId, start, end)
+                    .stream()
+                    .filter(actividad -> actividad.getEstatus() != EstatusActividadEnum.CERRADA)
+                    .collect(Collectors.toList());
         }
         List<EventoCalendarioDTO> eventos = actividades.stream()
                 .map(this::convertActividadToEvento)
@@ -77,7 +90,8 @@ public class CalendarioService {
                 eventos.addAll(cuentaPorCobrarRepository.findAll().stream()
                         .filter(cuenta -> cuenta.getFechaPago() != null &&
                                 !cuenta.getFechaPago().isBefore(start) &&
-                                !cuenta.getFechaPago().isAfter(end))
+                                !cuenta.getFechaPago().isAfter(end) &&
+                                !cuenta.getEstatus().name().equals("PAGADO"))
                         .map(cuenta -> EventoCalendarioDTO.builder()
                                 .titulo("Cuenta por Cobrar - " + cuenta.getFolio() + " - " + cuenta.getCliente().getNombre())
                                 .inicio(cuenta.getFechaPago().atStartOfDay().atZone(MEXICO_ZONE).toInstant())
@@ -95,7 +109,8 @@ public class CalendarioService {
                 eventos.addAll(cuentaPorPagarRepository.findAll().stream()
                         .filter(cuenta -> cuenta.getFechaPago() != null &&
                                 !cuenta.getFechaPago().isBefore(start) &&
-                                !cuenta.getFechaPago().isAfter(end))
+                                !cuenta.getFechaPago().isAfter(end) &&
+                                !cuenta.getEstatus().equals("Pagado"))
                         .map(cuenta -> {
                             EventoCalendarioDTO.EventoCalendarioDTOBuilder builder = EventoCalendarioDTO.builder()
                                     .titulo(cuenta.getCuenta().getCategoria().getDescripcion() + " - " + cuenta.getCuenta().getNombre())
