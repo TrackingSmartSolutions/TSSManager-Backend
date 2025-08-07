@@ -11,4 +11,5 @@ public class CuentaPorPagarDTO {
     private BigDecimal monto;
     private String formaPago;
     private Integer usuarioId;
+    private String nota;
 }

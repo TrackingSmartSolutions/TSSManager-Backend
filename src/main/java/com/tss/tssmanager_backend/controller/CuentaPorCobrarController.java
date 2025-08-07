@@ -9,6 +9,7 @@ import com.tss.tssmanager_backend.service.CuentaPorCobrarService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -37,9 +38,18 @@ public class CuentaPorCobrarController {
             @PathVariable Integer cotizacionId,
             @RequestParam EsquemaCobroEnum esquema,
             @RequestParam List<String> conceptosSeleccionados,
-            @RequestParam(required = false) Integer numeroPagos) {
-        logger.info("Solicitud para crear cuentas por cobrar desde cotización ID: {} with numeroPagos: {}", cotizacionId, numeroPagos);
-        return ResponseEntity.ok(cuentaPorCobrarService.crearCuentasPorCobrarFromCotizacion(cotizacionId, esquema, conceptosSeleccionados, numeroPagos));
+            @RequestParam(required = false) Integer numeroPagos,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicial) {
+        logger.info("Solicitud para crear cuentas por cobrar desde cotización ID: {} with numeroPagos: {} y fechaInicial: {}", cotizacionId, numeroPagos, fechaInicial);
+        return ResponseEntity.ok(cuentaPorCobrarService.crearCuentasPorCobrarFromCotizacion(cotizacionId, esquema, conceptosSeleccionados, numeroPagos, fechaInicial));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<CuentaPorCobrarDTO> actualizarCuentaPorCobrar(
+            @PathVariable Integer id,
+            @RequestBody CuentaPorCobrarDTO dto) {
+        logger.info("Solicitud para actualizar cuenta por cobrar con ID: {}", id);
+        return ResponseEntity.ok(cuentaPorCobrarService.actualizarCuentaPorCobrar(id, dto));
     }
 
     @DeleteMapping("/{id}")

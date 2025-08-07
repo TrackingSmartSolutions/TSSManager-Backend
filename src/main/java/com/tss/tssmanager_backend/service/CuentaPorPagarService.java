@@ -33,7 +33,7 @@ public class CuentaPorPagarService {
     private SimRepository simRepository;
 
     public List<CuentaPorPagar> obtenerTodas() {
-        return cuentasPorPagarRepository.findAll();
+        return cuentasPorPagarRepository.findAllByOrderByFechaPagoAsc();
     }
 
     @Transactional
@@ -45,7 +45,6 @@ public class CuentaPorPagarService {
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
         cuenta.setEstatus("Pagado");
-        cuenta.setFechaPago(fechaPago);
         cuenta.setMonto(monto);
         cuenta.setFormaPago(formaPago);
 
@@ -56,17 +55,17 @@ public class CuentaPorPagarService {
                 "Marcada como pagada el " + fechaFormateada);
 
         cuentasPorPagarRepository.save(cuenta);
-        actualizarVigenciaSim(cuenta, fechaPago);
+        actualizarVigenciaSim(cuenta, LocalDate.now());
 
         // Crear transacción asociada (registro del pago)
         Transaccion transaccionPago = new Transaccion();
-        transaccionPago.setFecha(fechaPago);
+        transaccionPago.setFecha(LocalDate.now());
         transaccionPago.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
         transaccionPago.setCategoria(transaccionOriginal.getCategoria());
         transaccionPago.setCuenta(cuenta.getCuenta());
         transaccionPago.setMonto(monto);
         transaccionPago.setEsquema(com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum.UNICA);
-        transaccionPago.setFechaPago(fechaPago);
+        transaccionPago.setFechaPago(LocalDate.now());
         transaccionPago.setFormaPago(cuenta.getFormaPago());
         transaccionPago.setNotas("Transacción generada desde Cuentas por Pagar");
         transaccionPago.setFechaCreacion(LocalDateTime.now());
@@ -77,8 +76,33 @@ public class CuentaPorPagarService {
     }
 
     @Transactional
-    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal monto, String formaPago, Integer usuarioId) {
-        marcarComoPagada(id, fechaPago, monto, formaPago, usuarioId, false);
+    public void marcarComoPagada(Integer id, BigDecimal monto, String formaPago, Integer usuarioId) {
+        marcarComoPagada(id, LocalDate.now(), monto, formaPago, usuarioId, false);
+    }
+
+    @Transactional
+    public CuentaPorPagar actualizarCuentaPorPagar(Integer id, LocalDate fechaPago, BigDecimal monto, String formaPago, String nota) {
+        CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
+
+        // Verificar que no esté pagada
+        if ("Pagado".equals(cuenta.getEstatus())) {
+            throw new IllegalStateException("No se puede editar una cuenta que ya está pagada");
+        }
+        // Actualizar campos editables
+        if (fechaPago != null) {
+            cuenta.setFechaPago(fechaPago);
+        }
+        if (monto != null) {
+            cuenta.setMonto(monto);
+        }
+        if (formaPago != null && !formaPago.isEmpty()) {
+            cuenta.setFormaPago(formaPago);
+        }
+        if (nota != null) {
+            cuenta.setNota(nota);
+        }
+        return cuentasPorPagarRepository.save(cuenta);
     }
 
     @Transactional

@@ -13,4 +13,11 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
     @Query("SELECT c FROM CuentaPorPagar c WHERE c.fechaPago BETWEEN :start AND :end")
     List<CuentaPorPagar> findByFechaPagoBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
     List<CuentaPorPagar> findByTransaccionId(Integer transaccionId);
+    List<CuentaPorPagar> findAllByOrderByFechaPagoAsc();
+
+    @Query("SELECT c FROM CuentaPorPagar c WHERE c.fechaPago BETWEEN :start AND :end AND c.estatus != :estatus")
+    List<CuentaPorPagar> findByFechaPagoBetweenAndEstatusNot(
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end,
+            @Param("estatus") String estatus);
 }

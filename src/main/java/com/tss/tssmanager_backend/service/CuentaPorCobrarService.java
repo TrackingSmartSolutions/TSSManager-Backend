@@ -51,7 +51,7 @@ public class CuentaPorCobrarService {
     private CloudinaryConfig cloudinaryConfig;
 
     @Transactional
-    public List<CuentaPorCobrarDTO> crearCuentasPorCobrarFromCotizacion(Integer cotizacionId, EsquemaCobroEnum esquema, List<String> conceptosSeleccionados, Integer numeroPagos) {
+    public List<CuentaPorCobrarDTO> crearCuentasPorCobrarFromCotizacion(Integer cotizacionId, EsquemaCobroEnum esquema, List<String> conceptosSeleccionados, Integer numeroPagos, LocalDate fechaInicial) {
         logger.info("Creando cuentas por cobrar desde cotización ID: {} with esquema: {} and numeroPagos: {}", cotizacionId, esquema, numeroPagos);
 
         Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId)
@@ -84,7 +84,7 @@ public class CuentaPorCobrarService {
             logger.warn("Verificar que los conceptos seleccionados coincidan con los de la cotización");
         }
 
-        LocalDate fechaBase = LocalDate.now();
+        LocalDate fechaBase = fechaInicial;
 
         if (esquema == EsquemaCobroEnum.ANUAL) {
             // Para ANUAL: numeroPagos + 1 cuentas
@@ -106,7 +106,7 @@ public class CuentaPorCobrarService {
                     logger.info("Cuenta {} - Fecha: {}, Monto: {} (subtotal)", i+1, fechaBase, cotizacion.getSubtotal());
                 } else {
                     // Siguientes cuentas: 365 días más, monto = total unidades seleccionadas
-                    cuenta.setFechaPago(fechaBase.plusDays(i * 365));
+                    cuenta.setFechaPago(fechaBase.plusYears(i));
                     cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
                     logger.info("Cuenta {} - Fecha: {}, Monto: {} (unidades seleccionadas)", i+1, fechaBase.plusDays(i * 365), totalUnidadesSeleccionadas);
                 }
@@ -116,9 +116,7 @@ public class CuentaPorCobrarService {
             }
 
         } else if (esquema == EsquemaCobroEnum.MENSUAL) {
-            // Para MENSUAL: numeroPagos cuentas, dividir el total entre numeroPagos
-            BigDecimal montoPorCuenta = totalUnidadesSeleccionadas.divide(BigDecimal.valueOf(numeroPagos), 2, BigDecimal.ROUND_HALF_UP);
-            logger.info("Monto por cuenta mensual: {} (total: {} / pagos: {})", montoPorCuenta, totalUnidadesSeleccionadas, numeroPagos);
+            logger.info("Monto por cuenta mensual: {} (cada cuenta tendrá el monto total)", totalUnidadesSeleccionadas);
 
             for (int i = 0; i < numeroPagos; i++) {
                 CuentaPorCobrar cuenta = new CuentaPorCobrar();
@@ -132,10 +130,10 @@ public class CuentaPorCobrarService {
                 if (i == 0) {
                     cuenta.setFechaPago(fechaBase);
                 } else {
-                    cuenta.setFechaPago(fechaBase.plusDays(i * 30));
+                    cuenta.setFechaPago(fechaBase.plusMonths(i));
                 }
 
-                cuenta.setCantidadCobrar(montoPorCuenta);
+                cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
                 cuenta.setFolio(generateFolio(cliente.getNombre(), i + 1));
                 cuentas.add(cuenta);
             }
@@ -195,6 +193,35 @@ public class CuentaPorCobrarService {
         cuenta.setNoEquipos(dto.getNoEquipos());
         cuenta.setConceptos(dto.getConceptos() != null ? String.join(", ", dto.getConceptos()) : "");
         return cuenta;
+    }
+
+    @Transactional
+    public CuentaPorCobrarDTO actualizarCuentaPorCobrar(Integer id, CuentaPorCobrarDTO dto) {
+        logger.info("Actualizando cuenta por cobrar con ID: {}", id);
+
+        CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada con id: " + id));
+
+        // Verificar que no esté pagada
+        if (cuenta.getEstatus() == EstatusPagoEnum.PAGADO) {
+            throw new IllegalStateException("No se puede editar una cuenta que ya está pagada");
+        }
+
+        // Actualizar campos editables
+        if (dto.getFechaPago() != null) {
+            cuenta.setFechaPago(dto.getFechaPago());
+        }
+
+        if (dto.getCantidadCobrar() != null) {
+            cuenta.setCantidadCobrar(dto.getCantidadCobrar());
+        }
+
+        if (dto.getConceptos() != null && !dto.getConceptos().isEmpty()) {
+            cuenta.setConceptos(String.join(", ", dto.getConceptos()));
+        }
+
+        CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
+        return convertToDTO(savedCuenta);
     }
 
     @Transactional

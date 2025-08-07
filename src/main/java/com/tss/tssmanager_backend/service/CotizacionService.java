@@ -120,7 +120,6 @@ public class CotizacionService {
 
         unidadCotizacionRepository.saveAll(unidades);
         cotizacion.setUnidades(unidades);
-
         CotizacionDTO result = convertToDTO(savedCotizacion);
         result.setIsrEstatal(isrEstatal);
         result.setIsrFederal(isrFederal);
@@ -231,7 +230,12 @@ public class CotizacionService {
             udto.setImporteTotal(u.getImporteTotal());
             return udto;
         }).collect(Collectors.toList()));
-        dto.setCantidadTotal(cotizacion.getUnidades().stream().mapToInt(UnidadCotizacion::getCantidad).sum());
+        dto.setCantidadTotal(
+                cotizacion.getUnidades().stream()
+                        .filter(u -> "Equipos".equals(u.getUnidad()))
+                        .mapToInt(UnidadCotizacion::getCantidad)
+                        .sum()
+        );
         dto.setConceptosCount((int) cotizacion.getUnidades().stream().map(UnidadCotizacion::getConcepto).distinct().count());
         dto.setEmpresaData(empresaService.convertToEmpresaDTO(cotizacion.getCliente()));
         return dto;

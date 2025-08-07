@@ -21,6 +21,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
     boolean existsByEmpresaId(Integer empresaId);
     List<Trato> findByEmpresaIdAndFechaCreacionBetween(Integer empresaId, Instant start, Instant end);
     List<Trato> findByEmpresaIdAndPropietarioIdAndFechaCreacionBetween(Integer empresaId, Integer propietarioId, Instant start, Instant end);
+    List<Trato> findAllById(Iterable<Integer> ids);
 
     @Query("SELECT t FROM Trato t LEFT JOIN FETCH t.contacto c LEFT JOIN FETCH c.telefonos WHERE t.id = :id")
     Optional<Trato> findTratoWithContactoAndTelefonos(@Param("id") Integer id);
