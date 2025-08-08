@@ -15,7 +15,7 @@ public class EmpresaConCoordenadasDTO {
     private BigDecimal lat;
     private BigDecimal lng;
 
-    // Constructors
+    // Constructores
     public EmpresaConCoordenadasDTO() {}
 
     public EmpresaConCoordenadasDTO(Integer id, String nombre, String domicilioFisico,

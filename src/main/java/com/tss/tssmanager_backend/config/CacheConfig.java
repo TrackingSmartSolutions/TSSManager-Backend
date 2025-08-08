@@ -38,7 +38,10 @@ public class CacheConfig {
                 "notificaciones",
                 "calendario-eventos",
                 "dashboard-stats",
-                "reports-data"
+                "reports-data",
+                "gruposDisponibles",
+                "simsDisponibles",
+                "equiposDisponibles"
         ));
 
         return cacheManager;

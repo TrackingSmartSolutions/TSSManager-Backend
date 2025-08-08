@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface CategoriaTransaccionesRepository extends JpaRepository<CategoriaTransacciones, Integer> {
     Optional<CategoriaTransacciones> findByDescripcion(String descripcion);
+    Optional<CategoriaTransacciones> findByDescripcionIgnoreCase(String descripcion);
+
 }

@@ -9,6 +9,12 @@ import com.tss.tssmanager_backend.enums.TarifaSimEnum;
 import com.tss.tssmanager_backend.repository.*;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,13 +44,22 @@ public class SimService {
     private CategoriaTransaccionesRepository categoriaRepository;
 
     @Autowired
+    private CuentasTransaccionesRepository cuentaRepository;
+
+    @Autowired
     private EmpresaRepository empresaRepository;
 
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
 
+    @CacheEvict(value = {"gruposDisponibles", "simsDisponibles"}, allEntries = true)
     @Transactional
     public Sim guardarSim(Sim sim) {
+
+        boolean esSimNueva = sim.getId() == null;
+        if (existeNumeroSim(sim.getNumero(), sim.getId())) {
+            throw new IllegalStateException("Ya existe una SIM con este número");
+        }
         if (sim.getResponsable() == ResponsableSimEnum.CLIENTE) {
             sim.setGrupo(99);
             sim.setVigencia(null);
@@ -93,7 +108,6 @@ public class SimService {
                     }
                 }
             } else {
-                // Es una creación nueva
                 // Lógica especial para SIMs M2M Global 15
                 if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
                     sim.setGrupo(0);
@@ -140,7 +154,7 @@ public class SimService {
         }
 
         // Crear transacción automática para SIMs de TSS
-        if (savedSim.getResponsable() == ResponsableSimEnum.TSS) {
+        if (savedSim.getResponsable() == ResponsableSimEnum.TSS && esSimNueva) {
             try {
                 crearTransaccionAutomatica(savedSim);
             } catch (Exception e) {
@@ -149,12 +163,19 @@ public class SimService {
             }
         }
 
+        else if (savedSim.getResponsable() == ResponsableSimEnum.TSS && !esSimNueva) {
+            try {
+                actualizarCuentasPorPagarExistentes(savedSim);
+            } catch (Exception e) {
+                System.err.println("Error al actualizar cuentas por pagar para SIM " + savedSim.getNumero() + ": " + e.getMessage());
+            }
+        }
+
         return savedSim;
     }
 
     private void crearTransaccionAutomatica(Sim sim) {
-        // Buscar o crear la categoría "Recarga de Saldos"
-        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcion("Recarga de Saldos");
+        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcionIgnoreCase("Recargas de Saldos");
         CategoriaTransacciones categoria;
 
         if (categoriaOpt.isPresent()) {
@@ -180,6 +201,8 @@ public class SimService {
             }
         }
 
+        CuentasTransacciones cuentaTransaccion = buscarOCrearCuenta(nombreCuenta, categoria);
+
         BigDecimal monto = sim.getRecarga() != null ? sim.getRecarga() : new BigDecimal("50.00");
 
         // Obtener fecha de pago basada en la vigencia de la SIM
@@ -195,21 +218,18 @@ public class SimService {
         transaccion.setFecha(LocalDate.now());
         transaccion.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
         transaccion.setCategoria(categoria);
-        transaccion.setNombreCuenta(nombreCuenta);
+        transaccion.setCuenta(cuentaTransaccion);
         transaccion.setEsquema(EsquemaTransaccionEnum.MENSUAL);
         transaccion.setNumeroPagos(1);
         transaccion.setFechaPago(fechaPago);
         transaccion.setMonto(monto);
         transaccion.setFormaPago("01");
-        transaccion.setNotas(sim.getNumero());
+        transaccion.setNotas("");
 
         transaccionService.agregarTransaccion(transaccion);
 
         try {
-            // Buscar las cuentas por pagar recién creadas para esta transacción
             List<CuentaPorPagar> cuentasCreadas = cuentaPorPagarRepository.findByTransaccionId(transaccion.getId());
-
-            // Asociar la SIM a todas las cuentas por pagar de esta transacción
             for (CuentaPorPagar cuenta : cuentasCreadas) {
                 cuenta.setSim(sim);
                 cuentaPorPagarRepository.save(cuenta);
@@ -221,6 +241,23 @@ public class SimService {
         }
     }
 
+    private void actualizarCuentasPorPagarExistentes(Sim sim) {
+        List<CuentaPorPagar> cuentasExistentes = cuentaPorPagarRepository.findBySimId(sim.getId());
+
+        for (CuentaPorPagar cuenta : cuentasExistentes) {
+            // Actualizar el monto si cambió la recarga
+            if (sim.getRecarga() != null) {
+                cuenta.setMonto(sim.getRecarga());
+            }
+            // Actualizar fecha de vencimiento si cambió la vigencia
+            if (sim.getVigencia() != null) {
+                cuenta.setFechaPago(sim.getVigencia().toLocalDate());
+            }
+            cuentaPorPagarRepository.save(cuenta);
+        }
+    }
+
+    @Cacheable(value = "gruposDisponibles", unless = "#result.isEmpty()")
     public List<Integer> obtenerGruposDisponibles() {
         List<Integer> allGroups = simRepository.findAllGroups();
         return allGroups.stream()
@@ -240,10 +277,39 @@ public class SimService {
                 .toList();
     }
 
+    public Page<SimDTO> obtenerTodasLasSimsPaginadas(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        Page<Sim> simsPage = simRepository.findAllWithEquipoPaged(pageable);
+        return simsPage.map(this::convertToDTO);
+    }
+
     public List<SimDTO> obtenerTodasLasSims() {
-        return simRepository.findAllWithEquipo().stream()
-                .map(this::convertToDTO)
+        List<Object[]> results = simRepository.findAllWithEquipoNative();
+        return results.stream()
+                .map(this::convertFromNativeQuery)
                 .collect(Collectors.toList());
+    }
+
+    private SimDTO convertFromNativeQuery(Object[] row) {
+        SimDTO dto = new SimDTO();
+        // Mapear campos básicos de SIM
+        dto.setId((Integer) row[0]);
+        dto.setNumero((String) row[1]);
+        dto.setTarifa(TarifaSimEnum.valueOf((String) row[2]));
+        dto.setVigencia((Date) row[3]);
+        dto.setRecarga((BigDecimal) row[4]);
+        dto.setResponsable(ResponsableSimEnum.valueOf((String) row[5]));
+        dto.setPrincipal(PrincipalSimEnum.valueOf((String) row[6]));
+        dto.setGrupo((Integer) row[7]);
+        dto.setContrasena((String) row[9]);
+
+        // Mapear equipo si existe
+        if (row[10] != null) { // equipo_imei
+            dto.setEquipoImei((String) row[10]);
+            dto.setEquipoNombre((String) row[11]);
+        }
+
+        return dto;
     }
 
     public Optional<SimDTO> obtenerSimPorId(Integer id) {
@@ -262,10 +328,20 @@ public class SimService {
         simRepository.delete(sim);
     }
 
+    @Cacheable(value = "simsDisponibles", unless = "#result.isEmpty()")
     public List<SimDTO> obtenerSimsDisponibles() {
         return simRepository.findAvailableSims().stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
+    }
+
+    public boolean existeNumeroSim(String numero, Integer excludeId) {
+        if (excludeId != null) {
+            return simRepository.findByNumeroOptimized(numero)
+                    .map(sim -> !sim.getId().equals(excludeId))
+                    .orElse(false);
+        }
+        return simRepository.findByNumeroOptimized(numero).isPresent();
     }
 
     @Transactional
@@ -319,5 +395,21 @@ public class SimService {
         }
 
         return dto;
+    }
+
+    private CuentasTransacciones buscarOCrearCuenta(String nombreCuenta, CategoriaTransacciones categoria) {
+        Optional<CuentasTransacciones> cuentaExistente = cuentaRepository.findByNombre(nombreCuenta);
+
+        if (cuentaExistente.isPresent()) {
+            System.out.println("Cuenta encontrada: " + nombreCuenta);
+            return cuentaExistente.get();
+        }
+
+        System.out.println("Creando nueva cuenta: " + nombreCuenta);
+        CuentasTransacciones nuevaCuenta = new CuentasTransacciones();
+        nuevaCuenta.setNombre(nombreCuenta);
+        nuevaCuenta.setCategoria(categoria);
+
+        return cuentaRepository.save(nuevaCuenta);
     }
 }

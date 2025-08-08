@@ -215,6 +215,4 @@ public class EquipoService {
         return equiposEstatusRepository.findAllEstatusOptimizedPaged(pageable);
     }
 
-
-
 }

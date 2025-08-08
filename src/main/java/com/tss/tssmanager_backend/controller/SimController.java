@@ -11,6 +11,7 @@ import com.tss.tssmanager_backend.repository.EquipoRepository;
 import com.tss.tssmanager_backend.service.SimService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -47,10 +48,13 @@ public class SimController {
     @PostMapping
     public ResponseEntity<?> crearSim(@RequestBody Map<String, Object> simData) {
         try {
-            // Log para debugging
-            System.out.println("=== DATOS RECIBIDOS ===");
-            System.out.println("Datos completos: " + simData);
-
+            String numero = (String) simData.get("numero");
+            if (simService.existeNumeroSim(numero, null)) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Número duplicado");
+                errorResponse.put("message", "Ya existe una SIM con este número");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
             Sim sim = new Sim();
             sim.setNumero((String) simData.get("numero"));
             sim.setTarifa(TarifaSimEnum.valueOf((String) simData.get("tarifa")));
@@ -88,12 +92,6 @@ public class SimController {
             } else if (simData.get("equipo") == null) {
                 sim.setEquipo(null);
             }
-
-            System.out.println("=== SIM ANTES DE GUARDAR ===");
-            System.out.println("Número: " + sim.getNumero());
-            System.out.println("Grupo: " + sim.getGrupo());
-            System.out.println("Principal: " + sim.getPrincipal());
-            System.out.println("Responsable: " + sim.getResponsable());
 
             Sim simGuardada = simService.guardarSim(sim);
             return ResponseEntity.ok(simGuardada);
@@ -210,6 +208,15 @@ public class SimController {
         return ResponseEntity.ok(simService.obtenerGruposDisponibles());
     }
 
+    @GetMapping("/validar-numero/{numero}")
+    public ResponseEntity<Map<String, Boolean>> validarNumero(
+            @PathVariable String numero,
+            @RequestParam(required = false) Integer excludeId) {
+        boolean existe = simService.existeNumeroSim(numero, excludeId);
+        Map<String, Boolean> response = Map.of("disponible", !existe);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/{id}/saldo")
     public ResponseEntity<Map<String, String>> guardarSaldo(
             @PathVariable Integer id,
@@ -231,5 +238,13 @@ public class SimController {
     public ResponseEntity<List<HistorialSaldosSim>> obtenerHistorialSaldos(@PathVariable Integer id) {
         List<HistorialSaldosSim> historial = simService.obtenerHistorialSaldos(id);
         return ResponseEntity.ok(historial);
+    }
+
+    @GetMapping("/paged")
+    public ResponseEntity<Page<SimDTO>> obtenerSimsPaginadas(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        Page<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size);
+        return ResponseEntity.ok(simsPage);
     }
 }
