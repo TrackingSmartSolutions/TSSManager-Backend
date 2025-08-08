@@ -106,7 +106,7 @@ public class GeocodingService {
 
     private Map<String, BigDecimal> geocodeAddress(String address) {
         if (!isValidAddress(address)) {
-            System.out.println("❌ Dirección inválida: " + address);
+            System.out.println("Dirección inválida: " + address);
             return null;
         }
 
@@ -171,7 +171,7 @@ public class GeocodingService {
     }
 
     private Map<String, BigDecimal> tryAreaGeocoding(String address) {
-        System.out.println("🏘️ Intentando geocodificación por área...");
+        System.out.println("Intentando geocodificación por área...");
 
         String[] commonAreas = {
                 "Centro", "Obregón", "Belisario Domínguez", "San Juan de Dios",
@@ -189,7 +189,7 @@ public class GeocodingService {
     }
 
     private Map<String, BigDecimal> getFallbackLeonCoordinates(String address) {
-        System.out.println("🎯 Usando coordenadas genéricas de León como último recurso...");
+        System.out.println("Usando coordenadas genéricas de León como último recurso...");
 
         BigDecimal baseLat = new BigDecimal("21.1619");
         BigDecimal baseLng = new BigDecimal("-101.6971");
@@ -208,7 +208,6 @@ public class GeocodingService {
     }
 
     private Map<String, BigDecimal> tryGeocodingStrategy(String query, String strategyName) {
-        System.out.println("🔍 " + strategyName + ": " + query);
 
         String url = String.format(
                 "https://nominatim.openstreetmap.org/search?format=json&q=%s&limit=5&countrycodes=mx&addressdetails=1&bounded=0",
