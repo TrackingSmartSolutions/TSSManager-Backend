@@ -24,4 +24,22 @@ public interface EmpresaRepository extends JpaRepository<Empresa, Integer> {
     void deleteByPropietario_Id(@Param("propietarioId") Integer propietarioId);
 
     Optional<Empresa> findByNombreAndPropietario_Id(String nombre, Integer propietarioId);
+
+    @Query(value = """
+    SELECT 
+        e.id,
+        e.nombre,
+        e.domicilio_fisico,
+        e.sector,
+        e.estatus,
+        e.sitio_web,
+        cc.lat,
+        cc.lng
+    FROM "Empresas" e
+    LEFT JOIN coordenadas_cache cc ON cc.direccion_hash = encode(sha256(lower(trim(e.domicilio_fisico))::bytea), 'hex')
+    WHERE e.domicilio_fisico IS NOT NULL 
+    AND e.domicilio_fisico != ''
+    ORDER BY e.nombre
+    """, nativeQuery = true)
+    List<Object[]> findEmpresasConCoordenadas();
 }
