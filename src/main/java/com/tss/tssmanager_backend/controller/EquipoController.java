@@ -9,6 +9,7 @@ import com.tss.tssmanager_backend.enums.TipoEquipoEnum;
 import com.tss.tssmanager_backend.service.EquipoService;
 import com.tss.tssmanager_backend.service.SimService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -79,6 +80,13 @@ public class EquipoController {
     @GetMapping("/estatus")
     public ResponseEntity<List<EquiposEstatusDTO>> obtenerEstatus() {
         return ResponseEntity.ok(service.obtenerEstatus());
+    }
+
+    @GetMapping("/estatus-paginado")
+    public ResponseEntity<Page<EquiposEstatusDTO>> obtenerEstatusPaginado(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(service.obtenerEstatusPaginado(page, size));
     }
 
     private Equipo convertMapToEquipo(Map<String, Object> equipoMap) {

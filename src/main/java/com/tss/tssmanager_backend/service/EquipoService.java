@@ -12,6 +12,9 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -202,20 +205,16 @@ public class EquipoService {
     }
 
     public List<EquiposEstatusDTO> obtenerEstatus() {
-
-        List<EquiposEstatus> estatusList = equiposEstatusRepository.findAllByOrderByFechaCheckDesc();
-        return estatusList.stream().map(this::mapToDTO).collect(Collectors.toList());
+        LocalDate fechaDesde = LocalDate.now().minusDays(30);
+        Date fechaDesdeSql = Date.valueOf(fechaDesde);
+        return equiposEstatusRepository.findRecentEstatusOptimized(fechaDesdeSql);
     }
 
-    private EquiposEstatusDTO mapToDTO(EquiposEstatus estatus) {
-        EquiposEstatusDTO dto = new EquiposEstatusDTO();
-        dto.setId(estatus.getId());
-        dto.setEquipoId(estatus.getEquipo().getId());
-        dto.setEstatus(estatus.getEstatus());
-        dto.setMotivo(estatus.getMotivo());
-        dto.setFechaCheck(estatus.getFechaCheck());
-        return dto;
+    public Page<EquiposEstatusDTO> obtenerEstatusPaginado(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return equiposEstatusRepository.findAllEstatusOptimizedPaged(pageable);
     }
+
 
 
 }

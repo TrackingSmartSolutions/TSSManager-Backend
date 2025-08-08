@@ -15,14 +15,15 @@ public class EquiposEstatus {
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "equipo_id", nullable = false)
+    @JoinColumn(name = "equipo_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_equipos_estatus_equipo"))
     private Equipo equipo;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "estatus", nullable = false)
+    @Column(name = "estatus", nullable = false, length = 20)
     private EstatusReporteEquipoEnum estatus;
 
-    @Column(name = "motivo")
+    @Column(name = "motivo", length = 500)
     private String motivo;
 
     @Column(name = "fecha_check", nullable = false)

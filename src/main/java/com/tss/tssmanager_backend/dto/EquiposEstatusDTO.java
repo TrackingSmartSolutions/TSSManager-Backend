@@ -13,4 +13,15 @@ public class EquiposEstatusDTO {
     private String motivo;
     private Date fechaCheck;
 
+    public EquiposEstatusDTO(Integer id, Integer equipoId, EstatusReporteEquipoEnum estatus,
+                             String motivo, Date fechaCheck) {
+        this.id = id;
+        this.equipoId = equipoId;
+        this.estatus = estatus;
+        this.motivo = motivo;
+        this.fechaCheck = fechaCheck;
+    }
+
+    public EquiposEstatusDTO() {}
+
 }

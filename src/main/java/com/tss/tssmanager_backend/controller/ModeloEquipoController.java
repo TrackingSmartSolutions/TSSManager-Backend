@@ -3,11 +3,15 @@ package com.tss.tssmanager_backend.controller;
 import com.tss.tssmanager_backend.entity.ModeloEquipo;
 import com.tss.tssmanager_backend.service.ModeloEquipoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/modelos")
@@ -44,8 +48,20 @@ public class ModeloEquipoController {
         return ResponseEntity.ok(service.obtenerModelo(id));
     }
 
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> obtenerModelosConConteo() {
+        return ResponseEntity.ok(service.obtenerModelosConConteo());
+    }
+
     @GetMapping
     public ResponseEntity<Iterable<ModeloEquipo>> obtenerTodosLosModelos() {
         return ResponseEntity.ok(service.obtenerTodosLosModelos());
+    }
+
+    @GetMapping("/paginated")
+    public ResponseEntity<Page<ModeloEquipo>> obtenerModelosPaginados(
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(service.obtenerModelosPaginados(pageable, search));
     }
 }

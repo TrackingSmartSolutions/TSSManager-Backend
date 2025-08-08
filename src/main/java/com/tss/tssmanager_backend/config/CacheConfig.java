@@ -33,6 +33,7 @@ public class CacheConfig {
                 "tratos",
                 "contactos",
                 "equipos",
+                "modelos",
                 "sims",
                 "notificaciones",
                 "calendario-eventos",
