@@ -42,28 +42,11 @@ public class NotificacionService {
     @Autowired
     private TratoRepository tratoRepository;
     @Autowired
-    private SimRepository simRepository;
-    @Autowired
     private CuentaPorCobrarRepository cuentaPorCobrarRepository;
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
     @Autowired
     private EmpresaRepository empresaRepository;
-
-    @Cacheable(value = "notificaciones", key = "'usuario_' + #usuarioId + '_estatus_' + #estatus")
-    public List<Notificacion> findByUsuarioIdAndEstatus(Integer usuarioId, EstatusNotificacionEnum estatus) {
-        return notificacionRepository.findByUsuarioIdAndEstatus(usuarioId, estatus);
-    }
-
-    @Cacheable(value = "notificaciones", key = "'count_usuario_' + #usuarioId")
-    public Integer countNoLeidasByUsuarioId(Integer usuarioId) {
-        return notificacionRepository.countByUsuarioIdAndEstatus(usuarioId, EstatusNotificacionEnum.NO_LEIDA);
-    }
-
-    @CacheEvict(value = "notificaciones", allEntries = true)
-    public Notificacion save(Notificacion notificacion) {
-        return notificacionRepository.save(notificacion);
-    }
 
     @PostConstruct
     public void inicializarNotificaciones() {
@@ -75,7 +58,6 @@ public class NotificacionService {
             logger.error("Error durante la inicialización de notificaciones: {}", e.getMessage());
         }
     }
-
 
     private Instant obtenerInstantLocal() {
         return ZonedDateTime.now(ZONE_ID).toInstant();
@@ -224,9 +206,6 @@ public class NotificacionService {
             // Cuentas por pagar
             procesarCuentasPorPagar(hoy, manana);
 
-            // SIMs
-            procesarRecargarSims(hoy, manana);
-
         } catch (Exception e) {
             logger.error("Error al generar notificaciones de cuentas y SIMs: {}", e.getMessage());
         }
@@ -264,24 +243,6 @@ public class NotificacionService {
                 });
     }
 
-    private void procesarRecargarSims(LocalDate hoy, LocalDate manana) {
-        simRepository.findAll().stream()
-                .filter(sim -> sim.getVigencia() != null)
-                .filter(sim -> {
-                    LocalDate vigenciaDate = sim.getVigencia().toLocalDate();
-                    return vigenciaDate.equals(hoy) || vigenciaDate.equals(manana);
-                })
-                .forEach(sim -> {
-                    LocalDate vigenciaDate = sim.getVigencia().toLocalDate();
-                    String tipoMensaje = vigenciaDate.equals(manana) ? "mañana" : "hoy";
-                    String mensaje = String.format("Recarga de SIM vence %s: %s, Equipo: %s, Fecha: %s",
-                            tipoMensaje, sim.getNumero(),
-                            sim.getEquipo() != null ? sim.getEquipo().getImei() : "Sin equipo",
-                            vigenciaDate);
-
-                    notificarTodosLosUsuarios("RECARGA", mensaje);
-                });
-    }
 
     // Nuevo método helper para notificar a todos los usuarios activos
     private void notificarTodosLosUsuarios(String tipo, String mensaje) {
