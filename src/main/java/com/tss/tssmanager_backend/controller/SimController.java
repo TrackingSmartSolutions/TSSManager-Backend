@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/sims")
@@ -248,5 +249,29 @@ public class SimController {
             @RequestParam(defaultValue = "50") int size) {
         PagedResponseDTO<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size);
         return ResponseEntity.ok(simsPage);
+    }
+
+    @GetMapping("/equipos-disponibles")
+    public ResponseEntity<List<Map<String, Object>>> obtenerEquiposParaSims() {
+        try {
+            List<Object[]> results = equipoRepository.findEquiposForSimSelection();
+            List<Map<String, Object>> equipos = results.stream()
+                    .map(row -> {
+                        Map<String, Object> equipo = new HashMap<>();
+                        equipo.put("id", row[0]);
+                        equipo.put("imei", row[1]);
+                        equipo.put("nombre", row[2]);
+                        equipo.put("tipo", row[3]);
+                        equipo.put("estatus", row[4]);
+                        equipo.put("clienteId", row[5]);
+                        equipo.put("clienteDefault", row[6]);
+                        equipo.put("simReferenciada", row[7]);
+                        return equipo;
+                    })
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(equipos);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(null);
+        }
     }
 }

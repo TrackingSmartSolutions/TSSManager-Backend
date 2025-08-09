@@ -23,4 +23,14 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
     @Query("SELECT e FROM Equipo e WHERE e.tipo = :tipo AND e.estatus = :estatus")
     List<Equipo> findByTipoAndEstatus(@Param("tipo") String tipo, @Param("estatus") String estatus);
 
+    @Query(value = """
+    SELECT e.id, e.imei, e.nombre, e.tipo, e.estatus, e.cliente_id, e.cliente_default,
+           CASE WHEN s.equipo_imei IS NOT NULL THEN true ELSE false END as sim_referenciada
+    FROM "Equipos" e 
+    LEFT JOIN "SIMs" s ON e.imei = s.equipo_imei 
+    WHERE (e.tipo = 'DEMO' OR e.tipo = 'VENDIDO') 
+    AND e.estatus != 'ALMACEN'
+    ORDER BY e.nombre
+    """, nativeQuery = true)
+    List<Object[]> findEquiposForSimSelection();
 }
