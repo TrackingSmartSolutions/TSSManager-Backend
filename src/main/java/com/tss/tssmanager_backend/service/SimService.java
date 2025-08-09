@@ -1,5 +1,6 @@
 package com.tss.tssmanager_backend.service;
 
+import com.tss.tssmanager_backend.dto.PagedResponseDTO;
 import com.tss.tssmanager_backend.dto.SimDTO;
 import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
@@ -175,7 +176,16 @@ public class SimService {
     }
 
     private void crearTransaccionAutomatica(Sim sim) {
-        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcionIgnoreCase("Recargas de Saldos");
+        // Determinar la descripción de la categoría según la tarifa
+        String descripcionCategoria;
+        if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
+            descripcionCategoria = "M2M";
+        } else {
+            descripcionCategoria = "TELCEL";
+        }
+
+        // Buscar la categoría existente o crearla
+        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcionIgnoreCase(descripcionCategoria);
         CategoriaTransacciones categoria;
 
         if (categoriaOpt.isPresent()) {
@@ -183,7 +193,7 @@ public class SimService {
         } else {
             categoria = new CategoriaTransacciones();
             categoria.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
-            categoria.setDescripcion("Recarga de Saldos");
+            categoria.setDescripcion(descripcionCategoria);
             categoria = categoriaRepository.save(categoria);
         }
 
@@ -277,10 +287,21 @@ public class SimService {
                 .toList();
     }
 
-    public Page<SimDTO> obtenerTodasLasSimsPaginadas(int page, int size) {
+    public PagedResponseDTO<SimDTO> obtenerTodasLasSimsPaginadas(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         Page<Sim> simsPage = simRepository.findAllWithEquipoPaged(pageable);
-        return simsPage.map(this::convertToDTO);
+
+        List<SimDTO> content = simsPage.getContent().stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+
+        return new PagedResponseDTO<>(
+                content,
+                simsPage.getNumber(),
+                simsPage.getSize(),
+                simsPage.getTotalElements(),
+                simsPage.getTotalPages()
+        );
     }
 
     public List<SimDTO> obtenerTodasLasSims() {

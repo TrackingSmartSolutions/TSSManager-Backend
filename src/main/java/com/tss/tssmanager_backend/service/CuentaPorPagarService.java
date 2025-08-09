@@ -152,11 +152,16 @@ public class CuentaPorPagarService {
     }
 
     @Transactional
-    public void regenerarCuentasPorPagarManual(Integer transaccionId, LocalDate fechaUltimoPago) {
+    public void regenerarCuentasPorPagarManual(Integer transaccionId, LocalDate fechaUltimoPago, BigDecimal nuevoMonto) {
         Transaccion transaccionOriginal = transaccionRepository.findById(transaccionId)
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
-        regenerarCuentasPorPagar(transaccionOriginal, fechaUltimoPago);
+        regenerarCuentasPorPagar(transaccionOriginal, fechaUltimoPago, nuevoMonto);
+    }
+
+    @Transactional
+    public void regenerarCuentasPorPagarManual(Integer transaccionId, LocalDate fechaUltimoPago) {
+        regenerarCuentasPorPagarManual(transaccionId, fechaUltimoPago, null);
     }
 
     @Transactional
@@ -202,6 +207,63 @@ public class CuentaPorPagarService {
             System.out.println("- Transacción original: " + transaccionOriginal.getId());
             System.out.println("- Nueva serie: " + nuevaTransaccion.getNumeroPagos() + " pagos");
             System.out.println("- Primera fecha de pago: " + proximaFechaPago);
+            if (simAsociada != null) {
+                System.out.println("- SIM asociada: " + simAsociada.getNumero());
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error al regenerar cuentas por pagar: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Transactional
+    private void regenerarCuentasPorPagar(Transaccion transaccionOriginal, LocalDate fechaUltimoPago, BigDecimal nuevoMonto) {
+        try {
+            Sim simAsociada = null;
+            List<CuentaPorPagar> cuentasOriginales = cuentasPorPagarRepository.findByTransaccionId(transaccionOriginal.getId());
+            if (!cuentasOriginales.isEmpty()) {
+                simAsociada = cuentasOriginales.get(0).getSim();
+            }
+
+            Transaccion nuevaTransaccion = new Transaccion();
+            nuevaTransaccion.setFecha(fechaUltimoPago);
+            nuevaTransaccion.setTipo(transaccionOriginal.getTipo());
+            nuevaTransaccion.setCategoria(transaccionOriginal.getCategoria());
+            nuevaTransaccion.setCuenta(transaccionOriginal.getCuenta());
+
+            // Usar el nuevo monto si se proporciona, sino usar el monto original
+            nuevaTransaccion.setMonto(nuevoMonto != null ? nuevoMonto : transaccionOriginal.getMonto());
+
+            nuevaTransaccion.setEsquema(transaccionOriginal.getEsquema());
+
+            LocalDate proximaFechaPago = calcularProximaFechaPago(fechaUltimoPago, transaccionOriginal.getEsquema());
+            nuevaTransaccion.setFechaPago(proximaFechaPago);
+
+            nuevaTransaccion.setFormaPago(transaccionOriginal.getFormaPago());
+            nuevaTransaccion.setNotas(transaccionOriginal.getNotas());
+            nuevaTransaccion.setNumeroPagos(transaccionOriginal.getNumeroPagos());
+            nuevaTransaccion.setFechaCreacion(LocalDateTime.now());
+            nuevaTransaccion.setFechaModificacion(LocalDateTime.now());
+
+            transaccionService.agregarTransaccion(nuevaTransaccion);
+
+            // Si había una SIM asociada, asociarla a las nuevas cuentas por pagar
+            if (simAsociada != null) {
+                List<CuentaPorPagar> nuevasCuentas = cuentasPorPagarRepository.findByTransaccionId(nuevaTransaccion.getId());
+                for (CuentaPorPagar nuevaCuenta : nuevasCuentas) {
+                    nuevaCuenta.setSim(simAsociada);
+                    cuentasPorPagarRepository.save(nuevaCuenta);
+                }
+
+                System.out.println("SIM " + simAsociada.getNumero() + " asociada a " + nuevasCuentas.size() + " nuevas cuentas por pagar");
+            }
+
+            System.out.println("Cuentas por pagar regeneradas automáticamente:");
+            System.out.println("- Transacción original: " + transaccionOriginal.getId());
+            System.out.println("- Nueva serie: " + nuevaTransaccion.getNumeroPagos() + " pagos");
+            System.out.println("- Primera fecha de pago: " + proximaFechaPago);
+            System.out.println("- Monto: " + nuevaTransaccion.getMonto());
             if (simAsociada != null) {
                 System.out.println("- SIM asociada: " + simAsociada.getNumero());
             }

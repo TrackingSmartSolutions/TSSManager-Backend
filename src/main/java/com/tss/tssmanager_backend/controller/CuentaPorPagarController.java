@@ -79,10 +79,18 @@ public class CuentaPorPagarController {
     @PostMapping("/regenerar")
     public ResponseEntity<Void> regenerarCuentasPorPagar(@RequestBody RegenerarRequestDTO request) {
         try {
-            cuentasPorPagarService.regenerarCuentasPorPagarManual(
-                    request.getTransaccionId(),
-                    request.getFechaUltimoPago()
-            );
+            if (request.getNuevoMonto() != null) {
+                cuentasPorPagarService.regenerarCuentasPorPagarManual(
+                        request.getTransaccionId(),
+                        request.getFechaUltimoPago(),
+                        request.getNuevoMonto()
+                );
+            } else {
+                cuentasPorPagarService.regenerarCuentasPorPagarManual(
+                        request.getTransaccionId(),
+                        request.getFechaUltimoPago()
+                );
+            }
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             System.err.println("Error al regenerar cuentas por pagar: " + e.getMessage());

@@ -1,5 +1,6 @@
 package com.tss.tssmanager_backend.controller;
 
+import com.tss.tssmanager_backend.dto.PagedResponseDTO;
 import com.tss.tssmanager_backend.dto.SimDTO;
 import com.tss.tssmanager_backend.entity.Equipo;
 import com.tss.tssmanager_backend.entity.HistorialSaldosSim;
@@ -11,7 +12,6 @@ import com.tss.tssmanager_backend.repository.EquipoRepository;
 import com.tss.tssmanager_backend.service.SimService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -241,10 +241,10 @@ public class SimController {
     }
 
     @GetMapping("/paged")
-    public ResponseEntity<Page<SimDTO>> obtenerSimsPaginadas(
+    public ResponseEntity<PagedResponseDTO<SimDTO>> obtenerSimsPaginadas(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        Page<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size);
+        PagedResponseDTO<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size);
         return ResponseEntity.ok(simsPage);
     }
 }

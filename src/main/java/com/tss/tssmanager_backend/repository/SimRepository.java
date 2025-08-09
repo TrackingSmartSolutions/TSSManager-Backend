@@ -73,7 +73,6 @@ public interface SimRepository extends JpaRepository<Sim, Integer> {
     @Query(value = "SELECT COUNT(*) FROM \"SIMs\" WHERE grupo = ?1 AND principal = 'NO'", nativeQuery = true)
     Long countNonPrincipalesByGrupoNative(Integer grupo);
 
-    // NUEVA: Buscar SIM por número con índice
     @Query(value = "SELECT * FROM \"SIMs\" WHERE LOWER(numero) = LOWER(?1)", nativeQuery = true)
     Optional<Sim> findByNumeroOptimized(String numero);
 }
