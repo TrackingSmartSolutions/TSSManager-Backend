@@ -199,15 +199,22 @@ public class SimService {
 
         // Determinar nombre de la cuenta
         String nombreCuenta = "AG";
-        if (sim.getEquipo() != null && sim.getEquipo().getClienteId() != null) {
-            try {
-                Optional<Empresa> empresaOpt = empresaRepository.findById(sim.getEquipo().getClienteId());
-                if (empresaOpt.isPresent()) {
-                    nombreCuenta = empresaOpt.get().getNombre();
+        if (sim.getEquipo() != null) {
+            // Primero verificar si tiene clienteId
+            if (sim.getEquipo().getClienteId() != null) {
+                try {
+                    Optional<Empresa> empresaOpt = empresaRepository.findById(sim.getEquipo().getClienteId());
+                    if (empresaOpt.isPresent()) {
+                        nombreCuenta = empresaOpt.get().getNombre();
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error obteniendo empresa: " + e.getMessage());
+                    nombreCuenta = "AG";
                 }
-            } catch (Exception e) {
-                System.err.println("Error obteniendo empresa: " + e.getMessage());
-                nombreCuenta = "AG";
+            }
+            // Si no tiene clienteId pero sí clienteDefault, usar el clienteDefault
+            else if (sim.getEquipo().getClienteDefault() != null) {
+                nombreCuenta = sim.getEquipo().getClienteDefault();
             }
         }
 
@@ -263,44 +270,54 @@ public class SimService {
             if (sim.getVigencia() != null) {
                 cuenta.setFechaPago(sim.getVigencia().toLocalDate());
             }
+
+            // Actualizar el nombre de la cuenta si cambió el equipo vinculado
+            if (sim.getEquipo() != null) {
+                String nuevoNombreCuenta = "AG";
+                if (sim.getEquipo().getClienteId() != null) {
+                    try {
+                        Optional<Empresa> empresaOpt = empresaRepository.findById(sim.getEquipo().getClienteId());
+                        if (empresaOpt.isPresent()) {
+                            nuevoNombreCuenta = empresaOpt.get().getNombre();
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error obteniendo empresa: " + e.getMessage());
+                        nuevoNombreCuenta = "AG";
+                    }
+                } else if (sim.getEquipo().getClienteDefault() != null) {
+                    nuevoNombreCuenta = sim.getEquipo().getClienteDefault();
+                }
+
+                // Buscar o crear la cuenta con el nuevo nombre
+                CuentasTransacciones nuevaCuenta = buscarOCrearCuenta(nuevoNombreCuenta, cuenta.getTransaccion().getCategoria());
+                cuenta.getTransaccion().setCuenta(nuevaCuenta);
+            }
+
             cuentaPorPagarRepository.save(cuenta);
         }
     }
 
     @Cacheable(value = "gruposDisponibles", unless = "#result.isEmpty()")
     public List<Integer> obtenerGruposDisponibles() {
-        List<Integer> allGroups = simRepository.findAllGroups();
-        return allGroups.stream()
-                .filter(group -> {
-                    // El grupo 0 no se incluye en grupos disponibles para selección normal
-                    if (group == 0) return false;
-
-                    Long principalCount = simRepository.countPrincipalesByGrupo(group);
-                    Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupo(group);
-
-                    // Un grupo está disponible si:
-                    // 1. Tiene una SIM principal Y menos de 5 SIMs no principales
-                    // 2. O no tiene SIM principal aún (para futuras SIMs principales)
-                    return (principalCount == 1 && nonPrincipalCount < 5) ||
-                            (principalCount == 0 && nonPrincipalCount == 0);
-                })
-                .toList();
+        return obtenerGruposDisponiblesOptimizado();
     }
 
     public PagedResponseDTO<SimDTO> obtenerTodasLasSimsPaginadas(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        Page<Sim> simsPage = simRepository.findAllWithEquipoPaged(pageable);
+        int offset = page * size;
 
-        List<SimDTO> content = simsPage.getContent().stream()
-                .map(this::convertToDTO)
+        List<Object[]> results = simRepository.findSimsPaginatedOptimized(size, offset);
+        Long totalElements = simRepository.countAllSims();
+
+        List<SimDTO> content = results.stream()
+                .map(this::convertFromOptimizedQuery)
                 .collect(Collectors.toList());
 
         return new PagedResponseDTO<>(
                 content,
-                simsPage.getNumber(),
-                simsPage.getSize(),
-                simsPage.getTotalElements(),
-                simsPage.getTotalPages()
+                page,
+                size,
+                totalElements,
+                (int) Math.ceil((double) totalElements / size)
         );
     }
 
@@ -432,5 +449,47 @@ public class SimService {
         nuevaCuenta.setCategoria(categoria);
 
         return cuentaRepository.save(nuevaCuenta);
+    }
+
+    private SimDTO convertFromOptimizedQuery(Object[] row) {
+        SimDTO dto = new SimDTO();
+        dto.setId((Integer) row[0]);
+        dto.setNumero((String) row[1]);
+        dto.setTarifa(TarifaSimEnum.valueOf((String) row[2]));
+        dto.setVigencia((Date) row[3]);
+        dto.setRecarga((BigDecimal) row[4]);
+        dto.setResponsable(ResponsableSimEnum.valueOf((String) row[5]));
+        dto.setPrincipal(PrincipalSimEnum.valueOf((String) row[6]));
+        dto.setGrupo((Integer) row[7]);
+        dto.setContrasena((String) row[9]);
+
+        if (row[10] != null) {
+            dto.setEquipoImei((String) row[10]);
+            dto.setEquipoNombre((String) row[11]);
+        }
+
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public SimDTO obtenerSimDTOPorId(Integer id) {
+        return simRepository.findById(id)
+                .map(this::convertToDTO)
+                .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada"));
+    }
+
+    @Cacheable(value = "gruposDisponibles", unless = "#result.isEmpty()")
+        public List<Integer> obtenerGruposDisponiblesOptimizado() {
+            return simRepository.findAllGroupsOptimized().stream()
+                    .filter(group -> {
+                        if (group == 0) return false;
+
+                        Long principalCount = simRepository.countPrincipalesByGrupoNative(group);
+                        Long nonPrincipalCount = simRepository.countNonPrincipalesByGrupoNative(group);
+
+                        return (principalCount == 1 && nonPrincipalCount < 5) ||
+                                (principalCount == 0 && nonPrincipalCount == 0);
+                    })
+                    .toList();
     }
 }

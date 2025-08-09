@@ -218,7 +218,7 @@ public class SimController {
     }
 
     @PostMapping("/{id}/saldo")
-    public ResponseEntity<Map<String, String>> guardarSaldo(
+    public ResponseEntity<Map<String, Object>> guardarSaldo(
             @PathVariable Integer id,
             @RequestParam(required = false) BigDecimal saldoActual,
             @RequestParam(required = false) BigDecimal datos,
@@ -226,8 +226,10 @@ public class SimController {
         try {
             Date fechaDate = fecha != null ? Date.valueOf(LocalDate.parse(fecha)) : Date.valueOf(LocalDate.now());
             simService.guardarSaldo(id, saldoActual, datos, fechaDate);
-            Map<String, String> response = new HashMap<>();
+
+            Map<String, Object> response = new HashMap<>();
             response.put("message", "Saldo registrado correctamente");
+            response.put("simActualizada", simService.obtenerSimDTOPorId(id));
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();

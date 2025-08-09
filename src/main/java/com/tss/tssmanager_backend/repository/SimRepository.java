@@ -75,4 +75,18 @@ public interface SimRepository extends JpaRepository<Sim, Integer> {
 
     @Query(value = "SELECT * FROM \"SIMs\" WHERE LOWER(numero) = LOWER(?1)", nativeQuery = true)
     Optional<Sim> findByNumeroOptimized(String numero);
+
+    @Query(value = """
+    SELECT s.id, s.numero, s.tarifa, s.vigencia, s.recarga, s.responsable, 
+           s.principal, s.grupo, s.equipo_imei, s.contrasena, 
+           e.imei as equipo_imei, e.nombre as equipo_nombre
+    FROM "SIMs" s 
+    LEFT JOIN "Equipos" e ON s.equipo_imei = e.imei 
+    ORDER BY s.id DESC
+    LIMIT ?1 OFFSET ?2
+    """, nativeQuery = true)
+    List<Object[]> findSimsPaginatedOptimized(int limit, int offset);
+
+    @Query(value = "SELECT COUNT(*) FROM \"SIMs\"", nativeQuery = true)
+    Long countAllSims();
 }
