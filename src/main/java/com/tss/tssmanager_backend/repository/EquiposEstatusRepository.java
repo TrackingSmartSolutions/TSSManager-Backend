@@ -58,4 +58,7 @@ public interface EquiposEstatusRepository extends JpaRepository<EquiposEstatus, 
         ORDER BY es.fechaCheck DESC
         """)
     List<EquiposEstatusDTO> findRecentEstatusOptimized(@Param("fechaDesde") Date fechaDesde);
+
+    @Query("SELECT MAX(es.fechaCheck) FROM EquiposEstatus es")
+    Date findMaxFechaCheck();
 }

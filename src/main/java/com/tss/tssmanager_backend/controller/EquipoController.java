@@ -176,4 +176,9 @@ public class EquipoController {
         }
         return equipo;
     }
+
+    @GetMapping("/dashboard-estatus")
+    public ResponseEntity<Map<String, Object>> obtenerDashboardEstatus() {
+        return ResponseEntity.ok(service.obtenerDashboardEstatusOptimizado());
+    }
 }

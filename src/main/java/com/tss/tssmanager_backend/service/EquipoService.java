@@ -21,10 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -213,6 +210,114 @@ public class EquipoService {
     public Page<EquiposEstatusDTO> obtenerEstatusPaginado(int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         return equiposEstatusRepository.findAllEstatusOptimizedPaged(pageable);
+    }
+
+    @Cacheable(value = "dashboard-stats", key = "'estatus-plataforma'")
+    @Transactional(readOnly = true)
+    public Map<String, Object> obtenerDashboardEstatusOptimizado() {
+        Map<String, Object> result = new HashMap<>();
+
+        Date fechaUltimoCheck = equiposEstatusRepository.findMaxFechaCheck();
+        result.put("fechaUltimoCheck", fechaUltimoCheck);
+
+        List<Object[]> dashboardData = repository.findDashboardEstatusData();
+
+        List<Map<String, Object>> equiposOffline = procesarEquiposOfflineOptimizado(dashboardData, fechaUltimoCheck);
+
+        result.put("estatusPorCliente", procesarEstatusPorClienteOptimizado(dashboardData));
+        result.put("equiposPorPlataforma", procesarEquiposPorPlataformaOptimizado(dashboardData));
+        result.put("equiposOffline", equiposOffline);
+        result.put("equiposPorMotivo", procesarEquiposPorMotivo(equiposOffline));
+        result.put("equiposParaCheck", repository.findEquiposParaCheck());
+
+        return result;
+    }
+
+    private List<Map<String, Object>> procesarEstatusPorClienteOptimizado(List<Object[]> data) {
+        Map<String, Map<String, Integer>> clienteStats = new HashMap<>();
+
+        for (Object[] row : data) {
+            String cliente = (String) row[0];
+            String estatus = (String) row[1];
+
+            clienteStats.computeIfAbsent(cliente, k -> new HashMap<>())
+                    .merge(estatus, 1, Integer::sum);
+        }
+
+        return clienteStats.entrySet().stream()
+                .map(entry -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("cliente", entry.getKey());
+                    item.put("enLinea", entry.getValue().getOrDefault("ONLINE", 0));
+                    item.put("fueraLinea", entry.getValue().getOrDefault("OFFLINE", 0));
+                    return item;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private List<Map<String, Object>> procesarEquiposPorPlataformaOptimizado(List<Object[]> data) {
+        Map<String, Integer> plataformaCount = new HashMap<>();
+
+        for (Object[] row : data) {
+            String plataforma = (String) row[2];
+            if (plataforma != null) {
+                plataformaCount.merge(plataforma, 1, Integer::sum);
+            }
+        }
+
+        return plataformaCount.entrySet().stream()
+                .map(entry -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("plataforma", entry.getKey());
+                    item.put("cantidad", entry.getValue());
+                    return item;
+                })
+                .sorted((a, b) -> Integer.compare((Integer) b.get("cantidad"), (Integer) a.get("cantidad")))
+                .collect(Collectors.toList());
+    }
+
+    private List<Map<String, Object>> procesarEquiposOfflineOptimizado(List<Object[]> data, Date fechaUltimoCheck) {
+        List<Map<String, Object>> equiposOffline = new ArrayList<>();
+
+        for (Object[] row : data) {
+            String estatusReporte = (String) row[1];
+
+            if (!"ONLINE".equals(estatusReporte)) {
+                Map<String, Object> equipo = new HashMap<>();
+                equipo.put("cliente", row[0] != null ? row[0] : "Sin Cliente");
+                equipo.put("nombre", row[3]);
+                equipo.put("plataforma", row[2]);
+                equipo.put("imei", row[4]);
+                equipo.put("motivo", row[5] != null ? row[5] : "Sin reporte de estatus");
+                equipo.put("fechaCheck", row[6]);
+                equipo.put("reportando", false);
+
+                equiposOffline.add(equipo);
+            }
+        }
+
+        return equiposOffline;
+    }
+
+    private List<Map<String, Object>> procesarEquiposPorMotivo(List<Map<String, Object>> equiposOffline) {
+        Map<String, Integer> motivoCount = new HashMap<>();
+
+        for (Map<String, Object> equipo : equiposOffline) {
+            String motivo = (String) equipo.get("motivo");
+            if (motivo != null && !motivo.trim().isEmpty()) {
+                motivoCount.merge(motivo, 1, Integer::sum);
+            }
+        }
+
+        return motivoCount.entrySet().stream()
+                .map(entry -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("motivo", entry.getKey());
+                    item.put("cantidad", entry.getValue());
+                    return item;
+                })
+                .sorted((a, b) -> Integer.compare((Integer) b.get("cantidad"), (Integer) a.get("cantidad")))
+                .collect(Collectors.toList());
     }
 
 }

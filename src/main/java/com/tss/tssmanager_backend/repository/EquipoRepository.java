@@ -33,4 +33,41 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
     ORDER BY e.nombre
     """, nativeQuery = true)
     List<Object[]> findEquiposForSimSelection();
+
+    @Query(value = """
+    WITH empresa_nombres AS (
+        SELECT id, nombre 
+        FROM "Empresas"
+    )
+    SELECT 
+        COALESCE(en.nombre, e.cliente_default, 'Sin Cliente') as cliente,
+        COALESCE(
+            CASE 
+                WHEN es.estatus = 'REPORTANDO' THEN 'ONLINE'
+                WHEN es.estatus = 'NO_REPORTANDO' THEN 'OFFLINE'
+                ELSE 'OFFLINE'
+            END, 
+            'OFFLINE'
+        ) as estatus_reporte,
+        CAST(e.plataforma AS VARCHAR) as plataforma,
+        e.nombre as equipo_nombre,
+        e.imei,
+        COALESCE(es.motivo, 'Sin reporte de estatus') as motivo,
+        es.fecha_check
+    FROM "Equipos" e
+    LEFT JOIN empresa_nombres en ON e.cliente_id = en.id
+    LEFT JOIN LATERAL (
+        SELECT CAST(estatus AS VARCHAR) as estatus, motivo, fecha_check 
+        FROM "Equipos_Estatus" 
+        WHERE equipo_id = e.id 
+        ORDER BY fecha_check DESC 
+        LIMIT 1
+    ) es ON true
+    WHERE e.tipo IN ('VENDIDO', 'DEMO')
+    ORDER BY e.nombre
+    """, nativeQuery = true)
+    List<Object[]> findDashboardEstatusData();
+
+    @Query("SELECT e FROM Equipo e WHERE e.tipo IN ('VENDIDO', 'DEMO')")
+    List<Equipo> findEquiposParaCheck();
 }
