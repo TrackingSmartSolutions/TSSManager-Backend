@@ -29,7 +29,7 @@ public class Empresa {
     @Column(name = "nombre", nullable = false)
     private String nombre;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "propietario_id", nullable = false)
     private Usuario propietario;
 
