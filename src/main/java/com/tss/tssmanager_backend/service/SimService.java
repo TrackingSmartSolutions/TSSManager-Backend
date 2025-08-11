@@ -492,4 +492,16 @@ public class SimService {
                     })
                     .toList();
     }
+
+    @Transactional(readOnly = true)
+    public HistorialSaldosSim obtenerUltimoSaldo(Integer simId) {
+        Sim sim = simRepository.findById(simId)
+                .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada con ID: " + simId));
+
+        List<HistorialSaldosSim> historial = historialSaldosSimRepository.findBySimNumero(sim.getNumero());
+
+        return historial.stream()
+                .max((h1, h2) -> h1.getFecha().compareTo(h2.getFecha()))
+                .orElse(null);
+    }
 }

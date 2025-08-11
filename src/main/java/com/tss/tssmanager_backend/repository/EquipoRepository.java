@@ -70,4 +70,11 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
 
     @Query("SELECT e FROM Equipo e WHERE e.tipo IN ('VENDIDO', 'DEMO')")
     List<Equipo> findEquiposParaCheck();
+
+    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada WHERE e IN :equipos")
+    List<Equipo> findAllWithSimReferenciada(@Param("equipos") List<Equipo> equipos);
+
+    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada ORDER BY e.id")
+    List<Equipo> findAllWithSims();
+
 }

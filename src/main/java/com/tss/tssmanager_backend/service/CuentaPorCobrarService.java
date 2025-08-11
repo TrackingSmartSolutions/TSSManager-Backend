@@ -238,23 +238,49 @@ public class CuentaPorCobrarService {
     @Transactional
     public CuentaPorCobrarDTO marcarComoPagada(Integer id, LocalDate fechaPago, MultipartFile comprobante) throws Exception {
         logger.info("Marcando como pagada cuenta por cobrar con ID: {}", id);
+
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada con id: " + id));
+
         if (cuenta.getComprobantePagoUrl() != null) {
             throw new ResourceNotFoundException("La cuenta ya está marcada como pagada.");
         }
         if (cuenta.getSolicitudesFacturasNotas().isEmpty()) {
             throw new ResourceNotFoundException("La cuenta no está vinculada a una solicitud de factura.");
         }
-        Cloudinary cloudinary = cloudinaryConfig.cloudinary();
-        Map uploadResult = cloudinary.uploader().upload(comprobante.getBytes(), Map.of("resource_type", "raw"));
-        String comprobanteUrl = uploadResult.get("url").toString();
+
+        if (comprobante.getSize() > 10 * 1024 * 1024) {
+            throw new IllegalArgumentException("El archivo no debe exceder 10MB");
+        }
+
+        // Marcar como pagado PRIMERO (sin comprobante)
         cuenta.setEstatus(EstatusPagoEnum.PAGADO);
         cuenta.setFechaRealPago(fechaPago);
-        cuenta.setComprobantePagoUrl(comprobanteUrl);
+        cuenta.setComprobantePagoUrl("UPLOADING");
         CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
 
-        // Crear transacción
+        try {
+            Cloudinary cloudinary = cloudinaryConfig.cloudinary();
+            Map<String, Object> uploadOptions = Map.of(
+                    "resource_type", "raw",
+                    "timeout", 30,
+                    "chunk_size", 6000000,
+                    "use_filename", true,
+                    "unique_filename", true
+            );
+
+            Map uploadResult = cloudinary.uploader().upload(comprobante.getBytes(), uploadOptions);
+            String comprobanteUrl = uploadResult.get("url").toString();
+
+            cuenta.setComprobantePagoUrl(comprobanteUrl);
+            savedCuenta = cuentaPorCobrarRepository.save(cuenta);
+
+        } catch (Exception e) {
+            logger.error("Error al subir comprobante para cuenta {}: {}", id, e.getMessage());
+            cuenta.setComprobantePagoUrl("ERROR_UPLOAD");
+            savedCuenta = cuentaPorCobrarRepository.save(cuenta);
+        }
+
         Transaccion transaccion = new Transaccion();
         transaccion.setFecha(LocalDate.now());
         transaccion.setTipo(TipoTransaccionEnum.INGRESO);

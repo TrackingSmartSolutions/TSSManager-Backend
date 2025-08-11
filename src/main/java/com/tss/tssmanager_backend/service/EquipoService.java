@@ -34,7 +34,7 @@ public class EquipoService {
     private EquiposEstatusRepository equiposEstatusRepository;
 
     public Iterable<Equipo> obtenerTodosLosEquipos() {
-        return repository.findAll();
+        return repository.findAllWithSims();
     }
 
     @Cacheable(value = "equipos", key = "#id")

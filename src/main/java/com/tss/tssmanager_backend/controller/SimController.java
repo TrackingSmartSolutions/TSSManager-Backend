@@ -246,7 +246,7 @@ public class SimController {
     @GetMapping("/paged")
     public ResponseEntity<PagedResponseDTO<SimDTO>> obtenerSimsPaginadas(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(defaultValue = "150") int size) {
         PagedResponseDTO<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size);
         return ResponseEntity.ok(simsPage);
     }
@@ -272,6 +272,20 @@ public class SimController {
             return ResponseEntity.ok(equipos);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(null);
+        }
+    }
+
+    @GetMapping("/{id}/ultimo-saldo")
+    public ResponseEntity<HistorialSaldosSim> obtenerUltimoSaldo(@PathVariable Integer id) {
+        try {
+            HistorialSaldosSim ultimoSaldo = simService.obtenerUltimoSaldo(id);
+            if (ultimoSaldo != null) {
+                return ResponseEntity.ok(ultimoSaldo);
+            } else {
+                return ResponseEntity.noContent().build();
+            }
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
         }
     }
 }

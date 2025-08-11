@@ -29,7 +29,6 @@ public class CloudinaryConfig {
             String credentials = mainParts[0];
             String cloudName = mainParts[1];
 
-            // Dividir las credenciales por ":"
             String[] credentialParts = credentials.split(":");
             if (credentialParts.length != 2) {
                 throw new IllegalArgumentException("Formato de credenciales inválido. Debe ser api_key:api_secret");

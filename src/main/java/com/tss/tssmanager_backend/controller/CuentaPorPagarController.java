@@ -2,15 +2,20 @@ package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.dto.CuentaPorPagarDTO;
 import com.tss.tssmanager_backend.dto.RegenerarRequestDTO;
+import com.tss.tssmanager_backend.dto.ReporteCuentasPorPagarDTO;
 import com.tss.tssmanager_backend.entity.CuentaPorPagar;
 import com.tss.tssmanager_backend.service.CuentaPorPagarService;
+import com.tss.tssmanager_backend.service.ReporteCuentasPorPagarService;
 import com.tss.tssmanager_backend.service.TransaccionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @RestController
@@ -19,6 +24,8 @@ public class CuentaPorPagarController {
 
     @Autowired
     private CuentaPorPagarService cuentasPorPagarService;
+    @Autowired
+    private ReporteCuentasPorPagarService reporteService;
 
     @GetMapping
     public ResponseEntity<List<CuentaPorPagar>> obtenerTodasLasCuentasPorPagar() {
@@ -112,6 +119,51 @@ public class CuentaPorPagarController {
             return ResponseEntity.noContent().build();
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/reporte/datos")
+    public ResponseEntity<ReporteCuentasPorPagarDTO> obtenerDatosReporte(
+            @RequestParam String fechaInicio,
+            @RequestParam String fechaFin,
+            @RequestParam(defaultValue = "Todas") String filtroEstatus) {
+        try {
+            LocalDate inicio = LocalDate.parse(fechaInicio);
+            LocalDate fin = LocalDate.parse(fechaFin);
+
+            ReporteCuentasPorPagarDTO datos = reporteService.generarDatosReporte(inicio, fin, filtroEstatus);
+            return ResponseEntity.ok(datos);
+        } catch (Exception e) {
+            System.err.println("Error al generar datos del reporte: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/reporte/pdf")
+    public ResponseEntity<byte[]> generarReportePDF(
+            @RequestParam String fechaInicio,
+            @RequestParam String fechaFin,
+            @RequestParam(defaultValue = "Todas") String filtroEstatus) {
+        try {
+            LocalDate inicio = LocalDate.parse(fechaInicio);
+            LocalDate fin = LocalDate.parse(fechaFin);
+
+            ReporteCuentasPorPagarDTO datos = reporteService.generarDatosReporte(inicio, fin, filtroEstatus);
+            byte[] pdfBytes = reporteService.generarReportePDF(datos);
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            String fileName = String.format("reporte_cuentas_por_pagar_%s_%s.pdf",
+                    inicio.format(formatter), fin.format(formatter));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentLength(pdfBytes.length);
+
+            return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            System.err.println("Error al generar reporte PDF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

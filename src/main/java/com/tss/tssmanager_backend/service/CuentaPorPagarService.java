@@ -281,17 +281,17 @@ public class CuentaPorPagarService {
             case QUINCENAL:
                 return fechaUltimoPago.plusDays(15);
             case MENSUAL:
-                return fechaUltimoPago.plusMonths(1);
+                return fechaUltimoPago.plusDays(30);
             case BIMESTRAL:
-                return fechaUltimoPago.plusMonths(2);
+                return fechaUltimoPago.plusDays(60);
             case TRIMESTRAL:
-                return fechaUltimoPago.plusMonths(3);
+                return fechaUltimoPago.plusDays(90);
             case SEMESTRAL:
-                return fechaUltimoPago.plusMonths(6);
+                return fechaUltimoPago.plusDays(180);
             case ANUAL:
-                return fechaUltimoPago.plusYears(1);
+                return fechaUltimoPago.plusDays(365);
             default:
-                return fechaUltimoPago.plusMonths(1);
+                return fechaUltimoPago.plusDays(30);
         }
     }
 }
