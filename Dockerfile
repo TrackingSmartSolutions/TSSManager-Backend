@@ -12,7 +12,7 @@ COPY pom.xml .
 # Descargar dependencias
 RUN mvn dependency:go-offline -B
 
-# Copiar código fuente
+# Copiar codigo fuente
 COPY src ./src
 
 # Compilar
@@ -76,5 +76,5 @@ ENV JAVA_OPTS="-XX:+UseG1GC \
 HEALTHCHECK --interval=60s --timeout=3s --start-period=90s --retries=2 \
     CMD curl -f -m 3 http://localhost:8080/actuator/health || exit 1
 
-# Comando de ejecución
+# Comando de ejecucion
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
