@@ -6,8 +6,11 @@ import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
+import com.lowagie.text.Image;
+import com.lowagie.text.pdf.PdfContentByte;
+import com.lowagie.text.pdf.PdfGState;
+import java.io.InputStream;
 import com.tss.tssmanager_backend.dto.CotizacionDTO;
-import com.tss.tssmanager_backend.dto.EmpresaDTO;
 import com.tss.tssmanager_backend.dto.UnidadCotizacionDTO;
 import com.tss.tssmanager_backend.entity.Cotizacion;
 import com.tss.tssmanager_backend.entity.Empresa;
@@ -315,6 +318,29 @@ public class CotizacionService {
         return resultado;
     }
 
+    private Image cargarMembrete() throws Exception {
+        try {
+            InputStream inputStream = getClass().getResourceAsStream("/static/images/membrete.png");
+            if (inputStream == null) {
+                throw new Exception("No se pudo encontrar el archivo de membrete");
+            }
+
+            byte[] imageBytes = inputStream.readAllBytes();
+            Image membrete = Image.getInstance(imageBytes);
+
+            membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+
+            float xPos = (PageSize.A4.getWidth() - membrete.getScaledWidth()) / 2;
+            float yPos = (PageSize.A4.getHeight() - membrete.getScaledHeight()) / 2;
+            membrete.setAbsolutePosition(xPos, yPos);
+
+            return membrete;
+        } catch (Exception e) {
+            logger.warn("No se pudo cargar el membrete: {}", e.getMessage());
+            return null;
+        }
+    }
+
     @Transactional(readOnly = true)
     public ByteArrayResource generateCotizacionPDF(Integer id) throws Exception {
         logger.info("Generando PDF para cotización con ID: {}", id);
@@ -327,6 +353,17 @@ public class CotizacionService {
         PdfWriter writer = PdfWriter.getInstance(document, out);
 
         document.open();
+
+        try {
+            Image membrete = cargarMembrete();
+            if (membrete != null) {
+                PdfContentByte canvas = writer.getDirectContentUnder();
+                canvas.addImage(membrete);
+                logger.info("Membrete agregado exitosamente");
+            }
+        } catch (Exception e) {
+            logger.warn("Error al agregar membrete: {}", e.getMessage());
+        }
 
         Color azulCorporativo = new Color(41, 84, 144);
         Color azulClaro = new Color(230, 240, 250);
@@ -363,7 +400,6 @@ public class CotizacionService {
         titleCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
         titleCell.setBorder(Rectangle.NO_BORDER);
         titleCell.setPadding(15);
-        titleCell.setBackgroundColor(blancoHueso);
         headerTable.addCell(titleCell);
 
         document.add(headerTable);
@@ -484,10 +520,10 @@ public class CotizacionService {
         totalsTable.setSpacingAfter(20);
 
         addTotalRow(totalsTable, "Subtotal:", formatCurrency(cotizacion.getSubtotal()),
-                normalFont, boldFont, Color.WHITE);
+                normalFont, boldFont, null);
 
         addTotalRow(totalsTable, "IVA (16%):", formatCurrency(cotizacion.getIva()),
-                normalFont, boldFont, Color.WHITE);
+                normalFont, boldFont, null);
 
         PdfPCell separatorCell = new PdfPCell();
         separatorCell.setColspan(2);
@@ -498,7 +534,7 @@ public class CotizacionService {
         totalsTable.addCell(separatorCell);
 
         addTotalRow(totalsTable, "TOTAL:", formatCurrency(cotizacion.getTotal()),
-                totalFont, totalFont, azulClaro);
+                totalFont, totalFont, null);
 
         document.add(totalsTable);
 

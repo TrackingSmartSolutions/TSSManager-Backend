@@ -31,7 +31,7 @@ public class ReporteCuentasPorPagarService {
     private static final Color SUCCESS_GREEN = new Color(34, 139, 34);
     private static final Color LIGHT_GRAY = new Color(248, 249, 250);
     private static final Color BORDER_GRAY = new Color(222, 226, 230);
-    private static final Color TEXT_DARK = new Color(33, 37, 41);          
+    private static final Color TEXT_DARK = new Color(33, 37, 41);
 
     private static final Map<String, String> FORMAS_PAGO = Map.of(
             "01", "Efectivo",
