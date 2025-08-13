@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 @Entity
 @Data
@@ -13,7 +14,7 @@ public class EmailRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(nullable = false)
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String destinatario;
 
     @Column(nullable = false)
@@ -26,7 +27,7 @@ public class EmailRecord {
     private String archivosAdjuntos;
 
     @Column(name = "fecha_envio", nullable = false)
-    private LocalDateTime fechaEnvio;
+    private ZonedDateTime fechaEnvio;
 
     @Column(name = "trato_id")
     private Integer tratoId;

@@ -150,6 +150,7 @@ public class CalendarioService {
                 .tipo(actividad.getTipo().name())
                 .asignadoA(asignadoA.getNombre())
                 .trato(trato.getNombre())
+                .tratoId(trato.getId())
                 .modalidad(actividad.getModalidad() != null ? actividad.getModalidad().name() : null)
                 .medio(actividad.getMedio() != null ? actividad.getMedio().name() : null)
                 .build();
@@ -227,6 +228,7 @@ public class CalendarioService {
                 .tipo(actividad.getTipo().name())
                 .asignadoA(asignadoA.getNombre())
                 .trato(actividad.getTrato().getNombre())
+                .tratoId(actividad.getTrato().getId())
                 .modalidad(actividad.getModalidad() != null ? actividad.getModalidad().name() : null)
                 .medio(actividad.getMedio() != null ? actividad.getMedio().name() : null)
                 .build();

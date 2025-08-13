@@ -132,7 +132,7 @@ public interface DashboardMetricasRepository extends JpaRepository<Usuario, Inte
                      WHERE a.trato_id = ima.trato_id
                          AND a.asignado_a_id = ima.usuario_id
                          AND a.estatus = 'CERRADA'
-                         AND a.siguiente_accion = 'REUNION'
+                         AND a.tipo = 'REUNION'
                          AND a.fecha_completado BETWEEN :startDate AND :endDate
                  )
              )

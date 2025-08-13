@@ -17,6 +17,7 @@ public class EventoCalendarioDTO {
     private String tipo;
     private String asignadoA;
     private String trato;
+    private Integer tratoId;
     private String modalidad;
     private String medio;
     private String numeroSim;

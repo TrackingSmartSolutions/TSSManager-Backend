@@ -206,15 +206,14 @@ public class ReporteCuentasPorPagarService {
         document.add(resumenTitle);
 
         // Tabla de resumen limpia
-        PdfPTable resumenTable = new PdfPTable(3);
+        PdfPTable resumenTable = new PdfPTable(2);
         resumenTable.setWidthPercentage(100);
-        resumenTable.setWidths(new float[]{40, 35, 25});
+        resumenTable.setWidths(new float[]{50, 50});
         resumenTable.setSpacingAfter(25);
 
         // Headers
         addCleanHeaderCell(resumenTable, "Fecha", tableHeaderFont);
         addCleanHeaderCell(resumenTable, "Monto", tableHeaderFont);
-        addCleanHeaderCell(resumenTable, "% del Total", tableHeaderFont);
 
         // Datos
         List<LocalDate> fechasOrdenadas = datosReporte.getMontoPorDia().keySet()
@@ -223,14 +222,11 @@ public class ReporteCuentasPorPagarService {
         boolean alternate = false;
         for (LocalDate fecha : fechasOrdenadas) {
             BigDecimal monto = datosReporte.getMontoPorDia().get(fecha);
-            double porcentaje = monto.divide(datosReporte.getMontoTotal(), 4, BigDecimal.ROUND_HALF_UP)
-                    .multiply(new BigDecimal("100")).doubleValue();
 
             Color bgColor = alternate ? LIGHT_GRAY : Color.WHITE;
 
             addCleanDataCell(resumenTable, fecha.format(dateFormatter), normalFont, bgColor, Element.ALIGN_CENTER);
             addCleanDataCell(resumenTable, currencyFormat.format(monto), normalFont, bgColor, Element.ALIGN_RIGHT);
-            addCleanDataCell(resumenTable, String.format("%.1f%%", porcentaje), normalFont, bgColor, Element.ALIGN_CENTER);
 
             alternate = !alternate;
         }
@@ -280,12 +276,12 @@ public class ReporteCuentasPorPagarService {
             document.add(dayHeader);
 
             // Tabla de detalles
-            PdfPTable detalleTable = new PdfPTable(7);
+            PdfPTable detalleTable = new PdfPTable(6);
             detalleTable.setWidthPercentage(100);
-            detalleTable.setWidths(new float[]{12, 18, 12, 16, 10, 16, 8});
+            detalleTable.setWidths(new float[]{20, 20, 10, 18, 12, 14});
             detalleTable.setSpacingAfter(10);
 
-            String[] headers = {"Folio", "Cuenta", "Monto", "Forma Pago", "Estatus", "Categoría", "SIM"};
+            String[] headers = {"Categoría", "Cuenta", "SIM", "Forma Pago", "Estatus", "Monto"};
             for (String header : headers) {
                 addCompactHeaderCell(detalleTable, header, tableHeaderFont);
             }
@@ -294,13 +290,12 @@ public class ReporteCuentasPorPagarService {
             for (CuentaReporteDTO cuenta : cuentasDelDia) {
                 Color bg = alt ? new Color(252, 252, 253) : Color.WHITE;
 
-                addCompactDataCell(detalleTable, cuenta.getFolio(), normalFont, bg, Element.ALIGN_LEFT);
+                addCompactDataCell(detalleTable, cuenta.getCategoria(), normalFont, bg, Element.ALIGN_LEFT);
                 addCompactDataCell(detalleTable, cuenta.getCuenta(), normalFont, bg, Element.ALIGN_LEFT);
-                addCompactDataCell(detalleTable, currencyFormat.format(cuenta.getMonto()), normalFont, bg, Element.ALIGN_RIGHT);
+                addCompactDataCell(detalleTable, cuenta.getNumeroSim(), normalFont, bg, Element.ALIGN_CENTER);
                 addCompactDataCell(detalleTable, cuenta.getFormaPago(), normalFont, bg, Element.ALIGN_LEFT);
                 addCompactDataCell(detalleTable, cuenta.getEstatus(), normalFont, bg, Element.ALIGN_CENTER);
-                addCompactDataCell(detalleTable, cuenta.getCategoria(), normalFont, bg, Element.ALIGN_LEFT);
-                addCompactDataCell(detalleTable, cuenta.getNumeroSim(), normalFont, bg, Element.ALIGN_CENTER);
+                addCompactDataCell(detalleTable, currencyFormat.format(cuenta.getMonto()), normalFont, bg, Element.ALIGN_RIGHT);
 
                 alt = !alt;
             }

@@ -156,7 +156,7 @@ public class EmailController {
 
         } catch (Exception e) {
             System.err.println("Error al enviar correo con plantilla: " + e.getMessage());
-            e.printStackTrace(); // Agregar stack trace para mejor debugging
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
