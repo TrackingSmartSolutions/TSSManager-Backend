@@ -8,7 +8,6 @@ import com.resend.services.emails.model.CreateEmailOptions;
 import com.resend.services.emails.model.CreateEmailResponse;
 import com.tss.tssmanager_backend.entity.EmailRecord;
 import com.tss.tssmanager_backend.repository.EmailRecordRepository;
-import org.apache.tomcat.util.http.fileupload.ByteArrayOutputStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -22,7 +21,10 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Base64;
+import java.util.Map;
 
 @Service
 public class EmailService {
@@ -66,42 +68,38 @@ public class EmailService {
             // Manejo de adjuntos
             List<com.resend.services.emails.model.Attachment> attachments = new ArrayList<>();
             if (rutasArchivosAdjuntos != null && !rutasArchivosAdjuntos.isEmpty()) {
-
+                if (rutasArchivosAdjuntos.size() > 3) {
+                    throw new RuntimeException("Demasiados archivos adjuntos. Máximo 3 permitidos.");
+                }
                 for (String ruta : rutasArchivosAdjuntos) {
                     try {
                         byte[] fileContent = null;
                         String fileName;
+                        String base64Content = null;
 
                         if (isUrl(ruta)) {
                             fileContent = downloadFileFromUrl(ruta);
                             fileName = extractFileNameFromUrl(ruta);
                         } else {
                             Path filePath = Path.of(ruta);
-                            long fileSize = Files.size(filePath);
-                            if (fileSize > 5 * 1024 * 1024L) {
-                                System.err.println("Archivo omitido por tamaño: " + filePath.getFileName() + " (" + (fileSize/1024/1024) + "MB)");
-                                continue;
-                            }
                             fileContent = Files.readAllBytes(filePath);
                             fileName = filePath.getFileName().toString();
                         }
 
-                        if (fileContent != null && fileContent.length > 0) {
-                            String base64Content = encodeToBase64Chunked(fileContent);
+                        // Procesar inmediatamente y liberar memoria
+                        base64Content = Base64.getEncoder().encodeToString(fileContent);
+                        fileContent = null;
+                        System.gc();
 
-                            attachments.add(com.resend.services.emails.model.Attachment.builder()
-                                    .fileName(fileName)
-                                    .content(base64Content)
-                                    .build());
+                        attachments.add(com.resend.services.emails.model.Attachment.builder()
+                                .fileName(fileName)
+                                .content(base64Content)
+                                .build());
 
-                            fileContent = null;
-                            System.gc();
-                        }
+                        base64Content = null;
 
                     } catch (IOException e) {
                         System.err.println("Error procesando archivo adjunto " + ruta + ": " + e.getMessage());
-                    } catch (OutOfMemoryError e) {
-                        System.err.println("Error de memoria con adjunto " + ruta + ". Archivo omitido.");
                         System.gc();
                     }
                 }
@@ -134,22 +132,6 @@ public class EmailService {
         return emailRecordRepository.save(emailRecord);
     }
 
-    private String encodeToBase64Chunked(byte[] data) {
-        if (data.length > 1024 * 1024) {
-            StringBuilder result = new StringBuilder();
-            int chunkSize = 1024 * 512;
-
-            for (int i = 0; i < data.length; i += chunkSize) {
-                int end = Math.min(i + chunkSize, data.length);
-                byte[] chunk = Arrays.copyOfRange(data, i, end);
-                result.append(Base64.getEncoder().encodeToString(chunk));
-            }
-            return result.toString();
-        } else {
-            return Base64.getEncoder().encodeToString(data);
-        }
-    }
-
     private boolean isUrl(String path) {
         return path.startsWith("http://") || path.startsWith("https://");
     }
@@ -157,31 +139,16 @@ public class EmailService {
     private byte[] downloadFileFromUrl(String url) throws IOException {
         URL fileUrl = new URL(url);
         URLConnection connection = fileUrl.openConnection();
-        connection.setConnectTimeout(8000);
-        connection.setReadTimeout(20000);
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(15000);
 
-        // Verificar tamaño del archivo
         int contentLength = connection.getContentLength();
-        if (contentLength > 5 * 1024 * 1024) { // 5MB límite
-            throw new IOException("Archivo demasiado grande: " + (contentLength / 1024 / 1024) + "MB. Máximo: 5MB");
+        if (contentLength > 10 * 1024 * 1024) {
+            throw new IOException("Archivo demasiado grande para procesar: " + contentLength + " bytes");
         }
 
         try (InputStream inputStream = connection.getInputStream()) {
-            byte[] buffer = new byte[4096];
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
-            int bytesRead;
-            int totalBytes = 0;
-
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                totalBytes += bytesRead;
-                if (totalBytes > 5 * 1024 * 1024) {
-                    throw new IOException("Archivo excede 5MB durante descarga");
-                }
-                outputStream.write(buffer, 0, bytesRead);
-            }
-
-            return outputStream.toByteArray();
+            return inputStream.readAllBytes();
         }
     }
 
@@ -368,17 +335,24 @@ public class EmailService {
     public String uploadTempFileToCloudinary(Path tempFilePath) throws IOException {
         String fileName = tempFilePath.getFileName().toString();
 
-        // Remover el UUID que agregamos anteriormente para obtener el nombre original
+        long fileSize = Files.size(tempFilePath);
+        if (fileSize > 10 * 1024 * 1024) {
+            throw new IOException("Archivo demasiado grande: " + fileSize + " bytes");
+        }
+
         String originalName = fileName.contains("_") ? fileName.substring(fileName.indexOf("_") + 1) : fileName;
         String nombreSinExtension = originalName.substring(0, originalName.lastIndexOf('.'));
         String publicId = "correos_temporales/" + nombreSinExtension + "_" + System.currentTimeMillis();
 
-        Map uploadResult = cloudinary.uploader().upload(Files.readAllBytes(tempFilePath), ObjectUtils.asMap(
-                "resource_type", "raw",
-                "public_id", publicId,
-                "use_filename", true,
-                "unique_filename", false
-        ));
+        Map uploadResult;
+        try (InputStream inputStream = Files.newInputStream(tempFilePath)) {
+            uploadResult = cloudinary.uploader().upload(inputStream, ObjectUtils.asMap(
+                    "resource_type", "raw",
+                    "public_id", publicId,
+                    "use_filename", true,
+                    "unique_filename", false
+            ));
+        }
 
         return uploadResult.get("url").toString();
     }

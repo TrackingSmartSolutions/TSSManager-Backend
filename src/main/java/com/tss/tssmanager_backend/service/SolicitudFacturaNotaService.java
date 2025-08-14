@@ -2,7 +2,9 @@ package com.tss.tssmanager_backend.service;
 
 import com.lowagie.text.*;
 import com.lowagie.text.Font;
+import com.lowagie.text.Image;
 import com.lowagie.text.Rectangle;
+import com.lowagie.text.pdf.PdfContentByte;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
@@ -26,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.awt.*;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
@@ -362,6 +365,29 @@ public class SolicitudFacturaNotaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + id));
     }
 
+    private Image cargarMembrete() throws Exception {
+        try {
+            InputStream inputStream = getClass().getResourceAsStream("/static/images/membrete.png");
+            if (inputStream == null) {
+                throw new Exception("No se pudo encontrar el archivo de membrete");
+            }
+
+            byte[] imageBytes = inputStream.readAllBytes();
+            Image membrete = Image.getInstance(imageBytes);
+
+            membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+
+            float xPos = (PageSize.A4.getWidth() - membrete.getScaledWidth()) / 2;
+            float yPos = (PageSize.A4.getHeight() - membrete.getScaledHeight()) / 2;
+            membrete.setAbsolutePosition(xPos, yPos);
+
+            return membrete;
+        } catch (Exception e) {
+            logger.warn("No se pudo cargar el membrete: {}", e.getMessage());
+            return null;
+        }
+    }
+
     @Transactional(readOnly = true)
     public ByteArrayResource generateSolicitudPDF(Integer id) throws Exception {
         logger.info("Generando PDF para solicitud con ID: {}", id);
@@ -369,11 +395,22 @@ public class SolicitudFacturaNotaService {
         SolicitudFacturaNota solicitud = solicitudRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + id));
 
-        Document document = new Document(PageSize.A4, 40, 40, 50, 50);
+        Document document = new Document(PageSize.A4, 40, 40, 90, 50);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PdfWriter writer = PdfWriter.getInstance(document, out);
 
         document.open();
+
+        try {
+            Image membrete = cargarMembrete();
+            if (membrete != null) {
+                PdfContentByte canvas = writer.getDirectContentUnder();
+                canvas.addImage(membrete);
+                logger.info("Membrete agregado exitosamente");
+            }
+        } catch (Exception e) {
+            logger.warn("Error al agregar membrete: {}", e.getMessage());
+        }
 
         Color azulCorporativo = new Color(41, 84, 144);
         Color azulClaro = new Color(230, 240, 250);
@@ -393,7 +430,7 @@ public class SolicitudFacturaNotaService {
         PdfPTable headerTable = new PdfPTable(2);
         headerTable.setWidthPercentage(100);
         headerTable.setWidths(new float[]{3f, 1f});
-        headerTable.setSpacingAfter(25);
+        headerTable.setSpacingAfter(15);
 
         String tipoDocumento = solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA ?
                 "SOLICITUD DE FACTURA" : "NOTA DE REMISIÓN";
@@ -403,14 +440,12 @@ public class SolicitudFacturaNotaService {
         titleCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
         titleCell.setBorder(Rectangle.NO_BORDER);
         titleCell.setPadding(15);
-        titleCell.setBackgroundColor(blancoHueso);
 
         PdfPCell idCell = new PdfPCell(new Phrase("ID: " + solicitud.getIdentificador(), subtituloFont));
         idCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
         idCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
         idCell.setBorder(Rectangle.NO_BORDER);
         idCell.setPadding(15);
-        idCell.setBackgroundColor(blancoHueso);
 
         headerTable.addCell(titleCell);
         headerTable.addCell(idCell);

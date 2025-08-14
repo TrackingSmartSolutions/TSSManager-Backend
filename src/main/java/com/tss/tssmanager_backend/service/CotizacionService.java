@@ -348,7 +348,7 @@ public class CotizacionService {
         Cotizacion cotizacion = cotizacionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + id));
 
-        Document document = new Document(PageSize.A4, 40, 40, 50, 50);
+        Document document = new Document(PageSize.A4, 40, 40, 90, 50);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PdfWriter writer = PdfWriter.getInstance(document, out);
 
@@ -380,7 +380,7 @@ public class CotizacionService {
 
         PdfPTable headerTable = new PdfPTable(1);
         headerTable.setWidthPercentage(100);
-        headerTable.setSpacingAfter(25);
+        headerTable.setSpacingAfter(15);
 
         String title = "COTIZACIÓN DE ";
         String significantConcept = cotizacion.getUnidades().stream()
