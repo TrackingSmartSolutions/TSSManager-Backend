@@ -19,4 +19,4 @@ RUN mvn clean install -DskipTests
 EXPOSE 8080
 
 # Comando para ejecutar la aplicación JAR
-ENTRYPOINT ["java", "-Xms64m", "-Xmx384m", "-XX:MetaspaceSize=32m", "-XX:MaxMetaspaceSize=96m", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=100", "-XX:+UseStringDeduplication", "-XX:+OptimizeStringConcat", "-Djava.awt.headless=true", "-Dspring.jmx.enabled=false", "-jar", "target/tssmanager-backend-0.0.1-SNAPSHOT.jar"]
+ENTRYPOINT ["java", "-Xms48m", "-Xmx350m", "-XX:MetaspaceSize=64m", "-XX:MaxMetaspaceSize=128m", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=200", "-XX:+UseStringDeduplication", "-Djava.awt.headless=true", "-Dspring.jmx.enabled=false", "-jar", "target/tssmanager-backend-0.0.1-SNAPSHOT.jar"]
