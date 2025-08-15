@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -177,27 +178,6 @@ public class SimService {
 
     private void crearTransaccionAutomatica(Sim sim) {
         // Determinar la descripción de la categoría según la tarifa
-        String descripcionCategoria;
-        if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
-            descripcionCategoria = "M2M";
-        } else {
-            descripcionCategoria = "TELCEL";
-        }
-
-        // Buscar la categoría existente o crearla
-        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcionIgnoreCase(descripcionCategoria);
-        CategoriaTransacciones categoria;
-
-        if (categoriaOpt.isPresent()) {
-            categoria = categoriaOpt.get();
-        } else {
-            categoria = new CategoriaTransacciones();
-            categoria.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
-            categoria.setDescripcion(descripcionCategoria);
-            categoria = categoriaRepository.save(categoria);
-        }
-
-        // Determinar nombre de la cuenta
         String nombreCuenta = "AG";
         if (sim.getEquipo() != null) {
             // Primero verificar si tiene clienteId
@@ -218,8 +198,26 @@ public class SimService {
             }
         }
 
-        CuentasTransacciones cuentaTransaccion = buscarOCrearCuenta(nombreCuenta, categoria);
+        String descripcionCategoria;
+        if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
+            descripcionCategoria = "M2M";
+        } else {
+            descripcionCategoria = "TELCEL";
+        }
 
+        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcionIgnoreCase(descripcionCategoria);
+        CategoriaTransacciones categoria;
+
+        if (categoriaOpt.isPresent()) {
+            categoria = categoriaOpt.get();
+        } else {
+            categoria = new CategoriaTransacciones();
+            categoria.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
+            categoria.setDescripcion(descripcionCategoria);
+            categoria = categoriaRepository.save(categoria);
+        }
+
+        CuentasTransacciones cuentaTransaccion = buscarOCrearCuentaConCategoria(nombreCuenta, categoria);
         BigDecimal monto = sim.getRecarga() != null ? sim.getRecarga() : new BigDecimal("50.00");
 
         // Obtener fecha de pago basada en la vigencia de la SIM
@@ -258,6 +256,29 @@ public class SimService {
         }
     }
 
+    private CuentasTransacciones buscarOCrearCuentaConCategoria(String nombreCuenta, CategoriaTransacciones categoria) {
+        List<CuentasTransacciones> cuentasExistentes = cuentaRepository.findByNombre(nombreCuenta)
+                .map(List::of)
+                .orElse(Collections.emptyList());
+
+        Optional<CuentasTransacciones> cuentaConCategoriaCorrecta = cuentasExistentes.stream()
+                .filter(cuenta -> cuenta.getCategoria().getId().equals(categoria.getId()))
+                .findFirst();
+
+        if (cuentaConCategoriaCorrecta.isPresent()) {
+            System.out.println("Cuenta encontrada con categoría correcta: " + nombreCuenta + " - " + categoria.getDescripcion());
+            return cuentaConCategoriaCorrecta.get();
+        }
+
+        // Si no existe, crear nueva cuenta con la categoría correcta
+        System.out.println("Creando nueva cuenta: " + nombreCuenta + " - " + categoria.getDescripcion());
+        CuentasTransacciones nuevaCuenta = new CuentasTransacciones();
+        nuevaCuenta.setNombre(nombreCuenta);
+        nuevaCuenta.setCategoria(categoria);
+
+        return cuentaRepository.save(nuevaCuenta);
+    }
+
     private void actualizarCuentasPorPagarExistentes(Sim sim) {
         List<CuentaPorPagar> cuentasExistentes = cuentaPorPagarRepository.findBySimId(sim.getId());
 
@@ -289,7 +310,7 @@ public class SimService {
                 }
 
                 // Buscar o crear la cuenta con el nuevo nombre
-                CuentasTransacciones nuevaCuenta = buscarOCrearCuenta(nuevoNombreCuenta, cuenta.getTransaccion().getCategoria());
+                CuentasTransacciones nuevaCuenta = buscarOCrearCuentaConCategoria(nuevoNombreCuenta, cuenta.getTransaccion().getCategoria());
                 cuenta.getTransaccion().setCuenta(nuevaCuenta);
             }
 
