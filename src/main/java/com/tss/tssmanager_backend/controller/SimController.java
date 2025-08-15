@@ -246,9 +246,16 @@ public class SimController {
     @GetMapping("/paged")
     public ResponseEntity<PagedResponseDTO<SimDTO>> obtenerSimsPaginadas(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-        PagedResponseDTO<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size);
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) Integer grupo,
+            @RequestParam(required = false) String numero) {
+        PagedResponseDTO<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size, grupo, numero);
         return ResponseEntity.ok(simsPage);
+    }
+
+    @GetMapping("/grupos-todos")
+    public ResponseEntity<List<Integer>> obtenerTodosLosGrupos() {
+        return ResponseEntity.ok(simService.obtenerTodosLosGrupos());
     }
 
     @GetMapping("/equipos-disponibles")

@@ -300,24 +300,34 @@ public class CuentaPorCobrarService {
             savedCuenta = cuentaPorCobrarRepository.save(cuenta);
         }
 
+        CategoriaTransacciones categoriaVentas = categoriaTransaccionesRepository.findByDescripcion("Ventas")
+                .orElseThrow(() -> new ResourceNotFoundException("Categoría 'Ventas' no encontrada"));
+
+        // Buscar la cuenta específicamente en la categoría de ventas
+        CuentasTransacciones cuentaTransaccion = cuentasTransaccionesRepository
+                .findByNombreAndCategoria(cuenta.getCliente().getNombre(), categoriaVentas);
+
+        // Si no existe, crear una nueva cuenta en la categoría de ventas
+        if (cuentaTransaccion == null) {
+            logger.info("Creando nueva cuenta de transacciones para cliente: {} en categoría Ventas", cuenta.getCliente().getNombre());
+            cuentaTransaccion = new CuentasTransacciones();
+            cuentaTransaccion.setNombre(cuenta.getCliente().getNombre());
+            cuentaTransaccion.setCategoria(categoriaVentas);
+            cuentaTransaccion = cuentasTransaccionesRepository.save(cuentaTransaccion);
+        }
+
+        // Crear la transacción
         Transaccion transaccion = new Transaccion();
         transaccion.setFecha(LocalDate.now());
         transaccion.setTipo(TipoTransaccionEnum.INGRESO);
-        transaccion.setCategoria(categoriaTransaccionesRepository.findByDescripcion("Ventas")
-                .orElseThrow(() -> new ResourceNotFoundException("Categoría 'ventas' no encontrada")));
-        transaccion.setCuenta(cuentasTransaccionesRepository.findByNombre(cuenta.getCliente().getNombre())
-                .orElseGet(() -> {
-                    CuentasTransacciones nuevaCuenta = new CuentasTransacciones();
-                    nuevaCuenta.setNombre(cuenta.getCliente().getNombre());
-                    nuevaCuenta.setCategoria(categoriaTransaccionesRepository.findByDescripcion("Ventas")
-                            .orElseThrow(() -> new ResourceNotFoundException("Categoría 'ventas' no encontrada")));
-                    return cuentasTransaccionesRepository.save(nuevaCuenta);
-                }));
+        transaccion.setCategoria(categoriaVentas);
+        transaccion.setCuenta(cuentaTransaccion);
         transaccion.setMonto(cuenta.getCantidadCobrar());
         transaccion.setEsquema(EsquemaTransaccionEnum.UNICA);
         transaccion.setFechaPago(fechaPago);
         transaccion.setFormaPago(cuenta.getSolicitudesFacturasNotas().get(0).getFormaPago());
         transaccion.setNotas("Transacción generada automáticamente desde Cuentas por Cobrar");
+
         transaccionService.agregarTransaccion(transaccion);
 
         return convertToDTO(savedCuenta);

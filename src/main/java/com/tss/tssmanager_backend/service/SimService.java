@@ -323,11 +323,16 @@ public class SimService {
         return obtenerGruposDisponiblesOptimizado();
     }
 
-    public PagedResponseDTO<SimDTO> obtenerTodasLasSimsPaginadas(int page, int size) {
+
+    public List<Integer> obtenerTodosLosGrupos() {
+        return simRepository.findAllGroupsForFilter();
+    }
+
+    public PagedResponseDTO<SimDTO> obtenerTodasLasSimsPaginadas(int page, int size, Integer grupo, String numero) {
         int offset = page * size;
 
-        List<Object[]> results = simRepository.findSimsPaginatedOptimized(size, offset);
-        Long totalElements = simRepository.countAllSims();
+        List<Object[]> results = simRepository.findSimsPaginatedWithFilters(grupo, numero, size, offset);
+        Long totalElements = simRepository.countSimsWithFilters(grupo, numero);
 
         List<SimDTO> content = results.stream()
                 .map(this::convertFromOptimizedQuery)
