@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -62,10 +63,12 @@ public class CuentaPorCobrarController {
     @PostMapping("/{id}/marcar-pagada")
     public ResponseEntity<CuentaPorCobrarDTO> marcarComoPagada(@PathVariable Integer id,
                                                                @RequestPart("fechaPago") String fechaPago,
+                                                               @RequestPart("montoPago") String montoPago,
                                                                @RequestPart("comprobante") MultipartFile comprobante) throws Exception {
-        logger.info("Solicitud para marcar como pagada cuenta por cobrar con ID: {}", id);
+        logger.info("Solicitud para marcar como pagada cuenta por cobrar con ID: {} con monto: {}", id, montoPago);
         LocalDate fechaPagoDate = LocalDate.parse(fechaPago);
-        return ResponseEntity.ok(cuentaPorCobrarService.marcarComoPagada(id, fechaPagoDate, comprobante));
+        BigDecimal montoDecimal = new BigDecimal(montoPago);
+        return ResponseEntity.ok(cuentaPorCobrarService.marcarComoPagada(id, fechaPagoDate, montoDecimal, comprobante));
     }
 
     @GetMapping

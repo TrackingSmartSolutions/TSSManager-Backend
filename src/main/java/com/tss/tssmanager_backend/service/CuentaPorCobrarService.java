@@ -236,26 +236,45 @@ public class CuentaPorCobrarService {
     }
 
     @Transactional
-    public CuentaPorCobrarDTO marcarComoPagada(Integer id, LocalDate fechaPago, MultipartFile comprobante) throws Exception {
-        logger.info("Marcando como pagada cuenta por cobrar con ID: {}", id);
+    public CuentaPorCobrarDTO marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal montoPago, MultipartFile comprobante) throws Exception {
+        logger.info("Marcando como pagada cuenta por cobrar con ID: {} con monto: {}", id, montoPago);
 
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada con id: " + id));
 
-        if (cuenta.getComprobantePagoUrl() != null) {
+        if (cuenta.getEstatus() == EstatusPagoEnum.PAGADO) {
             throw new ResourceNotFoundException("La cuenta ya está marcada como pagada.");
         }
+
         if (cuenta.getSolicitudesFacturasNotas().isEmpty()) {
             throw new ResourceNotFoundException("La cuenta no está vinculada a una solicitud de factura.");
+        }
+
+        // Validar que el monto de pago sea válido
+        BigDecimal saldoActual = cuenta.getSaldoPendiente() != null ? cuenta.getSaldoPendiente() : cuenta.getCantidadCobrar();
+        if (montoPago.compareTo(BigDecimal.ZERO) <= 0 || montoPago.compareTo(saldoActual) > 0) {
+            throw new IllegalArgumentException("El monto de pago debe ser mayor a 0 y menor o igual al saldo pendiente");
         }
 
         if (comprobante.getSize() > 10 * 1024 * 1024) {
             throw new IllegalArgumentException("El archivo no debe exceder 10MB");
         }
 
-        // Marcar como pagado PRIMERO (sin comprobante)
-        cuenta.setEstatus(EstatusPagoEnum.PAGADO);
-        cuenta.setFechaRealPago(fechaPago);
+        // Actualizar montos
+        BigDecimal montoAcumulado = cuenta.getMontoPagado().add(montoPago);
+        BigDecimal nuevoSaldo = cuenta.getCantidadCobrar().subtract(montoAcumulado);
+
+        cuenta.setMontoPagado(montoAcumulado);
+        cuenta.setSaldoPendiente(nuevoSaldo);
+
+        // Determinar estatus basado en el saldo
+        if (nuevoSaldo.compareTo(BigDecimal.ZERO) == 0) {
+            cuenta.setEstatus(EstatusPagoEnum.PAGADO);
+            cuenta.setFechaRealPago(fechaPago);
+        } else {
+            cuenta.setEstatus(EstatusPagoEnum.EN_PROCESO);
+        }
+
         cuenta.setComprobantePagoUrl("UPLOADING");
         CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
 
@@ -324,6 +343,8 @@ public class CuentaPorCobrarService {
         dto.setConceptos(cuenta.getConceptos() != null ? List.of(cuenta.getConceptos().split(", ")) : List.of());
         dto.setComprobantePagoUrl(cuenta.getComprobantePagoUrl());
         dto.setFechaRealPago(cuenta.getFechaRealPago());
+        dto.setMontoPagado(cuenta.getMontoPagado());
+        dto.setSaldoPendiente(cuenta.getSaldoPendiente());
         dto.setCotizacionId(cuenta.getCotizacion() != null ? cuenta.getCotizacion().getId() : null);
         return dto;
     }

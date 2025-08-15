@@ -37,42 +37,59 @@ public class CuentaPorPagarService {
     }
 
     @Transactional
-    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal monto, String formaPago, Integer usuarioId, boolean regenerarAutomaticamente) {
+    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal montoPago, String formaPago, Integer usuarioId, boolean regenerarAutomaticamente) {
         CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
 
+        // Obtener la transacción original al inicio
         Transaccion transaccionOriginal = transaccionRepository.findById(cuenta.getTransaccion().getId())
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
-        cuenta.setEstatus("Pagado");
-        cuenta.setMonto(monto);
+        // Validar que el monto de pago sea válido
+        BigDecimal saldoActual = cuenta.getSaldoPendiente() != null ? cuenta.getSaldoPendiente() : cuenta.getMonto();
+        if (montoPago.compareTo(BigDecimal.ZERO) <= 0 || montoPago.compareTo(saldoActual) > 0) {
+            throw new IllegalArgumentException("El monto de pago debe ser mayor a 0 y menor o igual al saldo pendiente");
+        }
+
+        // Actualizar montos
+        BigDecimal montoAcumulado = cuenta.getMontoPagado().add(montoPago);
+        BigDecimal nuevoSaldo = cuenta.getMonto().subtract(montoAcumulado);
+
+        cuenta.setMontoPagado(montoAcumulado);
+        cuenta.setSaldoPendiente(nuevoSaldo);
+
+        // Determinar estatus basado en el saldo
+        if (nuevoSaldo.compareTo(BigDecimal.ZERO) == 0) {
+            cuenta.setEstatus("Pagado");
+            actualizarVigenciaSim(cuenta, LocalDate.now());
+            // Solo verificar regeneración si está completamente pagada
+            verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal, regenerarAutomaticamente);
+        } else {
+            cuenta.setEstatus("En proceso");
+        }
+
         cuenta.setFormaPago(formaPago);
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         String fechaFormateada = LocalDateTime.now().format(formatter);
-        cuenta.setNota(cuenta.getNota() != null ?
-                cuenta.getNota() + " - Marcada como pagada el " + fechaFormateada :
-                "Marcada como pagada el " + fechaFormateada);
+        String nota = String.format("Pago parcial de $%s el %s", montoPago, fechaFormateada);
+        cuenta.setNota(cuenta.getNota() != null ? cuenta.getNota() + " - " + nota : nota);
 
         cuentasPorPagarRepository.save(cuenta);
-        actualizarVigenciaSim(cuenta, LocalDate.now());
 
-        // Crear transacción asociada (registro del pago)
         Transaccion transaccionPago = new Transaccion();
         transaccionPago.setFecha(LocalDate.now());
         transaccionPago.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
         transaccionPago.setCategoria(transaccionOriginal.getCategoria());
         transaccionPago.setCuenta(cuenta.getCuenta());
-        transaccionPago.setMonto(monto);
+        transaccionPago.setMonto(montoPago);
         transaccionPago.setEsquema(com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum.UNICA);
         transaccionPago.setFechaPago(LocalDate.now());
         transaccionPago.setFormaPago(cuenta.getFormaPago());
-        transaccionPago.setNotas("Transacción generada desde Cuentas por Pagar");
+        transaccionPago.setNotas("Transacción generada desde Cuentas por Pagar - Pago parcial");
         transaccionPago.setFechaCreacion(LocalDateTime.now());
         transaccionPago.setFechaModificacion(LocalDateTime.now());
         transaccionRepository.save(transaccionPago);
-
-        verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal, regenerarAutomaticamente);
     }
 
     @Transactional
@@ -135,6 +152,9 @@ public class CuentaPorPagarService {
 
     @Transactional
     private void verificarYRegenerarSiEsNecesario(CuentaPorPagar cuentaPagada, Transaccion transaccionOriginal, boolean regenerarAutomaticamente) {
+        if (!"Pagado".equals(cuentaPagada.getEstatus())) {
+            return;
+        }
         // Verificar si quedan cuentas pendientes DESPUÉS de marcar esta como pagada
         boolean hayPendientes = cuentasPorPagarRepository
                 .existsByTransaccionIdAndEstatusNot(transaccionOriginal.getId(), "Pagado");
@@ -293,5 +313,10 @@ public class CuentaPorPagarService {
             default:
                 return fechaUltimoPago.plusDays(30);
         }
+    }
+
+    public CuentaPorPagar obtenerPorId(Integer id) {
+        return cuentasPorPagarRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
     }
 }

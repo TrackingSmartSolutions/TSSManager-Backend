@@ -246,7 +246,7 @@ public class SimController {
     @GetMapping("/paged")
     public ResponseEntity<PagedResponseDTO<SimDTO>> obtenerSimsPaginadas(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "150") int size) {
+            @RequestParam(defaultValue = "50") int size) {
         PagedResponseDTO<SimDTO> simsPage = simService.obtenerTodasLasSimsPaginadas(page, size);
         return ResponseEntity.ok(simsPage);
     }

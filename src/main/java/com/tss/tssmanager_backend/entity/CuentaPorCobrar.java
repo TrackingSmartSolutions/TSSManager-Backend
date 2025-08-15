@@ -35,6 +35,12 @@ public class CuentaPorCobrar {
     @Column(name = "cantidadCobrar", nullable = false, precision = 10, scale = 2)
     private BigDecimal cantidadCobrar;
 
+    @Column(name = "monto_pagado", precision = 10, scale = 2)
+    private BigDecimal montoPagado = BigDecimal.ZERO;
+
+    @Column(name = "saldo_pendiente", precision = 10, scale = 2)
+    private BigDecimal saldoPendiente;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "estatus", nullable = false)
     private EstatusPagoEnum estatus;

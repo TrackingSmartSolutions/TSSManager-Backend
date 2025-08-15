@@ -28,6 +28,12 @@ public class CuentaPorPagar {
     @Column(name = "monto", nullable = false)
     private BigDecimal monto;
 
+    @Column(name = "monto_pagado", precision = 10, scale = 2)
+    private BigDecimal montoPagado = BigDecimal.ZERO;
+
+    @Column(name = "saldo_pendiente", precision = 10, scale = 2)
+    private BigDecimal saldoPendiente;
+
     @Column(name = "forma_pago", nullable = false)
     private String formaPago;
 

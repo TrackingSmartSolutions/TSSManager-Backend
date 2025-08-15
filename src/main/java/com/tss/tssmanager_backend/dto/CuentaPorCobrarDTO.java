@@ -23,4 +23,7 @@ public class CuentaPorCobrarDTO {
     private String comprobantePagoUrl;
     private LocalDate fechaRealPago;
     private Integer cotizacionId;
+    private BigDecimal montoPagado;
+    private BigDecimal saldoPendiente;
+    private BigDecimal montoPago;
 }

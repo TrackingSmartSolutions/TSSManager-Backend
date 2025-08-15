@@ -40,10 +40,17 @@ public class CuentaPorPagarController {
     @PostMapping("/marcar-como-pagada")
     public ResponseEntity<Void> marcarComoPagada(@RequestBody CuentaPorPagarDTO request) {
         try {
-            cuentasPorPagarService.marcarComoPagada(request.getId(), request.getMonto(), request.getFormaPago(), request.getUsuarioId());
+            cuentasPorPagarService.marcarComoPagada(
+                    request.getId(),
+                    LocalDate.now(),
+                    request.getMontoPago(),
+                    request.getFormaPago(),
+                    request.getUsuarioId(),
+                    false
+            );
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -108,17 +115,26 @@ public class CuentaPorPagarController {
     @PostMapping("/marcar-como-pagada-calendario")
     public ResponseEntity<Void> marcarComoPagadaDesdeCalendario(@RequestBody CuentaPorPagarDTO dto) {
         try {
+            if (dto.getId() == null || dto.getMontoPago() == null || dto.getFormaPago() == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
             cuentasPorPagarService.marcarComoPagada(
                     dto.getId(),
                     LocalDate.now(),
-                    dto.getMonto(),
+                    dto.getMontoPago(),
                     dto.getFormaPago(),
-                    dto.getUsuarioId(),
+                    dto.getUsuarioId() != null ? dto.getUsuarioId() : 1,
                     true
             );
             return ResponseEntity.noContent().build();
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
+            System.err.println("Error de validación: " + e.getMessage());
             return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            System.err.println("Error interno: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
@@ -163,6 +179,18 @@ public class CuentaPorPagarController {
             return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
         } catch (Exception e) {
             System.err.println("Error al generar reporte PDF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CuentaPorPagar> obtenerCuentaPorId(@PathVariable Integer id) {
+        try {
+            CuentaPorPagar cuenta = cuentasPorPagarService.obtenerPorId(id);
+            return ResponseEntity.ok(cuenta);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
