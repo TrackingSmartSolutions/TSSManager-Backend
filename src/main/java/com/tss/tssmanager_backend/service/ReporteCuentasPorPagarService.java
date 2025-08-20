@@ -278,7 +278,7 @@ public class ReporteCuentasPorPagarService {
             // Tabla de detalles
             PdfPTable detalleTable = new PdfPTable(6);
             detalleTable.setWidthPercentage(100);
-            detalleTable.setWidths(new float[]{20, 20, 10, 18, 12, 14});
+            detalleTable.setWidths(new float[]{18, 18, 15, 16, 12, 15});
             detalleTable.setSpacingAfter(10);
 
             String[] headers = {"Categoría", "Cuenta", "SIM", "Forma Pago", "Estatus", "Monto"};
