@@ -17,6 +17,7 @@ public class CotizacionDTO {
     private BigDecimal total;
     private String importeLetra;
     private Instant fechaCreacion;
+    private String fecha;
     private List<UnidadCotizacionDTO> unidades;
     private Integer cantidadTotal;
     private Integer conceptosCount;

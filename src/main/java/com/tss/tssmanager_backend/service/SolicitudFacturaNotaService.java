@@ -565,8 +565,12 @@ public class SolicitudFacturaNotaService {
                 ));
 
                 BigDecimal descuento = unidad.getDescuento() != null ? unidad.getDescuento() : BigDecimal.ZERO;
+                BigDecimal descuentoEnDinero = unidad.getPrecioUnitario()
+                        .multiply(BigDecimal.valueOf(unidad.getCantidad()))
+                        .multiply(descuento.divide(BigDecimal.valueOf(100)));
+
                 conceptosTable.addCell(createStyledTableCell(
-                        formatPercentage(descuento),
+                        formatCurrency(descuentoEnDinero),
                         Element.ALIGN_RIGHT,
                         normalFont,
                         rowColor
@@ -696,11 +700,15 @@ public class SolicitudFacturaNotaService {
                     normalFont, boldFont, Color.WHITE);
 
             if (cotizacion != null) {
-                addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(cotizacion.getIsrFederal()),
-                        normalFont, boldFont, Color.WHITE);
+                if (cotizacion.getIsrFederal() != null && cotizacion.getIsrFederal().compareTo(BigDecimal.ZERO) > 0) {
+                    addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(cotizacion.getIsrFederal()),
+                            normalFont, boldFont, Color.WHITE);
+                }
 
-                addTotalRow(rightTable, "ISR Estatal (2%):", formatCurrency(cotizacion.getIsrEstatal()),
-                        normalFont, boldFont, Color.WHITE);
+                if (cotizacion.getIsrEstatal() != null && cotizacion.getIsrEstatal().compareTo(BigDecimal.ZERO) > 0) {
+                    addTotalRow(rightTable, "ISR Estatal (2%):", formatCurrency(cotizacion.getIsrEstatal()),
+                            normalFont, boldFont, Color.WHITE);
+                }
             }
 
             PdfPCell separatorCell = new PdfPCell();

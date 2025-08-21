@@ -208,7 +208,10 @@ public class CotizacionService {
     @Transactional(readOnly = true)
     public List<CotizacionDTO> listarCotizaciones() {
         logger.info("Listando todas las cotizaciones");
-        return cotizacionRepository.findAll().stream().map(this::convertToDTO).collect(Collectors.toList());
+        return cotizacionRepository.findAllOrderByFechaCreacionDesc()
+                .stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 
     private CotizacionDTO convertToDTO(Cotizacion cotizacion) {
@@ -222,6 +225,9 @@ public class CotizacionService {
         dto.setTotal(cotizacion.getTotal());
         dto.setImporteLetra(cotizacion.getImporteLetra());
         dto.setFechaCreacion(cotizacion.getFechaCreacion());
+        dto.setFecha(cotizacion.getFechaCreacion()
+                .atZone(java.time.ZoneId.of("America/Mexico_City"))
+                .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
         dto.setUnidades(cotizacion.getUnidades().stream().map(u -> {
             UnidadCotizacionDTO udto = new UnidadCotizacionDTO();
             udto.setId(u.getId());
