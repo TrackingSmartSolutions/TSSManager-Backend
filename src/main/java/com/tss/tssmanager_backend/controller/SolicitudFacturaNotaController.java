@@ -116,10 +116,20 @@ public class SolicitudFacturaNotaController {
         return cell;
     }
 
+    @GetMapping("/solicitudes/{identificador}/timbrada")
+    public ResponseEntity<Boolean> verificarSolicitudTimbrada(@PathVariable String identificador) {
+        logger.info("Verificando si la solicitud {} está timbrada", identificador);
+        boolean timbrada = facturaRepository.findByNoSolicitud(identificador).isPresent();
+        return ResponseEntity.ok(timbrada);
+    }
+
     // Endpoints para Factura
     @PostMapping("/facturas")
     public ResponseEntity<FacturaDTO> timbrarFactura(@RequestPart Factura factura, @RequestPart("archivo") MultipartFile archivo) throws Exception {
         logger.info("Solicitud para timbrar factura para solicitud: {}", factura.getNoSolicitud());
+        if (facturaRepository.findByNoSolicitud(factura.getNoSolicitud()).isPresent()) {
+            throw new IllegalStateException("Esta solicitud ya ha sido timbrada previamente");
+        }
         return ResponseEntity.ok(solicitudService.timbrarFactura(factura, archivo));
     }
 

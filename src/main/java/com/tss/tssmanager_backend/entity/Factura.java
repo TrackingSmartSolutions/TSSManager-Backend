@@ -20,6 +20,9 @@ public class Factura {
     @Column(nullable = false, name = "archivo_url")
     private String archivoUrl;
 
+    @Column(name = "nombre_archivo_original")
+    private String nombreArchivoOriginal;
+
     @Column(name = "solicitud_id")
     private Integer solicitudId;
 

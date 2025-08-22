@@ -774,9 +774,26 @@ public class SolicitudFacturaNotaService {
             throw new IllegalArgumentException("El archivo de la factura es requerido");
         }
 
+        if (facturaRepository.findByNoSolicitud(factura.getNoSolicitud()).isPresent()) {
+            throw new IllegalStateException("Esta solicitud ya ha sido timbrada previamente");
+        }
+
+        String nombreOriginal = archivo.getOriginalFilename();
+        String extension = nombreOriginal != null && nombreOriginal.contains(".")
+                ? nombreOriginal.substring(nombreOriginal.lastIndexOf("."))
+                : ".pdf";
+        String nombreArchivo = "factura_" + factura.getNoSolicitud() + "_" + System.currentTimeMillis() + extension;
+
         Cloudinary cloudinary = cloudinaryConfig.cloudinary();
-        Map uploadResult = cloudinary.uploader().upload(archivo.getBytes(), Map.of("resource_type", "raw"));
+        Map uploadResult = cloudinary.uploader().upload(archivo.getBytes(),
+                Map.of(
+                        "resource_type", "raw",
+                        "public_id", "facturas/" + nombreArchivo.replace(extension, ""),
+                        "original_filename", nombreOriginal
+                ));
+
         factura.setArchivoUrl(uploadResult.get("url").toString());
+        factura.setNombreArchivoOriginal(nombreOriginal != null ? nombreOriginal : "factura.pdf");
 
         SolicitudFacturaNota solicitud = solicitudRepository.findByIdentificador(factura.getNoSolicitud())
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con identificador: " + factura.getNoSolicitud()));
