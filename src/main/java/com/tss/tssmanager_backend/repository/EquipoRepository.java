@@ -68,7 +68,7 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
     """, nativeQuery = true)
     List<Object[]> findDashboardEstatusData();
 
-    @Query("SELECT e FROM Equipo e WHERE e.tipo IN ('VENDIDO', 'DEMO')")
+    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada WHERE e.tipo IN ('VENDIDO', 'DEMO') ORDER BY e.nombre")
     List<Equipo> findEquiposParaCheck();
 
     @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada WHERE e IN :equipos")

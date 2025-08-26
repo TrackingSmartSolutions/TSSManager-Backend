@@ -70,6 +70,7 @@ public class EquipoService {
         throw new EntityNotFoundException("Equipo no encontrado con ID: " + id);
     }
 
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public Equipo guardarEquipo(Equipo equipo) {
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
@@ -81,6 +82,7 @@ public class EquipoService {
         return repository.save(equipo);
     }
 
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public Equipo actualizarEquipo(Integer id, Equipo equipoDetails) {
         Equipo equipo = obtenerEquipo(id);
         equipo.setImei(equipoDetails.getImei());
@@ -112,6 +114,7 @@ public class EquipoService {
         return repository.save(equipo);
     }
 
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public void eliminarEquipo(Integer id) {
         Equipo equipo = obtenerEquipo(id);
         if (equipo.getSimReferenciada() != null) {
@@ -127,6 +130,7 @@ public class EquipoService {
                 : Date.valueOf(today.plusYears(10));
     }
 
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public void activarEquipo(Integer id) {
         Equipo equipo = obtenerEquipo(id);
         if (equipo.getEstatus() == EstatusEquipoEnum.INACTIVO) {
@@ -137,6 +141,7 @@ public class EquipoService {
         }
     }
 
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public void renovarEquipo(Integer id) {
         Equipo equipo = obtenerEquipo(id);
         if (needsRenewal(equipo)) {
