@@ -20,7 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -186,13 +188,9 @@ public class EquipoService {
     }
 
     @Transactional
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true) // Añadir esta línea
     public void guardarEstatus(List<Map<String, Object>> estatusList) {
-        // Crear fecha solo con año, mes y día (sin hora)
-        LocalDate today = LocalDate.now();
-        Date fechaActual = Date.valueOf(today);
-
-        // Eliminar registros anteriores del mismo día
-        equiposEstatusRepository.deleteByFechaCheck(fechaActual);
+        Timestamp fechaActual = new Timestamp(System.currentTimeMillis());
 
         estatusList.forEach(estatus -> {
             EquiposEstatus es = new EquiposEstatus();
@@ -207,8 +205,8 @@ public class EquipoService {
     }
 
     public List<EquiposEstatusDTO> obtenerEstatus() {
-        LocalDate fechaDesde = LocalDate.now().minusDays(30);
-        Date fechaDesdeSql = Date.valueOf(fechaDesde);
+        LocalDateTime fechaDesde = LocalDateTime.now().minusDays(30);
+        Timestamp fechaDesdeSql = Timestamp.valueOf(fechaDesde);
         return equiposEstatusRepository.findRecentEstatusOptimized(fechaDesdeSql);
     }
 
@@ -217,12 +215,12 @@ public class EquipoService {
         return equiposEstatusRepository.findAllEstatusOptimizedPaged(pageable);
     }
 
-    @Cacheable(value = "dashboard-stats", key = "'estatus-plataforma'")
+    @CacheEvict(value = "dashboard-stats", key = "'estatus-plataforma'")
     @Transactional(readOnly = true)
     public Map<String, Object> obtenerDashboardEstatusOptimizado() {
         Map<String, Object> result = new HashMap<>();
 
-        Date fechaUltimoCheck = equiposEstatusRepository.findMaxFechaCheck();
+        Timestamp fechaUltimoCheck = equiposEstatusRepository.findMaxFechaCheck();
         result.put("fechaUltimoCheck", fechaUltimoCheck);
 
         List<Object[]> dashboardData = repository.findDashboardEstatusData();
@@ -281,7 +279,7 @@ public class EquipoService {
                 .collect(Collectors.toList());
     }
 
-    private List<Map<String, Object>> procesarEquiposOfflineOptimizado(List<Object[]> data, Date fechaUltimoCheck) {
+    private List<Map<String, Object>> procesarEquiposOfflineOptimizado(List<Object[]> data, Timestamp fechaUltimoCheck) {
         List<Map<String, Object>> equiposOffline = new ArrayList<>();
 
         for (Object[] row : data) {

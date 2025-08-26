@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.sql.Date;
+import java.sql.Timestamp;
 
 @Entity
 @Table(name = "\"Equipos_Estatus\"")
@@ -27,5 +28,5 @@ public class EquiposEstatus {
     private String motivo;
 
     @Column(name = "fecha_check", nullable = false)
-    private Date fechaCheck;
+    private Timestamp fechaCheck;
 }

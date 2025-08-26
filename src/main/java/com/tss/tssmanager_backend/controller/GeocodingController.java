@@ -71,4 +71,24 @@ public class GeocodingController {
             return ResponseEntity.ok(error);
         }
     }
+
+    @PostMapping("/coordenadas/test/{address}")
+    public ResponseEntity<String> testAddress(@PathVariable String address) {
+        try {
+            geocodingService.testSingleAddress(address);
+            return ResponseEntity.ok("Prueba completada - revisar logs");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/coordenadas/test-configs")
+    public ResponseEntity<String> testConfigurations() {
+        try {
+            geocodingService.testNominatimConfigurations("León, Guanajuato, México");
+            return ResponseEntity.ok("Prueba de configuraciones completada - revisar logs");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
+        }
+    }
 }
