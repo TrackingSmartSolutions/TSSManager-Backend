@@ -394,6 +394,18 @@ public class CuentaPorCobrarService {
             throw new ResourceNotFoundException("No se encontró el comprobante de pago asociado a esta cuenta.");
         }
 
+        // Validar si la URL indica un error de subida
+        if ("ERROR_UPLOAD".equals(cuenta.getComprobantePagoUrl()) ||
+                "UPLOADING".equals(cuenta.getComprobantePagoUrl())) {
+            throw new ResourceNotFoundException("El comprobante de pago no se pudo subir correctamente o está en proceso de subida.");
+        }
+
+        // Validar que la URL sea válida
+        if (!cuenta.getComprobantePagoUrl().startsWith("http://") &&
+                !cuenta.getComprobantePagoUrl().startsWith("https://")) {
+            throw new ResourceNotFoundException("La URL del comprobante de pago no es válida.");
+        }
+
         // Hacer una solicitud a Cloudinary para obtener el archivo
         java.net.URL url = new java.net.URL(cuenta.getComprobantePagoUrl());
         java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
