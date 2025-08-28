@@ -71,16 +71,16 @@ public class PlantillaCorreoService {
                 totalSize += adjunto.getSize();
             }
 
-            if (totalSize > 10 * 1024 * 1024) {
+            if (totalSize > 4.5 * 1024 * 1024) {
                 throw new IllegalArgumentException(
                         String.format("El tamaño total de los archivos excede el límite de 10MB. Tamaño actual: %.2f MB",
                                 totalSize / (1024.0 * 1024.0)));
             }
 
             for (MultipartFile adjunto : adjuntos) {
-                if (adjunto.getSize() > 5 * 1024 * 1024) {
+                if (adjunto.getSize() > 1.5 * 1024 * 1024) {
                     throw new IllegalArgumentException(
-                            String.format("El archivo '%s' excede el límite de 5MB por archivo. Tamaño: %.2f MB",
+                            String.format("El archivo '%s' excede el límite de 1.5MB por archivo. Tamaño: %.2f MB",
                                     adjunto.getOriginalFilename(),
                                     adjunto.getSize() / (1024.0 * 1024.0)));
                 }
@@ -145,9 +145,9 @@ public class PlantillaCorreoService {
             }
 
             for (MultipartFile adjunto : adjuntos) {
-                if (adjunto.getSize() > 5 * 1024 * 1024) {
+                if (adjunto.getSize() > 1.5 * 1024 * 1024) {
                     throw new IllegalArgumentException(
-                            String.format("El archivo '%s' excede el límite de 5MB por archivo. Tamaño: %.2f MB",
+                            String.format("El archivo '%s' excede el límite de 1.5MB por archivo. Tamaño: %.2f MB",
                                     adjunto.getOriginalFilename(),
                                     adjunto.getSize() / (1024.0 * 1024.0)));
                 }

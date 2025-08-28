@@ -143,7 +143,7 @@ public class EmailService {
         connection.setReadTimeout(15000);
 
         int contentLength = connection.getContentLength();
-        if (contentLength > 10 * 1024 * 1024) {
+        if (contentLength > 1.5 * 1024 * 1024) {
             throw new IOException("Archivo demasiado grande para procesar: " + contentLength + " bytes");
         }
 
@@ -336,7 +336,7 @@ public class EmailService {
         String fileName = tempFilePath.getFileName().toString();
 
         long fileSize = Files.size(tempFilePath);
-        if (fileSize > 10 * 1024 * 1024) {
+        if (fileSize > 1.5 * 1024 * 1024) {
             throw new IOException("Archivo demasiado grande: " + fileSize + " bytes");
         }
 
