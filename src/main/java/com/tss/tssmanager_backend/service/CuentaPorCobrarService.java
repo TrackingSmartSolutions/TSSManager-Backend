@@ -412,6 +412,16 @@ public class CuentaPorCobrarService {
         connection.setRequestMethod("GET");
         connection.connect();
 
+        if (connection.getResponseCode() == 302 || connection.getResponseCode() == 301) {
+            String redirectUrl = connection.getHeaderField("Location");
+            connection.disconnect();
+
+            url = new java.net.URL(redirectUrl);
+            connection = (java.net.HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.connect();
+        }
+
         if (connection.getResponseCode() != 200) {
             throw new Exception("Error al acceder al archivo en Cloudinary: " + connection.getResponseMessage());
         }
