@@ -394,72 +394,31 @@ public class CuentaPorCobrarService {
             throw new ResourceNotFoundException("No se encontró el comprobante de pago asociado a esta cuenta.");
         }
 
+        // Validar si la URL indica un error de subida
         if ("ERROR_UPLOAD".equals(cuenta.getComprobantePagoUrl()) ||
                 "UPLOADING".equals(cuenta.getComprobantePagoUrl())) {
             throw new ResourceNotFoundException("El comprobante de pago no se pudo subir correctamente o está en proceso de subida.");
         }
 
+        // Validar que la URL sea válida
         if (!cuenta.getComprobantePagoUrl().startsWith("http://") &&
                 !cuenta.getComprobantePagoUrl().startsWith("https://")) {
             throw new ResourceNotFoundException("La URL del comprobante de pago no es válida.");
         }
 
-        // Para Google Drive, usar un enfoque diferente
-        if (cuenta.getComprobantePagoUrl().contains("drive.google.com")) {
-            return descargarDesdeGoogleDrive(cuenta.getComprobantePagoUrl());
-        }
-
-        // Para Cloudinary u otras URLs
+        // Hacer una solicitud a Cloudinary para obtener el archivo
         java.net.URL url = new java.net.URL(cuenta.getComprobantePagoUrl());
         java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
         connection.setRequestMethod("GET");
-        connection.setInstanceFollowRedirects(true);
         connection.connect();
 
         if (connection.getResponseCode() != 200) {
-            throw new Exception("Error al acceder al archivo: " + connection.getResponseMessage());
+            throw new Exception("Error al acceder al archivo en Cloudinary: " + connection.getResponseMessage());
         }
 
         byte[] fileContent = connection.getInputStream().readAllBytes();
         connection.disconnect();
-        return fileContent;
-    }
 
-    private byte[] descargarDesdeGoogleDrive(String googleDriveUrl) throws Exception {
-        // Configurar conexión específica para Google Drive
-        java.net.URL url = new java.net.URL(googleDriveUrl);
-        java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
-
-        // Headers específicos para Google Drive
-        connection.setRequestMethod("GET");
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-        connection.setInstanceFollowRedirects(false); // Manejar redirecciones manualmente
-        connection.connect();
-
-        // Manejar redirecciones de Google Drive
-        int responseCode = connection.getResponseCode();
-        if (responseCode == 302 || responseCode == 301) {
-            String redirectUrl = connection.getHeaderField("Location");
-            connection.disconnect();
-
-            if (redirectUrl != null && !redirectUrl.trim().isEmpty()) {
-                // Limpiar la URL de caracteres problemáticos
-                redirectUrl = redirectUrl.trim().replaceAll("\\r|\\n", "");
-                url = new java.net.URL(redirectUrl);
-                connection = (java.net.HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-                connection.connect();
-                responseCode = connection.getResponseCode();
-            }
-        }
-
-        if (responseCode != 200) {
-            throw new Exception("Error al descargar desde Google Drive: " + connection.getResponseMessage());
-        }
-
-        byte[] fileContent = connection.getInputStream().readAllBytes();
-        connection.disconnect();
         return fileContent;
     }
 }
