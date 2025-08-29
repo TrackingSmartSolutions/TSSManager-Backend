@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CoordenadasCacheRepository extends JpaRepository<CoordenadasCache, Long> {
+public interface CoordenadasCacheRepository extends JpaRepository<CoordenadasCache, Integer> {
 
     Optional<CoordenadasCache> findByDireccionHash(String direccionHash);
 

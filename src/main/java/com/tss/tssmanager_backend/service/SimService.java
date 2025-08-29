@@ -54,7 +54,6 @@ public class SimService {
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
 
-    @CacheEvict(value = {"gruposDisponibles", "simsDisponibles"}, allEntries = true)
     @Transactional
     public Sim guardarSim(Sim sim) {
 
@@ -158,10 +157,13 @@ public class SimService {
         // Crear transacción automática para SIMs de TSS
         if (savedSim.getResponsable() == ResponsableSimEnum.TSS && esSimNueva) {
             try {
+                System.out.println("Iniciando proceso de creación de transacción automática para SIM nueva: " + savedSim.getNumero());
                 crearTransaccionAutomatica(savedSim);
+                System.out.println("Proceso de transacción automática completado para SIM: " + savedSim.getNumero());
             } catch (Exception e) {
                 System.err.println("Error al crear transacción automática para SIM " + savedSim.getNumero() + ": " + e.getMessage());
-                // No fallar la creación de la SIM por un error en la transacción
+                e.printStackTrace();
+                throw new RuntimeException("Error crítico al crear transacción automática: " + e.getMessage(), e);
             }
         }
 
@@ -170,104 +172,145 @@ public class SimService {
                 actualizarCuentasPorPagarExistentes(savedSim);
             } catch (Exception e) {
                 System.err.println("Error al actualizar cuentas por pagar para SIM " + savedSim.getNumero() + ": " + e.getMessage());
+                e.printStackTrace();
             }
         }
+
+        // Limpiar caché al final del proceso
+        limpiarCacheSims();
 
         return savedSim;
     }
 
+    @CacheEvict(value = {"gruposDisponibles", "simsDisponibles"}, allEntries = true)
+    public void limpiarCacheSims() {
+        System.out.println("Cache de SIMs y grupos disponibles limpiado");
+    }
+
     private void crearTransaccionAutomatica(Sim sim) {
-        // Determinar la descripción de la categoría según la tarifa
-        String nombreCuenta = "AG";
-        if (sim.getEquipo() != null) {
-            // Primero verificar si tiene clienteId
-            if (sim.getEquipo().getClienteId() != null) {
-                try {
-                    Optional<Empresa> empresaOpt = empresaRepository.findById(sim.getEquipo().getClienteId());
-                    if (empresaOpt.isPresent()) {
-                        nombreCuenta = empresaOpt.get().getNombre();
-                    }
-                } catch (Exception e) {
-                    System.err.println("Error obteniendo empresa: " + e.getMessage());
-                    nombreCuenta = "AG";
-                }
-            }
-            // Si no tiene clienteId pero sí clienteDefault, usar el clienteDefault
-            else if (sim.getEquipo().getClienteDefault() != null) {
-                nombreCuenta = sim.getEquipo().getClienteDefault();
-            }
-        }
-
-        String descripcionCategoria;
-        if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
-            descripcionCategoria = "M2M";
-        } else {
-            descripcionCategoria = "TELCEL";
-        }
-
-        Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcionIgnoreCase(descripcionCategoria);
-        CategoriaTransacciones categoria;
-
-        if (categoriaOpt.isPresent()) {
-            categoria = categoriaOpt.get();
-        } else {
-            categoria = new CategoriaTransacciones();
-            categoria.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
-            categoria.setDescripcion(descripcionCategoria);
-            categoria = categoriaRepository.save(categoria);
-        }
-
-        CuentasTransacciones cuentaTransaccion = buscarOCrearCuentaConCategoria(nombreCuenta, categoria);
-        BigDecimal monto = sim.getRecarga() != null ? sim.getRecarga() : new BigDecimal("50.00");
-
-        // Obtener fecha de pago basada en la vigencia de la SIM
-        LocalDate fechaPago;
-        if (sim.getVigencia() != null) {
-            fechaPago = sim.getVigencia().toLocalDate();
-        } else {
-            fechaPago = LocalDate.now().plusDays(30);
-        }
-
-        // Crear la transacción
-        Transaccion transaccion = new Transaccion();
-        transaccion.setFecha(LocalDate.now());
-        transaccion.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
-        transaccion.setCategoria(categoria);
-        transaccion.setCuenta(cuentaTransaccion);
-        transaccion.setEsquema(EsquemaTransaccionEnum.MENSUAL);
-        transaccion.setNumeroPagos(1);
-        transaccion.setFechaPago(fechaPago);
-        transaccion.setMonto(monto);
-        transaccion.setFormaPago("01");
-        transaccion.setNotas("");
-
-        transaccionService.agregarTransaccion(transaccion);
+        System.out.println("=== INICIO crearTransaccionAutomatica para SIM: " + sim.getNumero() + " ===");
 
         try {
-            List<CuentaPorPagar> cuentasCreadas = cuentaPorPagarRepository.findByTransaccionId(transaccion.getId());
-            for (CuentaPorPagar cuenta : cuentasCreadas) {
-                cuenta.setSim(sim);
-                cuentaPorPagarRepository.save(cuenta);
+            // Determinar la descripción de la categoría según la tarifa
+            String nombreCuenta = "AG";
+            if (sim.getEquipo() != null) {
+                System.out.println("SIM tiene equipo vinculado: " + sim.getEquipo().getImei());
+                // Primero verificar si tiene clienteId
+                if (sim.getEquipo().getClienteId() != null) {
+                    try {
+                        Optional<Empresa> empresaOpt = empresaRepository.findById(sim.getEquipo().getClienteId());
+                        if (empresaOpt.isPresent()) {
+                            nombreCuenta = empresaOpt.get().getNombre();
+                            System.out.println("Cuenta determinada por clienteId: " + nombreCuenta);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error obteniendo empresa por clienteId: " + e.getMessage());
+                        nombreCuenta = "AG";
+                    }
+                }
+                // Si no tiene clienteId pero sí clienteDefault, usar el clienteDefault
+                else if (sim.getEquipo().getClienteDefault() != null) {
+                    nombreCuenta = sim.getEquipo().getClienteDefault();
+                    System.out.println("Cuenta determinada por clienteDefault: " + nombreCuenta);
+                }
+            } else {
+                System.out.println("SIM sin equipo vinculado, usando cuenta por defecto: AG");
             }
 
-            System.out.println("SIM " + sim.getNumero() + " asociada a " + cuentasCreadas.size() + " cuentas por pagar");
+            String descripcionCategoria;
+            if (sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15) {
+                descripcionCategoria = "M2M";
+            } else {
+                descripcionCategoria = "TELCEL";
+            }
+            System.out.println("Categoría determinada: " + descripcionCategoria);
+
+            Optional<CategoriaTransacciones> categoriaOpt = categoriaRepository.findByDescripcionIgnoreCase(descripcionCategoria);
+            CategoriaTransacciones categoria;
+
+            if (categoriaOpt.isPresent()) {
+                categoria = categoriaOpt.get();
+                System.out.println("Categoría encontrada: " + categoria.getId());
+            } else {
+                System.out.println("Creando nueva categoría: " + descripcionCategoria);
+                categoria = new CategoriaTransacciones();
+                categoria.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
+                categoria.setDescripcion(descripcionCategoria);
+                categoria = categoriaRepository.save(categoria);
+                System.out.println("Nueva categoría creada con ID: " + categoria.getId());
+            }
+
+            CuentasTransacciones cuentaTransaccion = buscarOCrearCuentaConCategoria(nombreCuenta, categoria);
+            System.out.println("Cuenta de transacción obtenida: " + cuentaTransaccion.getId() + " - " + cuentaTransaccion.getNombre());
+
+            BigDecimal monto = sim.getRecarga() != null ? sim.getRecarga() : new BigDecimal("50.00");
+            System.out.println("Monto de la transacción: " + monto);
+
+            // Obtener fecha de pago basada en la vigencia de la SIM
+            LocalDate fechaPago;
+            if (sim.getVigencia() != null) {
+                fechaPago = sim.getVigencia().toLocalDate();
+            } else {
+                fechaPago = LocalDate.now().plusDays(30);
+            }
+            System.out.println("Fecha de pago calculada: " + fechaPago);
+
+            // Crear la transacción
+            Transaccion transaccion = new Transaccion();
+            transaccion.setFecha(LocalDate.now());
+            transaccion.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
+            transaccion.setCategoria(categoria);
+            transaccion.setCuenta(cuentaTransaccion);
+            transaccion.setEsquema(EsquemaTransaccionEnum.MENSUAL);
+            transaccion.setNumeroPagos(1);
+            transaccion.setFechaPago(fechaPago);
+            transaccion.setMonto(monto);
+            transaccion.setFormaPago("01");
+            transaccion.setNotas("Transacción automática para SIM");
+
+            System.out.println("Llamando a transaccionService.agregarTransaccion...");
+            transaccionService.agregarTransaccion(transaccion);
+            System.out.println("Transacción creada exitosamente con ID: " + transaccion.getId());
+
+            // Pausa pequeña para asegurar que la transacción se haya guardado completamente
+            Thread.sleep(100);
+
+            // Buscar las cuentas por pagar creadas
+            List<CuentaPorPagar> cuentasCreadas = cuentaPorPagarRepository.findByTransaccionId(transaccion.getId());
+            System.out.println("Cuentas por pagar encontradas: " + cuentasCreadas.size());
+
+            if (cuentasCreadas.isEmpty()) {
+                System.err.println("ALERTA: No se encontraron cuentas por pagar para la transacción " + transaccion.getId());
+                throw new RuntimeException("No se generaron cuentas por pagar para la transacción");
+            }
+
+            // Asociar cada cuenta por pagar a la SIM
+            for (CuentaPorPagar cuenta : cuentasCreadas) {
+                System.out.println("Asociando cuenta por pagar " + cuenta.getId() + " a SIM " + sim.getNumero());
+                cuenta.setSim(sim);
+                cuentaPorPagarRepository.save(cuenta);
+                System.out.println("Cuenta por pagar " + cuenta.getId() + " asociada exitosamente");
+            }
+
+            System.out.println("SIM " + sim.getNumero() + " asociada exitosamente a " + cuentasCreadas.size() + " cuentas por pagar");
+            System.out.println("=== FIN crearTransaccionAutomatica para SIM: " + sim.getNumero() + " ===");
+
         } catch (Exception e) {
-            System.err.println("Error al asociar SIM a cuentas por pagar: " + e.getMessage());
+            System.err.println("=== ERROR en crearTransaccionAutomatica para SIM: " + sim.getNumero() + " ===");
+            System.err.println("Mensaje de error: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("=== FIN ERROR ===");
+            throw new RuntimeException("Error crítico en creación de transacción automática: " + e.getMessage(), e);
         }
     }
 
     private CuentasTransacciones buscarOCrearCuentaConCategoria(String nombreCuenta, CategoriaTransacciones categoria) {
-        List<CuentasTransacciones> cuentasExistentes = cuentaRepository.findByNombre(nombreCuenta)
-                .map(List::of)
-                .orElse(Collections.emptyList());
+        // Buscar cuentas por nombre y categoría específica
+        List<CuentasTransacciones> cuentasExistentes = cuentaRepository.findByNombreAndCategoria_Id(nombreCuenta, categoria.getId());
 
-        Optional<CuentasTransacciones> cuentaConCategoriaCorrecta = cuentasExistentes.stream()
-                .filter(cuenta -> cuenta.getCategoria().getId().equals(categoria.getId()))
-                .findFirst();
-
-        if (cuentaConCategoriaCorrecta.isPresent()) {
+        if (!cuentasExistentes.isEmpty()) {
             System.out.println("Cuenta encontrada con categoría correcta: " + nombreCuenta + " - " + categoria.getDescripcion());
-            return cuentaConCategoriaCorrecta.get();
+            return cuentasExistentes.get(0);
         }
 
         // Si no existe, crear nueva cuenta con la categoría correcta
@@ -461,21 +504,6 @@ public class SimService {
         return dto;
     }
 
-    private CuentasTransacciones buscarOCrearCuenta(String nombreCuenta, CategoriaTransacciones categoria) {
-        Optional<CuentasTransacciones> cuentaExistente = cuentaRepository.findByNombre(nombreCuenta);
-
-        if (cuentaExistente.isPresent()) {
-            System.out.println("Cuenta encontrada: " + nombreCuenta);
-            return cuentaExistente.get();
-        }
-
-        System.out.println("Creando nueva cuenta: " + nombreCuenta);
-        CuentasTransacciones nuevaCuenta = new CuentasTransacciones();
-        nuevaCuenta.setNombre(nombreCuenta);
-        nuevaCuenta.setCategoria(categoria);
-
-        return cuentaRepository.save(nuevaCuenta);
-    }
 
     private SimDTO convertFromOptimizedQuery(Object[] row) {
         SimDTO dto = new SimDTO();
