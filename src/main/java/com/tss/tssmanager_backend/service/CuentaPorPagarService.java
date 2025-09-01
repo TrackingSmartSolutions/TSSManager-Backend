@@ -78,15 +78,15 @@ public class CuentaPorPagarService {
         cuentasPorPagarRepository.save(cuenta);
 
         Transaccion transaccionPago = new Transaccion();
-        transaccionPago.setFecha(transaccionOriginal.getFecha());
+        transaccionPago.setFecha(cuenta.getFechaPago());
         transaccionPago.setTipo(com.tss.tssmanager_backend.enums.TipoTransaccionEnum.GASTO);
         transaccionPago.setCategoria(transaccionOriginal.getCategoria());
         transaccionPago.setCuenta(cuenta.getCuenta());
         transaccionPago.setMonto(montoPago);
         transaccionPago.setEsquema(com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum.UNICA);
-        transaccionPago.setFechaPago(transaccionOriginal.getFechaPago());
+        transaccionPago.setFechaPago(cuenta.getFechaPago());
         transaccionPago.setFormaPago(cuenta.getFormaPago());
-        transaccionPago.setNotas("Transacción generada desde Cuentas por Pagar - "+ transaccionOriginal.getNotas());
+        transaccionPago.setNotas("Transacción generada desde Cuentas por Pagar "+ transaccionOriginal.getNotas());
         transaccionPago.setFechaCreacion(LocalDateTime.now());
         transaccionPago.setFechaModificacion(LocalDateTime.now());
         transaccionRepository.save(transaccionPago);
