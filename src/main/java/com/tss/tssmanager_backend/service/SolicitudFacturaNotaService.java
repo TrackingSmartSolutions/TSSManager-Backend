@@ -392,14 +392,31 @@ public class SolicitudFacturaNotaService {
     public ByteArrayResource generateSolicitudPDF(Integer id) throws Exception {
         logger.info("Generando PDF para solicitud con ID: {}", id);
 
-        SolicitudFacturaNota solicitud = solicitudRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + id));
+        SolicitudFacturaNota solicitud = entityManager
+                .createQuery("SELECT s FROM SolicitudFacturaNota s " +
+                        "LEFT JOIN FETCH s.emisor " +
+                        "LEFT JOIN FETCH s.cliente " +
+                        "LEFT JOIN FETCH s.cuentaPorCobrar c " +
+                        "LEFT JOIN FETCH c.cliente " +
+                        "LEFT JOIN FETCH s.cotizacion cot " +
+                        "LEFT JOIN FETCH cot.unidades " +
+                        "WHERE s.id = :id", SolicitudFacturaNota.class)
+                .setParameter("id", id)
+                .getSingleResult();
+
+        if (solicitud == null) {
+            throw new ResourceNotFoundException("Solicitud no encontrada con id: " + id);
+        }
 
         Document document = new Document(PageSize.A4, 40, 40, 90, 50);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PdfWriter writer = PdfWriter.getInstance(document, out);
 
+        writer.setCompressionLevel(9);
+        writer.setFullCompression();
+
         document.open();
+        System.gc();
 
         try {
             Image membrete = cargarMembrete();
@@ -529,8 +546,11 @@ public class SolicitudFacturaNotaService {
 
         Cotizacion cotizacion = solicitud.getCotizacion();
         if (cotizacion != null && cotizacion.getUnidades() != null) {
+            List<UnidadCotizacion> unidades = cotizacion.getUnidades();
             boolean isEvenRow = false;
-            for (UnidadCotizacion unidad : cotizacion.getUnidades()) {
+
+            for (int i = 0; i < unidades.size(); i++) {
+                UnidadCotizacion unidad = unidades.get(i);
                 Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
                 conceptosTable.addCell(createStyledTableCell(
@@ -547,7 +567,12 @@ public class SolicitudFacturaNotaService {
                         rowColor
                 ));
 
-                PdfPCell conceptoCell = new PdfPCell(new Phrase(unidad.getConcepto(), normalFont));
+                String concepto = unidad.getConcepto();
+                if (concepto.length() > 200) {
+                    concepto = concepto.substring(0, 197) + "...";
+                }
+
+                PdfPCell conceptoCell = new PdfPCell(new Phrase(concepto, normalFont));
                 conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
                 conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
                 conceptoCell.setPadding(8);
@@ -584,6 +609,10 @@ public class SolicitudFacturaNotaService {
                 ));
 
                 isEvenRow = !isEvenRow;
+
+                if (i % 10 == 0) {
+                    System.gc();
+                }
             }
         }
 
@@ -593,6 +622,8 @@ public class SolicitudFacturaNotaService {
                 normalFont, boldFont, totalFont, headerTableFont, rojoDestacado);
 
         document.close();
+        writer.close();
+        System.gc();
         return new ByteArrayResource(out.toByteArray());
     }
 
