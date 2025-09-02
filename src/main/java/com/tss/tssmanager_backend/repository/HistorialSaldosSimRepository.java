@@ -18,4 +18,5 @@ public interface HistorialSaldosSimRepository extends JpaRepository<HistorialSal
 
     @Query("SELECT h FROM HistorialSaldosSim h WHERE h.sim.numero = :numero ORDER BY h.fecha DESC, h.id DESC")
     List<HistorialSaldosSim> findBySimNumeroOrderByFechaDesc(@Param("numero") String numero);
+    
 }
