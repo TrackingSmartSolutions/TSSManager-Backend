@@ -20,6 +20,7 @@ public class SimDTO {
     private Integer grupo;
     private String contrasena;
     private String equipoImei;
+    private String ultimoSaldoRegistrado;
 
     @Deprecated
     private Integer equipoId;

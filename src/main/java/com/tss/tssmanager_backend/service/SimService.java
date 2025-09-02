@@ -22,9 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -381,6 +379,17 @@ public class SimService {
                 .map(this::convertFromOptimizedQuery)
                 .collect(Collectors.toList());
 
+        List<Integer> simIds = content.stream()
+                .map(SimDTO::getId)
+                .collect(Collectors.toList());
+
+        Map<Integer, String> ultimosSaldos = obtenerUltimosSaldosParaLista(simIds);
+
+        content.forEach(sim -> {
+            String ultimoSaldo = ultimosSaldos.getOrDefault(sim.getId(), "N/A");
+            sim.setUltimoSaldoRegistrado(ultimoSaldo);
+        });
+
         return new PagedResponseDTO<>(
                 content,
                 page,
@@ -557,5 +566,45 @@ public class SimService {
         return historial.stream()
                 .max((h1, h2) -> h1.getFecha().compareTo(h2.getFecha()))
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Integer, String> obtenerUltimosSaldosParaLista(List<Integer> simIds) {
+        Map<Integer, String> ultimosSaldos = new HashMap<>();
+
+        for (Integer simId : simIds) {
+            try {
+                Sim sim = simRepository.findById(simId).orElse(null);
+                if (sim == null) continue;
+
+                List<HistorialSaldosSim> historial = historialSaldosSimRepository.findBySimNumero(sim.getNumero());
+
+                if (!historial.isEmpty()) {
+                    HistorialSaldosSim ultimoRegistro = historial.stream()
+                            .max((h1, h2) -> h1.getFecha().compareTo(h2.getFecha()))
+                            .orElse(null);
+
+                    if (ultimoRegistro != null) {
+                        if (sim.getTarifa() == TarifaSimEnum.POR_SEGUNDO && ultimoRegistro.getSaldoActual() != null) {
+                            ultimosSaldos.put(simId, "$" + ultimoRegistro.getSaldoActual().toString());
+                        } else if ((sim.getTarifa() == TarifaSimEnum.SIN_LIMITE || sim.getTarifa() == TarifaSimEnum.M2M_GLOBAL_15)
+                                && ultimoRegistro.getDatos() != null) {
+                            int datosEnteros = ultimoRegistro.getDatos().intValue();
+                            ultimosSaldos.put(simId, datosEnteros + " MB");
+                        } else {
+                            ultimosSaldos.put(simId, "N/A");
+                        }
+                    } else {
+                        ultimosSaldos.put(simId, "N/A");
+                    }
+                } else {
+                    ultimosSaldos.put(simId, "Sin registros");
+                }
+            } catch (Exception e) {
+                ultimosSaldos.put(simId, "Error");
+            }
+        }
+
+        return ultimosSaldos;
     }
 }
