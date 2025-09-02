@@ -19,4 +19,4 @@ RUN mvn clean install -DskipTests
 EXPOSE 8080
 
 # Comando para ejecutar la aplicación JAR
-ENTRYPOINT ["java", "-Xms64m", "-Xmx256m", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=100", "-XX:+UseStringDeduplication", "-jar", "target/tssmanager-backend-0.0.1-SNAPSHOT.jar"]
+ENTRYPOINT ["java", "-jar", "target/tssmanager-backend-0.0.1-SNAPSHOT.jar"]
