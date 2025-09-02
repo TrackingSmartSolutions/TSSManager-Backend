@@ -20,3 +20,4 @@ EXPOSE 8080
 
 # Comando para ejecutar la aplicación JAR
 ENTRYPOINT ["java", "-jar", "target/tssmanager-backend-0.0.1-SNAPSHOT.jar"]
+
