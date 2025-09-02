@@ -482,7 +482,7 @@ public class SimService {
     public List<HistorialSaldosSim> obtenerHistorialSaldos(Integer simId) {
         Sim sim = simRepository.findById(simId)
                 .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada con ID: " + simId));
-        return historialSaldosSimRepository.findBySimNumero(sim.getNumero());
+        return historialSaldosSimRepository.findBySimNumeroOrderByFechaDesc(sim.getNumero());
     }
 
     private Integer generarNuevoGrupo() {
@@ -564,7 +564,7 @@ public class SimService {
         List<HistorialSaldosSim> historial = historialSaldosSimRepository.findBySimNumero(sim.getNumero());
 
         return historial.stream()
-                .max((h1, h2) -> h1.getFecha().compareTo(h2.getFecha()))
+                .findFirst()
                 .orElse(null);
     }
 
@@ -577,13 +577,10 @@ public class SimService {
                 Sim sim = simRepository.findById(simId).orElse(null);
                 if (sim == null) continue;
 
-                List<HistorialSaldosSim> historial = historialSaldosSimRepository.findBySimNumero(sim.getNumero());
+                List<HistorialSaldosSim> historial = historialSaldosSimRepository.findBySimNumeroOrderByFechaDesc(sim.getNumero());
 
                 if (!historial.isEmpty()) {
-                    HistorialSaldosSim ultimoRegistro = historial.stream()
-                            .max((h1, h2) -> h1.getFecha().compareTo(h2.getFecha()))
-                            .orElse(null);
-
+                    HistorialSaldosSim ultimoRegistro = historial.get(0);
                     if (ultimoRegistro != null) {
                         if (sim.getTarifa() == TarifaSimEnum.POR_SEGUNDO && ultimoRegistro.getSaldoActual() != null) {
                             ultimosSaldos.put(simId, "$" + ultimoRegistro.getSaldoActual().toString());
@@ -594,7 +591,8 @@ public class SimService {
                         } else {
                             ultimosSaldos.put(simId, "N/A");
                         }
-                    } else {
+                    }
+                     else {
                         ultimosSaldos.put(simId, "N/A");
                     }
                 } else {

@@ -4,6 +4,7 @@ import com.tss.tssmanager_backend.entity.HistorialSaldosSim;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -14,4 +15,7 @@ public interface HistorialSaldosSimRepository extends JpaRepository<HistorialSal
 
     @Query("SELECT h FROM HistorialSaldosSim h WHERE h.sim.numero = :simNumero ORDER BY h.fecha DESC")
     List<HistorialSaldosSim> findBySimNumero(String simNumero);
+
+    @Query("SELECT h FROM HistorialSaldosSim h WHERE h.sim.numero = :numero ORDER BY h.fecha DESC, h.id DESC")
+    List<HistorialSaldosSim> findBySimNumeroOrderByFechaDesc(@Param("numero") String numero);
 }
