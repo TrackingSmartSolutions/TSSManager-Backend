@@ -3,6 +3,8 @@ package com.tss.tssmanager_backend.service;
 import com.tss.tssmanager_backend.entity.CuentaPorPagar;
 import com.tss.tssmanager_backend.entity.Sim;
 import com.tss.tssmanager_backend.entity.Transaccion;
+import com.tss.tssmanager_backend.enums.ConceptoCreditoEnum;
+import com.tss.tssmanager_backend.enums.PlataformaEquipoEnum;
 import com.tss.tssmanager_backend.repository.CuentaPorPagarRepository;
 import com.tss.tssmanager_backend.repository.SimRepository;
 import com.tss.tssmanager_backend.repository.TransaccionRepository;
@@ -24,6 +26,9 @@ public class CuentaPorPagarService {
     private CuentaPorPagarRepository cuentasPorPagarRepository;
 
     @Autowired
+    private CreditoPlataformaService creditoPlataformaService;
+
+    @Autowired
     private TransaccionRepository transaccionRepository;
 
     @Autowired
@@ -37,7 +42,7 @@ public class CuentaPorPagarService {
     }
 
     @Transactional
-    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal montoPago, String formaPago, Integer usuarioId, boolean regenerarAutomaticamente) {
+    public void marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal montoPago, String formaPago, Integer usuarioId, boolean regenerarAutomaticamente, Integer cantidadCreditos) {
         CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
 
@@ -90,11 +95,65 @@ public class CuentaPorPagarService {
         transaccionPago.setFechaCreacion(LocalDateTime.now());
         transaccionPago.setFechaModificacion(LocalDateTime.now());
         transaccionRepository.save(transaccionPago);
+
+        // Registrar abono en créditos plataforma si es categoria de créditos
+        registrarAbonoCreditos(transaccionOriginal, montoPago, cuenta, cantidadCreditos);
+    }
+
+    private void registrarAbonoCreditos(Transaccion transaccion, BigDecimal monto, CuentaPorPagar cuenta, Integer cantidadCreditos) {
+        if (transaccion.getCategoria() != null &&
+                transaccion.getCategoria().getDescripcion().toLowerCase().contains("créditos plataforma")) {
+
+            PlataformaEquipoEnum plataforma = determinarPlataformaPorCuenta(transaccion.getCuenta());
+            String subtipo = determinarSubtipoPorCuenta(transaccion.getCuenta());
+
+            if (plataforma != null && cantidadCreditos != null && cantidadCreditos > 0) {
+                ConceptoCreditoEnum concepto = ConceptoCreditoEnum.COMPRA;
+                String nota = String.format("Compra de %d créditos", cantidadCreditos);
+
+                creditoPlataformaService.registrarAbonoConSubtipo(
+                        plataforma,
+                        concepto,
+                        new BigDecimal(cantidadCreditos),
+                        nota,
+                        transaccion.getId(),
+                        cuenta.getId(),
+                        subtipo
+                );
+            }
+        }
+    }
+
+    private String determinarSubtipoPorCuenta(com.tss.tssmanager_backend.entity.CuentasTransacciones cuenta) {
+        if (cuenta == null || cuenta.getNombre() == null) return null;
+
+        String nombreCuenta = cuenta.getNombre().toLowerCase();
+
+        if (nombreCuenta.contains("whatsgps anual")) {
+            return "ANUAL";
+        } else if (nombreCuenta.contains("whatsgps vitalicia")) {
+            return "VITALICIA";
+        }
+
+        return null;
+    }
+
+    private PlataformaEquipoEnum determinarPlataformaPorCuenta(com.tss.tssmanager_backend.entity.CuentasTransacciones cuenta) {
+        if (cuenta == null || cuenta.getNombre() == null) return null;
+
+        String nombreCuenta = cuenta.getNombre().toLowerCase();
+
+        if (nombreCuenta.contains("WhatsGPS") || nombreCuenta.contains("whatsgps")) {
+            return PlataformaEquipoEnum.WHATSGPS;
+        } else if (nombreCuenta.contains("Tracksolid") || nombreCuenta.contains("tracksolid")) {
+            return PlataformaEquipoEnum.TRACK_SOLID;
+        }
+        return null;
     }
 
     @Transactional
     public void marcarComoPagada(Integer id, BigDecimal monto, String formaPago, Integer usuarioId) {
-        marcarComoPagada(id, LocalDate.now(), monto, formaPago, usuarioId, false);
+        marcarComoPagada(id, LocalDate.now(), monto, formaPago, usuarioId, false, null);
     }
 
     @Transactional

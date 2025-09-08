@@ -46,7 +46,8 @@ public class CuentaPorPagarController {
                     request.getMontoPago(),
                     request.getFormaPago(),
                     request.getUsuarioId(),
-                    false
+                    false,
+                    request.getCantidadCreditos()
             );
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
@@ -125,7 +126,8 @@ public class CuentaPorPagarController {
                     dto.getMontoPago(),
                     dto.getFormaPago(),
                     dto.getUsuarioId() != null ? dto.getUsuarioId() : 1,
-                    true
+                    true,
+                    dto.getCantidadCreditos()
             );
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {

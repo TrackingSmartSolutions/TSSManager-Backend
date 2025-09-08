@@ -15,5 +15,6 @@ public class CuentaPorPagarDTO {
     private BigDecimal montoPagado;
     private BigDecimal saldoPendiente;
     private BigDecimal montoPago;
+    private Integer cantidadCreditos;
 
 }

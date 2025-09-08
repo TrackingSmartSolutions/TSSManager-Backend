@@ -174,11 +174,41 @@ public class EquipoController {
             equipo.setClienteId(null);
             equipo.setClienteDefault(null);
         }
+        Object creditosUsadosObj = equipoMap.get("creditosUsados");
+        if (creditosUsadosObj instanceof Integer) {
+            equipo.setCreditosUsados((Integer) creditosUsadosObj);
+        } else if (creditosUsadosObj instanceof String) {
+            try {
+                equipo.setCreditosUsados(Integer.parseInt((String) creditosUsadosObj));
+            } catch (NumberFormatException e) {
+                equipo.setCreditosUsados(0);
+            }
+        } else {
+            equipo.setCreditosUsados(0);
+        }
         return equipo;
     }
 
     @GetMapping("/dashboard-estatus")
     public ResponseEntity<Map<String, Object>> obtenerDashboardEstatus() {
         return ResponseEntity.ok(service.obtenerDashboardEstatusOptimizado());
+    }
+
+    @PostMapping("/{id}/activar-con-creditos")
+    public ResponseEntity<Void> activarEquipoConCreditos(
+            @PathVariable Integer id,
+            @RequestBody Map<String, Object> request) {
+        Integer creditosUsados = (Integer) request.get("creditosUsados");
+        service.activarEquipoConCreditos(id, creditosUsados);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{id}/renovar-con-creditos")
+    public ResponseEntity<Void> renovarEquipoConCreditos(
+            @PathVariable Integer id,
+            @RequestBody Map<String, Object> request) {
+        Integer creditosUsados = (Integer) request.get("creditosUsados");
+        service.renovarEquipoConCreditos(id, creditosUsados);
+        return ResponseEntity.ok().build();
     }
 }

@@ -214,7 +214,7 @@ public class CotizacionService {
                 .collect(Collectors.toList());
     }
 
-    private CotizacionDTO convertToDTO(Cotizacion cotizacion) {
+    public CotizacionDTO convertToDTO(Cotizacion cotizacion) {
         CotizacionDTO dto = new CotizacionDTO();
         dto.setId(cotizacion.getId());
         dto.setClienteNombre(cotizacion.getCliente().getNombre());

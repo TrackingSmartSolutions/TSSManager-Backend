@@ -62,4 +62,7 @@ public class Equipo {
     @Column(name = "cliente_default", length = 10)
     private String clienteDefault;
 
+    @Column(name = "creditos_usados", nullable = false)
+    private Integer creditosUsados = 0;
+
 }

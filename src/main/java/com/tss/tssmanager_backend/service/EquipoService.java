@@ -3,9 +3,7 @@ package com.tss.tssmanager_backend.service;
 import com.tss.tssmanager_backend.dto.EquiposEstatusDTO;
 import com.tss.tssmanager_backend.entity.Equipo;
 import com.tss.tssmanager_backend.entity.EquiposEstatus;
-import com.tss.tssmanager_backend.enums.EstatusEquipoEnum;
-import com.tss.tssmanager_backend.enums.EstatusReporteEquipoEnum;
-import com.tss.tssmanager_backend.enums.TipoActivacionEquipoEnum;
+import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
 import com.tss.tssmanager_backend.repository.EquiposEstatusRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -19,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 
+import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -34,6 +33,9 @@ public class EquipoService {
 
     @Autowired
     private EquiposEstatusRepository equiposEstatusRepository;
+
+    @Autowired
+    private CreditoPlataformaService creditoPlataformaService;
 
     public Iterable<Equipo> obtenerTodosLosEquipos() {
         return repository.findAllWithSims();
@@ -72,21 +74,67 @@ public class EquipoService {
         throw new EntityNotFoundException("Equipo no encontrado con ID: " + id);
     }
 
+    @Transactional
     @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public Equipo guardarEquipo(Equipo equipo) {
+        boolean debeRegistrarCargo = false;
+        Integer creditosARegistrar = 0;
+
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+
+            if (equipo.getCreditosUsados() != null &&
+                    equipo.getCreditosUsados() > 0 &&
+                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
+                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                debeRegistrarCargo = true;
+                creditosARegistrar = equipo.getCreditosUsados();
+            }
+        }
+
+        if (equipo.getCreditosUsados() == null) {
+            equipo.setCreditosUsados(0);
         }
         if (equipo.getClienteDefault() != null) {
             System.out.println("Guardando equipo con cliente default: " + equipo.getClienteDefault());
         }
-        return repository.save(equipo);
+
+        Equipo equipoGuardado = repository.save(equipo);
+
+        if (debeRegistrarCargo) {
+            String subtipo = null;
+            if (equipoGuardado.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                subtipo = equipoGuardado.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
+            }
+
+            creditoPlataformaService.registrarCargoConSubtipo(
+                    equipoGuardado.getPlataforma(),
+                    ConceptoCreditoEnum.INTEGRACION,
+                    new BigDecimal(creditosARegistrar),
+                    "Integración de equipo: " + equipoGuardado.getNombre(),
+                    equipoGuardado.getId(),
+                    subtipo
+            );
+        }
+
+        return equipoGuardado;
     }
 
+    @Transactional
     @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public Equipo actualizarEquipo(Integer id, Equipo equipoDetails) {
         Equipo equipo = obtenerEquipo(id);
+
+        // Guardar el estado anterior
+        EstatusEquipoEnum estatusAnterior = equipo.getEstatus();
+        Integer creditosAnteriores = equipo.getCreditosUsados();
+
+        // Preparar flag para cargo
+        boolean debeRegistrarCargo = false;
+        Integer creditosARegistrar = 0;
+
+        // Actualizar todos los campos
         equipo.setImei(equipoDetails.getImei());
         equipo.setNombre(equipoDetails.getNombre());
         equipo.setModeloId(equipoDetails.getModeloId());
@@ -98,10 +146,35 @@ public class EquipoService {
         equipo.setPlataforma(equipoDetails.getPlataforma());
         equipo.setSimReferenciada(equipoDetails.getSimReferenciada());
         equipo.setClienteDefault(equipoDetails.getClienteDefault());
+        equipo.setCreditosUsados(equipoDetails.getCreditosUsados() != null ? equipoDetails.getCreditosUsados() : 0);
 
+        // Manejar cambio de estatus
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+
+            // Verificar si debe registrar cargo
+            if (estatusAnterior != EstatusEquipoEnum.ACTIVO &&
+                    equipo.getCreditosUsados() != null &&
+                    equipo.getCreditosUsados() > 0 &&
+                    (creditosAnteriores == null || creditosAnteriores == 0) &&
+                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
+                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                debeRegistrarCargo = true;
+                creditosARegistrar = equipo.getCreditosUsados();
+            }
+// Verificar si cambió la cantidad de créditos (sin cambiar estatus)
+            else if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO &&
+                    estatusAnterior == EstatusEquipoEnum.ACTIVO &&
+                    creditosAnteriores != null &&
+                    equipo.getCreditosUsados() != null &&
+                    !equipo.getCreditosUsados().equals(creditosAnteriores) &&
+                    equipo.getCreditosUsados() > creditosAnteriores &&
+                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
+                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                debeRegistrarCargo = true;
+                creditosARegistrar = equipo.getCreditosUsados() - creditosAnteriores;
+            }
         } else if (equipo.getEstatus() == EstatusEquipoEnum.INACTIVO) {
             equipo.setFechaActivacion(null);
             equipo.setFechaExpiracion(null);
@@ -113,7 +186,27 @@ public class EquipoService {
             System.out.println("Actualizando equipo con cliente default: " + equipo.getClienteDefault());
         }
 
-        return repository.save(equipo);
+        // PRIMERO guardar el equipo actualizado
+        Equipo equipoActualizado = repository.save(equipo);
+
+        // DESPUÉS registrar el cargo si es necesario
+        if (debeRegistrarCargo) {
+            String subtipo = null;
+            if (equipoActualizado.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                subtipo = equipoActualizado.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
+            }
+
+            creditoPlataformaService.registrarCargoConSubtipo(
+                    equipoActualizado.getPlataforma(),
+                    ConceptoCreditoEnum.INTEGRACION,
+                    new BigDecimal(creditosARegistrar),
+                    "Integración de equipo: " + equipoActualizado.getNombre(),
+                    equipoActualizado.getId(),
+                    subtipo
+            );
+        }
+
+        return equipoActualizado;
     }
 
     @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
@@ -321,6 +414,83 @@ public class EquipoService {
                 })
                 .sorted((a, b) -> Integer.compare((Integer) b.get("cantidad"), (Integer) a.get("cantidad")))
                 .collect(Collectors.toList());
+    }
+
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
+    public void activarEquipoConCreditos(Integer id, Integer creditosUsados) {
+        Equipo equipo = obtenerEquipo(id);
+        if (equipo.getEstatus() == EstatusEquipoEnum.INACTIVO) {
+            equipo.setEstatus(EstatusEquipoEnum.ACTIVO);
+            equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+            equipo.setCreditosUsados(creditosUsados != null ? creditosUsados : 0);
+            repository.save(equipo);
+
+            // Registrar cargo en créditos plataforma
+            if (creditosUsados != null && creditosUsados > 0 &&
+                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
+                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+
+                String subtipo = null;
+                if (equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                    subtipo = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
+                }
+
+                creditoPlataformaService.registrarCargoConSubtipo(
+                        equipo.getPlataforma(),
+                        ConceptoCreditoEnum.INTEGRACION,
+                        new BigDecimal(creditosUsados),
+                        "Integración de equipo: " + equipo.getNombre(),
+                        equipo.getId(),
+                        subtipo
+                );
+            }
+        }
+    }
+
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
+    public void renovarEquipoConCreditos(Integer id, Integer creditosUsados) {
+        Equipo equipo = obtenerEquipo(id);
+        if (needsRenewal(equipo)) {
+            equipo.setEstatus(EstatusEquipoEnum.ACTIVO);
+            equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+            equipo.setCreditosUsados(creditosUsados != null ? creditosUsados : 0);
+            repository.save(equipo);
+
+            // Registrar cargo en créditos plataforma solo para TRACK_SOLID y WHATSGPS
+            if (creditosUsados != null && creditosUsados > 0 &&
+                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
+                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+
+                ConceptoCreditoEnum concepto;
+                // Para WhatsGPS, distinguir entre anual y vitalicia
+                if (equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                    concepto = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL
+                            ? ConceptoCreditoEnum.RENOVACION_ANUAL
+                            : ConceptoCreditoEnum.RENOVACION_VITALICIA;
+                } else {
+                    // Para Track Solid
+                    concepto = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL
+                            ? ConceptoCreditoEnum.RENOVACION_ANUAL
+                            : ConceptoCreditoEnum.RENOVACION_VITALICIA;
+                }
+
+                String subtipo = null;
+                if (equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                    subtipo = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
+                }
+
+                creditoPlataformaService.registrarCargoConSubtipo(
+                        equipo.getPlataforma(),
+                        concepto,
+                        new BigDecimal(creditosUsados),
+                        "Renovación " + concepto.name().toLowerCase().replace("_", " ") + " - Equipo: " + equipo.getNombre(),
+                        equipo.getId(),
+                        subtipo
+                );
+            }
+        }
     }
 
 }

@@ -278,28 +278,6 @@ public class CuentaPorCobrarService {
         cuenta.setComprobantePagoUrl("UPLOADING");
         CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
 
-        try {
-            Cloudinary cloudinary = cloudinaryConfig.cloudinary();
-            Map<String, Object> uploadOptions = Map.of(
-                    "resource_type", "raw",
-                    "timeout", 30,
-                    "chunk_size", 6000000,
-                    "use_filename", true,
-                    "unique_filename", true
-            );
-
-            Map uploadResult = cloudinary.uploader().upload(comprobante.getBytes(), uploadOptions);
-            String comprobanteUrl = uploadResult.get("url").toString();
-
-            cuenta.setComprobantePagoUrl(comprobanteUrl);
-            savedCuenta = cuentaPorCobrarRepository.save(cuenta);
-
-        } catch (Exception e) {
-            logger.error("Error al subir comprobante para cuenta {}: {}", id, e.getMessage());
-            cuenta.setComprobantePagoUrl("ERROR_UPLOAD");
-            savedCuenta = cuentaPorCobrarRepository.save(cuenta);
-        }
-
         CategoriaTransacciones categoriaVentas = categoriaTransaccionesRepository.findByDescripcion("Ventas")
                 .orElseThrow(() -> new ResourceNotFoundException("Categoría 'Ventas' no encontrada"));
 
@@ -329,6 +307,29 @@ public class CuentaPorCobrarService {
         transaccion.setNotas("Transacción generada automáticamente desde Cuentas por Cobrar");
 
         transaccionService.agregarTransaccion(transaccion);
+
+
+        try {
+            Cloudinary cloudinary = cloudinaryConfig.cloudinary();
+            Map<String, Object> uploadOptions = Map.of(
+                    "resource_type", "raw",
+                    "timeout", 30,
+                    "chunk_size", 6000000,
+                    "use_filename", true,
+                    "unique_filename", true
+            );
+
+            Map uploadResult = cloudinary.uploader().upload(comprobante.getBytes(), uploadOptions);
+            String comprobanteUrl = uploadResult.get("url").toString();
+
+            cuenta.setComprobantePagoUrl(comprobanteUrl);
+            savedCuenta = cuentaPorCobrarRepository.save(cuenta);
+
+        } catch (Exception e) {
+            logger.error("Error al subir comprobante para cuenta {}: {}", id, e.getMessage());
+            cuenta.setComprobantePagoUrl("ERROR_UPLOAD");
+            savedCuenta = cuentaPorCobrarRepository.save(cuenta);
+        }
 
         return convertToDTO(savedCuenta);
     }
