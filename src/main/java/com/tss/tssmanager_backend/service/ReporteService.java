@@ -2,8 +2,10 @@ package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.ReporteDTO;
 import com.tss.tssmanager_backend.entity.Actividad;
+import com.tss.tssmanager_backend.entity.Usuario;
 import com.tss.tssmanager_backend.repository.ActividadRepository;
 import com.tss.tssmanager_backend.repository.NotaTratoRepository;
+import com.tss.tssmanager_backend.repository.UsuarioRepository;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,10 +24,24 @@ public class ReporteService {
     private ActividadRepository actividadRepository;
     @Autowired
     private NotaTratoRepository notaTratoRepository;
+    @Autowired
+    private UsuarioRepository usuarioRepository;
 
-    public ReporteDTO generarReporteActividades(LocalDate startDate, LocalDate endDate) {
+    public ReporteDTO generarReporteActividades(LocalDate startDate, LocalDate endDate, String nombreUsuario) {
         CustomUserDetails userDetails = (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        Integer userId = userDetails.getId();
+        Integer userId;
+
+        // Si se especifica un usuario y el usuario actual es ADMINISTRADOR
+        if (nombreUsuario != null && userDetails.getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMINISTRADOR"))) {
+            Usuario usuario = usuarioRepository.findByNombre(nombreUsuario);
+            if (usuario == null) {
+                throw new RuntimeException("Usuario no encontrado: " + nombreUsuario);
+            }
+            userId = usuario.getId();
+        } else {
+            userId = userDetails.getId();
+        }
 
         Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
         Instant end = endDate.atStartOfDay(ZoneId.systemDefault()).plusDays(1).toInstant();

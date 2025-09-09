@@ -53,7 +53,7 @@ public class TransaccionService {
 
         // Si no tiene cuenta asignada pero tiene nombre de cuenta, crear/buscar la cuenta
         if (transaccion.getCuenta() == null && transaccion.getNombreCuenta() != null) {
-            CuentasTransacciones cuenta = crearCuentaSiNoExiste(transaccion.getNombreCuenta(), transaccion.getCategoria());
+            CuentasTransacciones cuenta = crearCuentaSiNoExiste(transaccion.getNombreCuenta(), transaccion.getCategoria().getId());
             transaccion.setCuenta(cuenta);
         }
 
@@ -73,8 +73,12 @@ public class TransaccionService {
     }
 
     @Transactional
-    private CuentasTransacciones crearCuentaSiNoExiste(String nombreCuenta, CategoriaTransacciones categoria) {
-        // Verificar si la cuenta ya existe
+    private CuentasTransacciones crearCuentaSiNoExiste(String nombreCuenta, Integer categoriaId) {
+        // Buscar la categoría por ID
+        CategoriaTransacciones categoria = categoriaRepository.findById(categoriaId)
+                .orElseThrow(() -> new IllegalArgumentException("La categoría con ID " + categoriaId + " no existe."));
+
+        // Verificar si la cuenta ya existe con ese nombre Y esa categoría específica
         CuentasTransacciones cuentaExistente = cuentaRepository.findByNombreAndCategoria(nombreCuenta, categoria);
         if (cuentaExistente != null) {
             return cuentaExistente;

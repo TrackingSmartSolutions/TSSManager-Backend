@@ -252,7 +252,7 @@ public class EquipoService {
         LocalDate today = LocalDate.now();
         LocalDate expirationDate = equipo.getFechaExpiracion().toLocalDate();
         long daysUntilExpiration = expirationDate.toEpochDay() - today.toEpochDay();
-        return daysUntilExpiration <= 30 && daysUntilExpiration >= 0;
+        return daysUntilExpiration <= 30;
     }
 
     private boolean isExpired(Equipo equipo) {
