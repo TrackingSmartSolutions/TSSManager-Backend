@@ -33,7 +33,8 @@ public class ReporteService {
 
         // Si se especifica un usuario y el usuario actual es ADMINISTRADOR
         if (nombreUsuario != null && userDetails.getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMINISTRADOR"))) {
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMINISTRADOR") ||
+                        auth.getAuthority().equals("ROLE_GESTOR"))) {
             Usuario usuario = usuarioRepository.findByNombre(nombreUsuario);
             if (usuario == null) {
                 throw new RuntimeException("Usuario no encontrado: " + nombreUsuario);

@@ -91,7 +91,7 @@ public class CalendarioService {
     private List<Actividad> obtenerActividadesOptimizada(String userRol, Integer userId, String usuario, LocalDate start, LocalDate end) {
         if ("ROLE_EMPLEADO".equals(userRol)) {
             return actividadRepository.findByAsignadoAIdAndFechaLimiteBetweenAndEstatusNot(userId, start, end, EstatusActividadEnum.CERRADA);
-        } else if ("ROLE_ADMINISTRADOR".equals(userRol)) {
+        } else if ("ROLE_ADMINISTRADOR".equals(userRol) || "ROLE_GESTOR".equals(userRol))  {
             if (usuario == null || usuario.equals("Todos los usuarios")) {
                 return actividadRepository.findByFechaLimiteBetweenAndEstatusNot(start, end, EstatusActividadEnum.CERRADA);
             } else {
@@ -108,12 +108,14 @@ public class CalendarioService {
     private boolean determinarSiMostrarCuentas(String userRol, String usuario) {
         if ("ROLE_EMPLEADO".equals(userRol)) {
             return false;
-        } else if ("ROLE_ADMINISTRADOR".equals(userRol)) {
+        } else if ("ROLE_ADMINISTRADOR".equals(userRol) || "ROLE_GESTOR".equals(userRol)) {
             if (usuario == null || usuario.equals("Todos los usuarios")) {
                 return true;
             } else {
                 Usuario assignedUser = usuarioRepository.findByNombre(usuario);
-                return assignedUser != null && assignedUser.getRol() == RolUsuarioEnum.ADMINISTRADOR;
+                return assignedUser != null &&
+                        (assignedUser.getRol() == RolUsuarioEnum.ADMINISTRADOR ||
+                                assignedUser.getRol() == RolUsuarioEnum.GESTOR);
             }
         }
         return false;

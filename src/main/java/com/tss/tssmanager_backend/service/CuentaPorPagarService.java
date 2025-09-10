@@ -111,6 +111,8 @@ public class CuentaPorPagarService {
                 ConceptoCreditoEnum concepto = ConceptoCreditoEnum.COMPRA;
                 String nota = String.format("Compra de %d créditos", cantidadCreditos);
 
+                LocalDateTime fechaPagoDateTime = cuenta.getFechaPago().atStartOfDay();
+
                 creditoPlataformaService.registrarAbonoConSubtipo(
                         plataforma,
                         concepto,
@@ -118,7 +120,8 @@ public class CuentaPorPagarService {
                         nota,
                         transaccion.getId(),
                         cuenta.getId(),
-                        subtipo
+                        subtipo,
+                        fechaPagoDateTime
                 );
             }
         }

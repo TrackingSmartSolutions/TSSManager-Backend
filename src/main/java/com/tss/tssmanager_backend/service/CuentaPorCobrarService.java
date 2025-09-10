@@ -236,7 +236,8 @@ public class CuentaPorCobrarService {
     }
 
     @Transactional
-    public CuentaPorCobrarDTO marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal montoPago, MultipartFile comprobante) throws Exception {
+    public CuentaPorCobrarDTO marcarComoPagada(Integer id, LocalDate fechaPago, BigDecimal montoPago,
+                                               MultipartFile comprobante, Integer categoriaId) throws Exception {
         logger.info("Marcando como pagada cuenta por cobrar con ID: {} con monto: {}", id, montoPago);
 
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(id)
@@ -278,27 +279,32 @@ public class CuentaPorCobrarService {
         cuenta.setComprobantePagoUrl("UPLOADING");
         CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
 
-        CategoriaTransacciones categoriaVentas = categoriaTransaccionesRepository.findByDescripcion("Ventas")
-                .orElseThrow(() -> new ResourceNotFoundException("Categoría 'Ventas' no encontrada"));
+        if (categoriaId == null) {
+            throw new IllegalArgumentException("La categoría es obligatoria");
+        }
 
-        // Buscar la cuenta específicamente en la categoría de ventas
+        CategoriaTransacciones categoria = categoriaTransaccionesRepository.findById(categoriaId)
+                .orElseThrow(() -> new ResourceNotFoundException("Categoría no encontrada con ID: " + categoriaId));
+
         CuentasTransacciones cuentaTransaccion = cuentasTransaccionesRepository
-                .findByNombreAndCategoria(cuenta.getCliente().getNombre(), categoriaVentas);
+                .findByNombreAndCategoria(cuenta.getCliente().getNombre(), categoria);
 
-        // Si no existe, crear una nueva cuenta en la categoría de ventas
+// Si no existe, crear una nueva cuenta en la categoría seleccionada
         if (cuentaTransaccion == null) {
-            logger.info("Creando nueva cuenta de transacciones para cliente: {} en categoría Ventas", cuenta.getCliente().getNombre());
+            logger.info("Creando nueva cuenta de transacciones para cliente: {} en categoría: {}",
+                    cuenta.getCliente().getNombre(), categoria.getDescripcion());
             cuentaTransaccion = new CuentasTransacciones();
             cuentaTransaccion.setNombre(cuenta.getCliente().getNombre());
-            cuentaTransaccion.setCategoria(categoriaVentas);
+            cuentaTransaccion.setCategoria(categoria);
             cuentaTransaccion = cuentasTransaccionesRepository.save(cuentaTransaccion);
         }
+
 
         // Crear la transacción
         Transaccion transaccion = new Transaccion();
         transaccion.setFecha(LocalDate.now());
         transaccion.setTipo(TipoTransaccionEnum.INGRESO);
-        transaccion.setCategoria(categoriaVentas);
+        transaccion.setCategoria(categoria);
         transaccion.setCuenta(cuentaTransaccion);
         transaccion.setMonto(cuenta.getCantidadCobrar());
         transaccion.setEsquema(EsquemaTransaccionEnum.UNICA);

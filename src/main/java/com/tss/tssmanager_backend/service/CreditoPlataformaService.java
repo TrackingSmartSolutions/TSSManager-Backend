@@ -9,6 +9,7 @@ import com.tss.tssmanager_backend.enums.PlataformaEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoCreditoEnum;
 import com.tss.tssmanager_backend.repository.CreditoPlataformaRepository;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
+import com.tss.tssmanager_backend.utils.DateUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,9 +80,11 @@ public class CreditoPlataformaService {
     @Transactional
     public void registrarAbonoConSubtipo(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
                                          BigDecimal monto, String nota, Integer transaccionId,
-                                         Integer cuentaPorPagarId, String subtipo) {
+                                         Integer cuentaPorPagarId, String subtipo, LocalDateTime fechaCustom) {
         CreditoPlataforma credito = new CreditoPlataforma();
-        credito.setFecha(LocalDateTime.now());
+
+        credito.setFecha(fechaCustom != null ? fechaCustom : DateUtils.nowInMexico());
+
         credito.setPlataforma(plataforma);
         credito.setConcepto(concepto);
         credito.setTipo(TipoCreditoEnum.ABONO);
@@ -95,10 +98,18 @@ public class CreditoPlataformaService {
     }
 
     @Transactional
+    public void registrarAbonoConSubtipo(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
+                                         BigDecimal monto, String nota, Integer transaccionId,
+                                         Integer cuentaPorPagarId, String subtipo) {
+        registrarAbonoConSubtipo(plataforma, concepto, monto, nota, transaccionId,
+                cuentaPorPagarId, subtipo, null);
+    }
+
+    @Transactional
     public void registrarCargoConSubtipo(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
                                          BigDecimal monto, String nota, Integer equipoId, String subtipo) {
         CreditoPlataforma credito = new CreditoPlataforma();
-        credito.setFecha(LocalDateTime.now());
+        credito.setFecha(DateUtils.nowInMexico());
         credito.setPlataforma(plataforma);
         credito.setConcepto(concepto);
         credito.setTipo(TipoCreditoEnum.CARGO);
@@ -185,7 +196,7 @@ public class CreditoPlataformaService {
     public void registrarAbono(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
                                BigDecimal monto, String nota, Integer transaccionId, Integer cuentaPorPagarId) {
         CreditoPlataforma credito = new CreditoPlataforma();
-        credito.setFecha(LocalDateTime.now());
+        credito.setFecha(DateUtils.nowInMexico());
         credito.setPlataforma(plataforma);
         credito.setConcepto(concepto);
         credito.setTipo(TipoCreditoEnum.ABONO);

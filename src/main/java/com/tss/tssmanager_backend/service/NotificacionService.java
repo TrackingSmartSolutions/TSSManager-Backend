@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -255,8 +256,11 @@ public class NotificacionService {
     }
 
     private void notificarAdministradores(String tipo, String mensaje) {
-        List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
-        admins.forEach(admin -> {
+        List<Usuario> adminsYGestores = new ArrayList<>();
+        adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
+        adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
+
+        adminsYGestores.forEach(admin -> {
             if (!existeNotificacionReciente(admin.getId(), tipo, mensaje)) {
                 crearNotificacion(admin, tipo, mensaje);
             }

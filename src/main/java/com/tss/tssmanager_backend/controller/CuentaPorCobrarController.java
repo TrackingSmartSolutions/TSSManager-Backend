@@ -1,9 +1,12 @@
 package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.dto.CuentaPorCobrarDTO;
+import com.tss.tssmanager_backend.entity.CategoriaTransacciones;
 import com.tss.tssmanager_backend.entity.CuentaPorCobrar;
 import com.tss.tssmanager_backend.enums.EsquemaCobroEnum;
+import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
+import com.tss.tssmanager_backend.repository.CategoriaTransaccionesRepository;
 import com.tss.tssmanager_backend.repository.CuentaPorCobrarRepository;
 import com.tss.tssmanager_backend.service.CuentaPorCobrarService;
 import org.slf4j.Logger;
@@ -33,6 +36,9 @@ public class CuentaPorCobrarController {
 
     @Autowired
     private CuentaPorCobrarRepository cuentaPorCobrarRepository;
+
+    @Autowired
+    private CategoriaTransaccionesRepository categoriaTransaccionesRepository;
 
     @PostMapping("/from-cotizacion/{cotizacionId}")
     public ResponseEntity<List<CuentaPorCobrarDTO>> crearCuentasPorCobrarFromCotizacion(
@@ -64,11 +70,23 @@ public class CuentaPorCobrarController {
     public ResponseEntity<CuentaPorCobrarDTO> marcarComoPagada(@PathVariable Integer id,
                                                                @RequestPart("fechaPago") String fechaPago,
                                                                @RequestPart("montoPago") String montoPago,
+                                                               @RequestPart("categoriaId") String categoriaId,
                                                                @RequestPart("comprobante") MultipartFile comprobante) throws Exception {
-        logger.info("Solicitud para marcar como pagada cuenta por cobrar con ID: {} con monto: {}", id, montoPago);
+        logger.info("Solicitud para marcar como pagada cuenta por cobrar con ID: {} con monto: {} y categoría: {}", id, montoPago, categoriaId);
         LocalDate fechaPagoDate = LocalDate.parse(fechaPago);
         BigDecimal montoDecimal = new BigDecimal(montoPago);
-        return ResponseEntity.ok(cuentaPorCobrarService.marcarComoPagada(id, fechaPagoDate, montoDecimal, comprobante));
+        Integer categoriaIdInt = Integer.parseInt(categoriaId);
+        return ResponseEntity.ok(cuentaPorCobrarService.marcarComoPagada(id, fechaPagoDate, montoDecimal, comprobante, categoriaIdInt));
+    }
+
+    @GetMapping("/categorias-ingreso")
+    public ResponseEntity<List<CategoriaTransacciones>> obtenerCategoriasIngreso() {
+        try {
+            List<CategoriaTransacciones> categoriasIngreso = categoriaTransaccionesRepository.findByTipo(TipoTransaccionEnum.INGRESO);
+            return ResponseEntity.ok(categoriasIngreso);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 
     @GetMapping

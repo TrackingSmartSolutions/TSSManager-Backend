@@ -3,6 +3,7 @@ package com.tss.tssmanager_backend.entity;
 import com.tss.tssmanager_backend.enums.ConceptoCreditoEnum;
 import com.tss.tssmanager_backend.enums.PlataformaEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoCreditoEnum;
+import com.tss.tssmanager_backend.utils.DateUtils;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -60,6 +61,6 @@ public class CreditoPlataforma {
 
     @PrePersist
     protected void onCreate() {
-        fechaCreacion = LocalDateTime.now();
+        fechaCreacion = DateUtils.nowInMexico();
     }
 }
