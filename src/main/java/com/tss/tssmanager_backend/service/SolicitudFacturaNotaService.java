@@ -30,6 +30,7 @@ import java.awt.*;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -517,7 +518,81 @@ public class SolicitudFacturaNotaService {
         }
 
         Cotizacion cotizacion = solicitud.getCotizacion();
-        if (cotizacion != null && cotizacion.getUnidades() != null) {
+
+// Priorizar mostrar conceptos personalizados si existen
+        if (solicitud.getConceptosSeleccionados() != null && !solicitud.getConceptosSeleccionados().trim().isEmpty()) {
+            // Si hay cotización, intentar filtrar sus unidades
+            if (cotizacion != null && cotizacion.getUnidades() != null) {
+                List<UnidadCotizacion> unidadesFiltradas = filtrarUnidadesPorConceptos(cotizacion, solicitud.getConceptosSeleccionados());
+
+                if (!unidadesFiltradas.isEmpty()) {
+                    // Mostrar unidades filtradas de la cotización
+                    boolean isEvenRow = false;
+                    for (UnidadCotizacion unidad : unidadesFiltradas) {
+                        Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
+
+                        conceptosTable.addCell(createStyledTableCell(
+                                String.valueOf(unidad.getCantidad()),
+                                Element.ALIGN_CENTER,
+                                normalFont,
+                                rowColor
+                        ));
+
+                        conceptosTable.addCell(createStyledTableCell(
+                                unidad.getUnidad(),
+                                Element.ALIGN_CENTER,
+                                normalFont,
+                                rowColor
+                        ));
+
+                        PdfPCell conceptoCell = new PdfPCell(new Phrase(unidad.getConcepto(), normalFont));
+                        conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+                        conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
+                        conceptoCell.setPadding(8);
+                        conceptoCell.setBackgroundColor(rowColor);
+                        conceptoCell.setBorder(Rectangle.BOX);
+                        conceptoCell.setBorderColor(grisMedio);
+                        conceptoCell.setBorderWidth(0.5f);
+                        conceptosTable.addCell(conceptoCell);
+
+                        conceptosTable.addCell(createStyledTableCell(
+                                formatCurrency(unidad.getPrecioUnitario()),
+                                Element.ALIGN_RIGHT,
+                                normalFont,
+                                rowColor
+                        ));
+
+                        BigDecimal descuento = unidad.getDescuento() != null ? unidad.getDescuento() : BigDecimal.ZERO;
+                        BigDecimal descuentoEnDinero = unidad.getPrecioUnitario()
+                                .multiply(BigDecimal.valueOf(unidad.getCantidad()))
+                                .multiply(descuento.divide(BigDecimal.valueOf(100)));
+
+                        conceptosTable.addCell(createStyledTableCell(
+                                formatCurrency(descuentoEnDinero),
+                                Element.ALIGN_RIGHT,
+                                normalFont,
+                                rowColor
+                        ));
+
+                        conceptosTable.addCell(createStyledTableCell(
+                                formatCurrency(unidad.getImporteTotal()),
+                                Element.ALIGN_RIGHT,
+                                boldFont,
+                                rowColor
+                        ));
+
+                        isEvenRow = !isEvenRow;
+                    }
+                } else {
+                    // No se encontraron coincidencias, mostrar conceptos personalizados
+                    addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio);
+                }
+            } else {
+                // No hay cotización, mostrar solo conceptos personalizados
+                addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio);
+            }
+        } else if (cotizacion != null && cotizacion.getUnidades() != null) {
+            // Fallback: mostrar todas las unidades de la cotización si no hay conceptos personalizados
             List<UnidadCotizacion> unidadesFiltradas = filtrarUnidadesPorConceptos(cotizacion, solicitud.getConceptosSeleccionados());
 
             boolean isEvenRow = false;
@@ -828,10 +903,79 @@ public class SolicitudFacturaNotaService {
 
         List<String> conceptos = List.of(conceptosSeleccionados.split(", "));
 
-        return cotizacion.getUnidades().stream()
+        // Debug logging
+        logger.info("Conceptos a filtrar: {}", conceptos);
+        logger.info("Conceptos disponibles en cotización:");
+        cotizacion.getUnidades().forEach(u ->
+                logger.info("  - '{}'", u.getConcepto())
+        );
+
+        List<UnidadCotizacion> unidadesFiltradas = cotizacion.getUnidades().stream()
                 .filter(unidad -> conceptos.stream()
-                        .anyMatch(concepto -> unidad.getConcepto().trim().equalsIgnoreCase(concepto.trim())))
+                        .anyMatch(concepto -> {
+                            boolean match = unidad.getConcepto().trim().equalsIgnoreCase(concepto.trim()) ||
+                                    unidad.getConcepto().toLowerCase().contains(concepto.toLowerCase().trim()) ||
+                                    concepto.toLowerCase().contains(unidad.getConcepto().toLowerCase().trim());
+                            if (match) {
+                                logger.info("Match encontrado: '{}' <-> '{}'", unidad.getConcepto(), concepto);
+                            }
+                            return match;
+                        }))
                 .collect(Collectors.toList());
+
+        logger.info("Unidades filtradas: {}", unidadesFiltradas.size());
+
+        // Si no se encontró ninguna coincidencia, devolver todas las unidades
+        if (unidadesFiltradas.isEmpty()) {
+            logger.warn("No se encontraron coincidencias exactas, devolviendo todas las unidades");
+            return cotizacion.getUnidades();
+        }
+
+        return unidadesFiltradas;
+    }
+
+    private void addConceptosPersonalizados(PdfPTable conceptosTable, SolicitudFacturaNota solicitud,
+                                            Color blancoHueso, Font normalFont, Font boldFont, Color grisMedio) {
+        if (solicitud.getConceptosSeleccionados() == null) return;
+
+        String[] conceptos = solicitud.getConceptosSeleccionados().split(", ");
+        boolean isEvenRow = false;
+
+        for (String concepto : conceptos) {
+            Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
+
+            // Cantidad (default 1)
+            conceptosTable.addCell(createStyledTableCell("1", Element.ALIGN_CENTER, normalFont, rowColor));
+
+            // Unidad (default "Servicio")
+            conceptosTable.addCell(createStyledTableCell("Servicio", Element.ALIGN_CENTER, normalFont, rowColor));
+
+            // Concepto personalizado
+            PdfPCell conceptoCell = new PdfPCell(new Phrase(concepto.trim(), normalFont));
+            conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+            conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
+            conceptoCell.setPadding(8);
+            conceptoCell.setBackgroundColor(rowColor);
+            conceptoCell.setBorder(Rectangle.BOX);
+            conceptoCell.setBorderColor(grisMedio);
+            conceptoCell.setBorderWidth(0.5f);
+            conceptosTable.addCell(conceptoCell);
+
+            // Precio unitario (usar el total/número de conceptos)
+            BigDecimal precioPromedio = solicitud.getSubtotal().divide(
+                    BigDecimal.valueOf(conceptos.length), 2, RoundingMode.HALF_UP);
+            conceptosTable.addCell(createStyledTableCell(
+                    formatCurrency(precioPromedio), Element.ALIGN_RIGHT, normalFont, rowColor));
+
+            // Descuento (0%)
+            conceptosTable.addCell(createStyledTableCell("0%", Element.ALIGN_RIGHT, normalFont, rowColor));
+
+            // Importe
+            conceptosTable.addCell(createStyledTableCell(
+                    formatCurrency(precioPromedio), Element.ALIGN_RIGHT, boldFont, rowColor));
+
+            isEvenRow = !isEvenRow;
+        }
     }
 
     private void recalcularTotalesConConceptosFiltrados(SolicitudFacturaNota solicitud,
