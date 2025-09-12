@@ -51,8 +51,8 @@ public class TransaccionService {
             throw new IllegalArgumentException("Todos los campos obligatorios deben estar completos y el monto debe ser mayor a 0.");
         }
 
-        // Si no tiene cuenta asignada pero tiene nombre de cuenta, crear/buscar la cuenta
-        if (transaccion.getCuenta() == null && transaccion.getNombreCuenta() != null) {
+        // CORRECCIÓN: Verificar que la categoría no sea null antes de crear cuenta
+        if (transaccion.getCuenta() == null && transaccion.getNombreCuenta() != null && transaccion.getCategoria() != null) {
             CuentasTransacciones cuenta = crearCuentaSiNoExiste(transaccion.getNombreCuenta(), transaccion.getCategoria().getId());
             transaccion.setCuenta(cuenta);
         }
