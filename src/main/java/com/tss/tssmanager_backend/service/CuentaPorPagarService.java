@@ -16,6 +16,8 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -75,8 +77,9 @@ public class CuentaPorPagarService {
         cuenta.setFormaPago(formaPago);
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        String fechaFormateada = LocalDateTime.now().format(formatter);
-        String nota = String.format("Pago de $%s el %s", montoPago, fechaFormateada);
+        ZonedDateTime fechaLocal = ZonedDateTime.now(ZoneId.of("America/Mexico_City"));
+        String fechaFormateada = fechaLocal.format(formatter);
+        String nota = String.format("Pago de $%s el %s", montoPago, fechaFormateada);;
         cuenta.setNota(cuenta.getNota() != null ? cuenta.getNota() + " - " + nota : nota);
 
         cuentasPorPagarRepository.save(cuenta);
@@ -90,7 +93,7 @@ public class CuentaPorPagarService {
         transaccionPago.setEsquema(com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum.UNICA);
         transaccionPago.setFechaPago(fechaPago);
         transaccionPago.setFormaPago(formaPago);
-        transaccionPago.setNotas("Pago de cuenta por pagar - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
+        transaccionPago.setNotas("Transacción generada desde Cuentas por Pagar - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
         transaccionPago.setFechaCreacion(LocalDateTime.now());
         transaccionPago.setFechaModificacion(LocalDateTime.now());
         transaccionRepository.save(transaccionPago);
@@ -274,7 +277,7 @@ public class CuentaPorPagarService {
             nuevaTransaccion.setFechaPago(proximaFechaPago);
 
             nuevaTransaccion.setFormaPago(transaccionOriginal.getFormaPago());
-            nuevaTransaccion.setNotas("Serie regenerada - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
+            nuevaTransaccion.setNotas("Transacción generada desde Cuentas por Pagar - Serie regenerada - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
             nuevaTransaccion.setNumeroPagos(transaccionOriginal.getNumeroPagos());
             nuevaTransaccion.setFechaCreacion(LocalDateTime.now());
             nuevaTransaccion.setFechaModificacion(LocalDateTime.now());
