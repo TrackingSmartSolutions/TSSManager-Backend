@@ -70,4 +70,7 @@ public class SolicitudFacturaNota {
     @Column(name = "uso_cfdi")
     private String usoCfdi;
 
+    @Column(name = "conceptos_seleccionados", columnDefinition = "TEXT")
+    private String conceptosSeleccionados;
+
 }

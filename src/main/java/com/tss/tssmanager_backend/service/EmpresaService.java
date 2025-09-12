@@ -538,4 +538,10 @@ public class EmpresaService {
         return convertToEmpresaDTO(empresa);
     }
 
+    @Transactional(readOnly = true)
+    public List<Integer> getEmpresasSinTratos() {
+        logger.info("Obteniendo empresas sin tratos");
+        return empresaRepository.findEmpresasSinTratos();
+    }
+
 }

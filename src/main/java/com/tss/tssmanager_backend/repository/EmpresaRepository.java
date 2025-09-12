@@ -42,4 +42,7 @@ public interface EmpresaRepository extends JpaRepository<Empresa, Integer> {
     ORDER BY e.nombre
     """, nativeQuery = true)
     List<Object[]> findEmpresasConCoordenadas();
+
+    @Query(value = "SELECT e.id FROM \"Empresas\" e WHERE NOT EXISTS (SELECT 1 FROM \"Tratos\" t WHERE t.empresa_id = e.id)", nativeQuery = true)
+    List<Integer> findEmpresasSinTratos();
 }

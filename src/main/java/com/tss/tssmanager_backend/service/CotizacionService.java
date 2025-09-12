@@ -3,12 +3,9 @@ package com.tss.tssmanager_backend.service;
 import com.lowagie.text.*;
 import com.lowagie.text.Font;
 import com.lowagie.text.Rectangle;
-import com.lowagie.text.pdf.PdfPCell;
-import com.lowagie.text.pdf.PdfPTable;
-import com.lowagie.text.pdf.PdfWriter;
+import com.lowagie.text.pdf.*;
 import com.lowagie.text.Image;
-import com.lowagie.text.pdf.PdfContentByte;
-import com.lowagie.text.pdf.PdfGState;
+
 import java.io.InputStream;
 import com.tss.tssmanager_backend.dto.CotizacionDTO;
 import com.tss.tssmanager_backend.dto.UnidadCotizacionDTO;
@@ -27,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.awt.*;
 import java.math.BigDecimal;
@@ -247,6 +245,8 @@ public class CotizacionService {
         );
         dto.setConceptosCount((int) cotizacion.getUnidades().stream().map(UnidadCotizacion::getConcepto).distinct().count());
         dto.setEmpresaData(empresaService.convertToEmpresaDTO(cotizacion.getCliente()));
+        dto.setArchivoAdicionalNombre(cotizacion.getArchivoAdicionalNombre());
+        dto.setArchivoAdicionalTipo(cotizacion.getArchivoAdicionalTipo());
         return dto;
     }
 
@@ -348,7 +348,63 @@ public class CotizacionService {
     }
 
     @Transactional(readOnly = true)
-    public ByteArrayResource generateCotizacionPDF(Integer id) throws Exception {
+    public ByteArrayResource generateCotizacionPDF(Integer id, boolean incluirArchivo) throws Exception {
+        logger.info("Generando PDF para cotización con ID: {}", id);
+
+        Cotizacion cotizacion = cotizacionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + id));
+
+        // Generar el PDF de la cotización como antes
+        ByteArrayResource cotizacionPDF = generarPDFCotizacion(cotizacion.getId());
+
+        // Si tiene archivo adicional y se solicita incluirlo, combinar PDFs
+        if (incluirArchivo && cotizacion.getArchivoAdicionalContenido() != null) {
+            return combinarPDFs(cotizacionPDF, cotizacion.getArchivoAdicionalContenido());
+        }
+
+        return cotizacionPDF;
+    }
+
+    private ByteArrayResource combinarPDFs(ByteArrayResource cotizacionPDF, byte[] archivoAdicional) throws Exception {
+        try {
+            // Usar PdfReader y PdfWriter para combinar
+            ByteArrayOutputStream combined = new ByteArrayOutputStream();
+            Document document = new Document();
+            PdfWriter writer = PdfWriter.getInstance(document, combined);
+            document.open();
+
+            PdfContentByte cb = writer.getDirectContent();
+
+            // Agregar páginas del PDF de cotización
+            PdfReader reader1 = new PdfReader(cotizacionPDF.getByteArray());
+            for (int i = 1; i <= reader1.getNumberOfPages(); i++) {
+                document.newPage();
+                PdfImportedPage page1 = writer.getImportedPage(reader1, i);
+                cb.addTemplate(page1, 0, 0);
+            }
+
+            // Agregar páginas del archivo adicional
+            PdfReader reader2 = new PdfReader(archivoAdicional);
+            for (int i = 1; i <= reader2.getNumberOfPages(); i++) {
+                document.newPage();
+                PdfImportedPage page2 = writer.getImportedPage(reader2, i);
+                cb.addTemplate(page2, 0, 0);
+            }
+
+            document.close();
+            reader1.close();
+            reader2.close();
+
+            return new ByteArrayResource(combined.toByteArray());
+
+        } catch (Exception e) {
+            logger.error("Error combinando PDFs: {}", e.getMessage());
+            throw new Exception("Error al combinar los archivos PDF", e);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ByteArrayResource generarPDFCotizacion(Integer id) throws Exception {
         logger.info("Generando PDF para cotización con ID: {}", id);
 
         Cotizacion cotizacion = cotizacionRepository.findById(id)
@@ -622,6 +678,19 @@ public class CotizacionService {
         logger.info("Verificando si cotización con ID {} está vinculada a cuenta por cobrar", cotizacionId);
 
         return cuentaPorCobrarRepository.existsByCotizacionId(cotizacionId);
+    }
+
+    @Transactional
+    public void subirArchivoAdicional(Integer cotizacionId, MultipartFile archivo) throws Exception {
+        Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + cotizacionId));
+
+        cotizacion.setArchivoAdicionalNombre(archivo.getOriginalFilename());
+        cotizacion.setArchivoAdicionalContenido(archivo.getBytes());
+        cotizacion.setArchivoAdicionalTipo(archivo.getContentType());
+
+        cotizacionRepository.save(cotizacion);
+        logger.info("Archivo adicional guardado para cotización ID: {}", cotizacionId);
     }
 
 }

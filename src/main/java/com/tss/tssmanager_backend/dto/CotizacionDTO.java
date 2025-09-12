@@ -22,4 +22,6 @@ public class CotizacionDTO {
     private Integer cantidadTotal;
     private Integer conceptosCount;
     private EmpresaDTO empresaData;
+    private String archivoAdicionalNombre;
+    private String archivoAdicionalTipo;
 }

@@ -369,16 +369,14 @@ public class SimService {
         return simRepository.findAllGroupsForFilter();
     }
 
-    public PagedResponseDTO<SimDTO> obtenerTodasLasSimsPaginadas(int page, int size, Integer grupo, String numero) {
-        int offset = page * size;
-
-        List<Object[]> results = simRepository.findSimsPaginatedWithFilters(grupo, numero, size, offset);
-        Long totalElements = simRepository.countSimsWithFilters(grupo, numero);
+    public List<SimDTO> obtenerTodasLasSimsConFiltros(Integer grupo, String numero) {
+        List<Object[]> results = simRepository.findSimsPaginatedWithFilters(grupo, numero);
 
         List<SimDTO> content = results.stream()
                 .map(this::convertFromOptimizedQuery)
                 .collect(Collectors.toList());
 
+        // Obtener saldos de forma más eficiente
         List<Integer> simIds = content.stream()
                 .map(SimDTO::getId)
                 .collect(Collectors.toList());
@@ -390,13 +388,7 @@ public class SimService {
             sim.setUltimoSaldoRegistrado(ultimoSaldo);
         });
 
-        return new PagedResponseDTO<>(
-                content,
-                page,
-                size,
-                totalElements,
-                (int) Math.ceil((double) totalElements / size)
-        );
+        return content;
     }
 
     public List<SimDTO> obtenerTodasLasSims() {

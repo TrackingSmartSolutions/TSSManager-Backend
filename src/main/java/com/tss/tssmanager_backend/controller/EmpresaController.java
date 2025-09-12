@@ -249,4 +249,10 @@ public class EmpresaController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
+
+    @GetMapping("/sin-tratos")
+    public ResponseEntity<List<Integer>> getEmpresasSinTratos() {
+        List<Integer> empresasSinTratos = empresaService.getEmpresasSinTratos();
+        return ResponseEntity.ok(empresasSinTratos);
+    }
 }

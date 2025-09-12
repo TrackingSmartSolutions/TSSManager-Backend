@@ -11,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -73,10 +74,14 @@ public class CotizacionController {
     }
 
     @GetMapping("/{id}/download-pdf")
-    public ResponseEntity<ByteArrayResource> descargarCotizacionPDF(@PathVariable Integer id) throws Exception {
+    public ResponseEntity<ByteArrayResource> descargarCotizacionPDF(
+            @PathVariable Integer id,
+            @RequestParam(value = "incluirArchivo", defaultValue = "true") boolean incluirArchivo) throws Exception {
+
         logger.info("Solicitud para descargar PDF de cotización con ID: {}", id);
-        ByteArrayResource resource = cotizacionService.generateCotizacionPDF(id);
+        ByteArrayResource resource = cotizacionService.generateCotizacionPDF(id, incluirArchivo);
         Cotizacion cotizacion = cotizacionService.findById(id);
+
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -91,6 +96,31 @@ public class CotizacionController {
                 .headers(headers)
                 .contentLength(resource.contentLength())
                 .body(resource);
+    }
+
+    @PostMapping("/{id}/upload-archivo")
+    public ResponseEntity<Map<String, String>> subirArchivo(
+            @PathVariable Integer id,
+            @RequestParam("archivo") MultipartFile archivo) {
+        try {
+            if (archivo.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "El archivo no puede estar vacío"));
+            }
+
+            if (!"application/pdf".equals(archivo.getContentType())) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Solo se permiten archivos PDF"));
+            }
+
+            cotizacionService.subirArchivoAdicional(id, archivo);
+            return ResponseEntity.ok(Map.of("mensaje", "Archivo subido exitosamente"));
+
+        } catch (Exception e) {
+            logger.error("Error al subir archivo: {}", e.getMessage(), e);
+            return ResponseEntity.status(500)
+                    .body(Map.of("error", "Error al subir el archivo"));
+        }
     }
 
     @GetMapping("/{id}/check-vinculada")

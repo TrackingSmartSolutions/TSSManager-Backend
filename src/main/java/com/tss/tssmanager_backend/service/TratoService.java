@@ -1827,6 +1827,4 @@ public class TratoService {
 
         return convertToDTO(updatedActividad);
     }
-
-
 }

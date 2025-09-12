@@ -6,6 +6,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.util.Date;
+import java.util.List;
 
 @Data
 public class SolicitudFacturaNotaDTO {
@@ -29,6 +30,7 @@ public class SolicitudFacturaNotaDTO {
     private BigDecimal total;
     private String folio;
     private String usoCfdi;
+    private List<String> conceptosSeleccionados;
 
 
     public static SolicitudFacturaNotaDTO fromEntity(SolicitudFacturaNota solicitud) {
@@ -57,6 +59,9 @@ public class SolicitudFacturaNotaDTO {
             dto.setConcepto(solicitud.getCuentaPorCobrar().getConceptos() != null ? solicitud.getCuentaPorCobrar().getConceptos() : "N/A");
             dto.setFolio(solicitud.getCuentaPorCobrar().getFolio() != null ? solicitud.getCuentaPorCobrar().getFolio() : "N/A");
         }
+        dto.setConceptosSeleccionados(solicitud.getConceptosSeleccionados() != null ?
+                List.of(solicitud.getConceptosSeleccionados().split(", ")) : List.of());
+
         return dto;
     }
 

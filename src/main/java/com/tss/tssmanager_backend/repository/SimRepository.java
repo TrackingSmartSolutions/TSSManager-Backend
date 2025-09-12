@@ -100,20 +100,20 @@ public interface SimRepository extends JpaRepository<Sim, Integer> {
     List<Integer> findAllGroupsForFilter();
 
     @Query(value = """
-    SELECT s.id, s.numero, s.tarifa, s.vigencia, s.recarga, s.responsable, 
-           s.principal, s.grupo, s.equipo_imei, s.contrasena, 
-           e.imei as equipo_imei, e.nombre as equipo_nombre
-    FROM "SIMs" s 
-    LEFT JOIN "Equipos" e ON s.equipo_imei = e.imei 
-    WHERE (:grupo IS NULL OR s.grupo = :grupo)
-    AND (:numero IS NULL OR LOWER(s.numero) LIKE LOWER(CONCAT('%', :numero, '%')))
-    ORDER BY s.id DESC
-    LIMIT :limit OFFSET :offset
-    """, nativeQuery = true)
+SELECT s.id, s.numero, s.tarifa, s.vigencia, s.recarga, s.responsable, 
+       s.principal, s.grupo, s.equipo_imei, s.contrasena, 
+       e.imei as equipo_imei, e.nombre as equipo_nombre
+FROM "SIMs" s 
+LEFT JOIN "Equipos" e ON s.equipo_imei = e.imei 
+WHERE (:grupo IS NULL OR s.grupo = :grupo)
+AND (:numero IS NULL OR LOWER(s.numero) LIKE LOWER(CONCAT('%', :numero, '%')))
+ORDER BY 
+    CASE WHEN s.vigencia IS NULL THEN 1 ELSE 0 END,
+    s.vigencia ASC,
+    s.numero ASC
+""", nativeQuery = true)
     List<Object[]> findSimsPaginatedWithFilters(@Param("grupo") Integer grupo,
-                                                @Param("numero") String numero,
-                                                @Param("limit") int limit,
-                                                @Param("offset") int offset);
+                                                @Param("numero") String numero);
 
     @Query(value = """
     SELECT COUNT(*)

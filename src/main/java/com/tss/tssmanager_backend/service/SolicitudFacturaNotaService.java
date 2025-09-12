@@ -211,6 +211,7 @@ public class SolicitudFacturaNotaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Emisor no encontrado"));
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(solicitud.getCuentaPorCobrar().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada"));
+        solicitud.setConceptosSeleccionados(cuenta.getConceptos());
 
         if (solicitud.getCliente() == null) {
             solicitud.setCliente(cuenta.getCliente());
@@ -233,24 +234,12 @@ public class SolicitudFacturaNotaService {
         if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getId() != null) {
             Cotizacion cotizacion = cotizacionRepository.findById(solicitud.getCotizacion().getId())
                     .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + solicitud.getCotizacion().getId()));
-            solicitud.setSubtotal(cotizacion.getSubtotal());
-            solicitud.setIva(cotizacion.getIva());
-            BigDecimal subtotal = cotizacion.getSubtotal();
-            if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
-                    cotizacion.getCliente().getRegimenFiscal().equals("601")) {
-                String domicilioFiscal = cotizacion.getCliente().getDomicilioFiscal().toLowerCase();
-                boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
-                boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
 
-                if (cpMatch || hasGuanajuato) {
-                    cotizacion.setIsrEstatal(subtotal.multiply(new BigDecimal("0.02")));
-                    cotizacion.setIsrFederal(subtotal.multiply(new BigDecimal("0.0125")));
-                } else if (!cpMatch && !hasGuanajuato) {
-                    cotizacion.setIsrFederal(subtotal.multiply(new BigDecimal("0.0125")));
-                }
-            }
-            solicitud.setTotal(cotizacion.getTotal().subtract(cotizacion.getIsrEstatal()).subtract(cotizacion.getIsrFederal()));
-            solicitud.setImporteLetra(cotizacionService.convertToLetter(solicitud.getTotal()));
+            // Filtrar unidades por los conceptos de la cuenta por cobrar
+            List<UnidadCotizacion> unidadesFiltradas = filtrarUnidadesPorConceptos(cotizacion, solicitud.getConceptosSeleccionados());
+
+            // Recalcular totales solo con las unidades filtradas
+            recalcularTotalesConConceptosFiltrados(solicitud, unidadesFiltradas);
         } else {
             solicitud.setSubtotal(BigDecimal.ZERO);
             solicitud.setIva(BigDecimal.ZERO);
@@ -529,8 +518,10 @@ public class SolicitudFacturaNotaService {
 
         Cotizacion cotizacion = solicitud.getCotizacion();
         if (cotizacion != null && cotizacion.getUnidades() != null) {
+            List<UnidadCotizacion> unidadesFiltradas = filtrarUnidadesPorConceptos(cotizacion, solicitud.getConceptosSeleccionados());
+
             boolean isEvenRow = false;
-            for (UnidadCotizacion unidad : cotizacion.getUnidades()) {
+            for (UnidadCotizacion unidad : unidadesFiltradas) {
                 Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
                 conceptosTable.addCell(createStyledTableCell(
@@ -828,5 +819,52 @@ public class SolicitudFacturaNotaService {
                 empresa.getRazonSocial() == null || empresa.getRegimenFiscal() == null) {
             throw new ResourceNotFoundException("No se puede generar la Solicitud de Factura porque la empresa no tiene completos los datos fiscales requeridos (Domicilio Fiscal, RFC, Razón Social, Régimen Fiscal). Por favor, edite los datos de la empresa.");
         }
+    }
+
+    private List<UnidadCotizacion> filtrarUnidadesPorConceptos(Cotizacion cotizacion, String conceptosSeleccionados) {
+        if (conceptosSeleccionados == null || conceptosSeleccionados.trim().isEmpty()) {
+            return cotizacion.getUnidades();
+        }
+
+        List<String> conceptos = List.of(conceptosSeleccionados.split(", "));
+
+        return cotizacion.getUnidades().stream()
+                .filter(unidad -> conceptos.stream()
+                        .anyMatch(concepto -> unidad.getConcepto().trim().equalsIgnoreCase(concepto.trim())))
+                .collect(Collectors.toList());
+    }
+
+    private void recalcularTotalesConConceptosFiltrados(SolicitudFacturaNota solicitud,
+                                                        List<UnidadCotizacion> unidadesFiltradas) {
+        BigDecimal subtotal = unidadesFiltradas.stream()
+                .map(UnidadCotizacion::getImporteTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
+        BigDecimal isrEstatal = BigDecimal.ZERO;
+        BigDecimal isrFederal = BigDecimal.ZERO;
+
+        // Aplicar retenciones si corresponde
+        if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
+                solicitud.getCliente().getRegimenFiscal().equals("601")) {
+
+            String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
+            boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
+            boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
+
+            if (cpMatch || hasGuanajuato) {
+                isrEstatal = subtotal.multiply(new BigDecimal("0.02"));
+                isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
+            } else if (!cpMatch && !hasGuanajuato) {
+                isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
+            }
+        }
+
+        BigDecimal total = subtotal.add(iva).subtract(isrEstatal).subtract(isrFederal);
+
+        solicitud.setSubtotal(subtotal);
+        solicitud.setIva(iva);
+        solicitud.setTotal(total);
+        solicitud.setImporteLetra(cotizacionService.convertToLetter(total));
     }
 }

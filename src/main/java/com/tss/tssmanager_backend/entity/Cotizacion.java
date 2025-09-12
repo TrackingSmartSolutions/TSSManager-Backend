@@ -42,5 +42,15 @@ public class Cotizacion {
     @OneToMany(mappedBy = "cotizacion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UnidadCotizacion> unidades;
 
+    @Column(name = "archivo_adicional_nombre")
+    private String archivoAdicionalNombre;
+
+    @Lob
+    @Column(name = "archivo_adicional_contenido")
+    private byte[] archivoAdicionalContenido;
+
+    @Column(name = "archivo_adicional_tipo")
+    private String archivoAdicionalTipo;
+
 
 }
