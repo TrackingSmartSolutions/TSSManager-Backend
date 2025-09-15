@@ -36,8 +36,21 @@ public class ReporteService {
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMINISTRADOR") ||
                         auth.getAuthority().equals("ROLE_GESTOR"))) {
             Usuario usuario = usuarioRepository.findByNombre(nombreUsuario);
+            System.out.println("Buscando usuario: '" + nombreUsuario + "'"); // Debug
+            System.out.println("Usuario encontrado: " + (usuario != null ? usuario.getNombre() : "null")); // Debug
+
             if (usuario == null) {
-                throw new RuntimeException("Usuario no encontrado: " + nombreUsuario);
+                // Intentar búsqueda case-insensitive
+                List<Usuario> todosUsuarios = usuarioRepository.findAll();
+                usuario = todosUsuarios.stream()
+                        .filter(u -> u.getNombre().equalsIgnoreCase(nombreUsuario.trim()))
+                        .findFirst()
+                        .orElse(null);
+
+                if (usuario == null) {
+                    throw new RuntimeException("Usuario no encontrado: '" + nombreUsuario + "'. Usuarios disponibles: " +
+                            todosUsuarios.stream().map(Usuario::getNombre).collect(Collectors.toList()));
+                }
             }
             userId = usuario.getId();
         } else {
