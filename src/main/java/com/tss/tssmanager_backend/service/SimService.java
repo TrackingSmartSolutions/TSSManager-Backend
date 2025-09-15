@@ -41,6 +41,9 @@ public class SimService {
     private TransaccionService transaccionService;
 
     @Autowired
+    private TransaccionRepository transaccionRepository;
+
+    @Autowired
     private CategoriaTransaccionesRepository categoriaRepository;
 
     @Autowired
@@ -333,30 +336,49 @@ public class SimService {
                 cuenta.setFechaPago(sim.getVigencia().toLocalDate());
             }
 
-            // Actualizar el nombre de la cuenta si cambió el equipo vinculado
-            if (sim.getEquipo() != null) {
-                String nuevoNombreCuenta = "AG";
-                if (sim.getEquipo().getClienteId() != null) {
-                    try {
-                        Optional<Empresa> empresaOpt = empresaRepository.findById(sim.getEquipo().getClienteId());
-                        if (empresaOpt.isPresent()) {
-                            nuevoNombreCuenta = empresaOpt.get().getNombre();
-                        }
-                    } catch (Exception e) {
-                        System.err.println("Error obteniendo empresa: " + e.getMessage());
-                        nuevoNombreCuenta = "AG";
-                    }
-                } else if (sim.getEquipo().getClienteDefault() != null) {
-                    nuevoNombreCuenta = sim.getEquipo().getClienteDefault();
-                }
 
-                // Buscar o crear la cuenta con el nuevo nombre
-                CuentasTransacciones nuevaCuenta = buscarOCrearCuentaConCategoria(nuevoNombreCuenta, cuenta.getTransaccion().getCategoria());
+            if (sim.getEquipo() != null) {
+                String nuevoNombreCuenta = determinarNombreCuenta(sim.getEquipo());
+
+                CuentasTransacciones nuevaCuenta = buscarOCrearCuentaConCategoria(
+                        nuevoNombreCuenta,
+                        cuenta.getTransaccion().getCategoria()
+                );
+
                 cuenta.getTransaccion().setCuenta(nuevaCuenta);
+                cuenta.setCuenta(nuevaCuenta);
+
+                String nuevoFolio = nuevoNombreCuenta + "-" + String.format("%02d", cuenta.getNumeroPago());
+                cuenta.setFolio(nuevoFolio);
+
+                transaccionRepository.save(cuenta.getTransaccion());
             }
 
             cuentaPorPagarRepository.save(cuenta);
         }
+    }
+
+    private String determinarNombreCuenta(Equipo equipo) {
+        String nombreCuenta = "AG";
+
+        if (equipo.getClienteId() != null) {
+            try {
+                Optional<Empresa> empresaOpt = empresaRepository.findById(equipo.getClienteId());
+                if (empresaOpt.isPresent()) {
+                    nombreCuenta = empresaOpt.get().getNombre();
+                    System.out.println("Cuenta determinada por clienteId: " + nombreCuenta);
+                }
+            } catch (Exception e) {
+                System.err.println("Error obteniendo empresa por clienteId: " + e.getMessage());
+                nombreCuenta = "AG";
+            }
+        }
+        else if (equipo.getClienteDefault() != null) {
+            nombreCuenta = equipo.getClienteDefault();
+            System.out.println("Cuenta determinada por clienteDefault: " + nombreCuenta);
+        }
+
+        return nombreCuenta;
     }
 
     @Cacheable(value = "gruposDisponibles", unless = "#result.isEmpty()")

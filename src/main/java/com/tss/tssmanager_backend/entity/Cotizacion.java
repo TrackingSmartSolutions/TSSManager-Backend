@@ -42,15 +42,26 @@ public class Cotizacion {
     @OneToMany(mappedBy = "cotizacion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UnidadCotizacion> unidades;
 
-    @Column(name = "archivo_adicional_nombre")
-    private String archivoAdicionalNombre;
+    @Column(name = "notas_comerciales_nombre")
+    private String notasComercialesNombre;
 
     @Lob
-    @Column(name = "archivo_adicional_contenido")
-    private byte[] archivoAdicionalContenido;
+    @Column(name = "notas_comerciales_contenido")
+    private byte[] notasComercialesContenido;
 
-    @Column(name = "archivo_adicional_tipo")
-    private String archivoAdicionalTipo;
+    @Column(name = "notas_comerciales_tipo")
+    private String notasComercialesTopo;
+
+    // Agregar nuevos campos para Ficha Técnica
+    @Column(name = "ficha_tecnica_nombre")
+    private String fichaTecnicaNombre;
+
+    @Lob
+    @Column(name = "ficha_tecnica_contenido")
+    private byte[] fichaTecnicaContenido;
+
+    @Column(name = "ficha_tecnica_tipo")
+    private String fichaTecnicaTipo;
 
 
 }

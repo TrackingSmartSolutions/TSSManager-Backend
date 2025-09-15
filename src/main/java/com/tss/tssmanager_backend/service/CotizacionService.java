@@ -5,6 +5,8 @@ import com.lowagie.text.Font;
 import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.*;
 import com.lowagie.text.Image;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
 
 import java.io.InputStream;
 import com.tss.tssmanager_backend.dto.CotizacionDTO;
@@ -245,8 +247,10 @@ public class CotizacionService {
         );
         dto.setConceptosCount((int) cotizacion.getUnidades().stream().map(UnidadCotizacion::getConcepto).distinct().count());
         dto.setEmpresaData(empresaService.convertToEmpresaDTO(cotizacion.getCliente()));
-        dto.setArchivoAdicionalNombre(cotizacion.getArchivoAdicionalNombre());
-        dto.setArchivoAdicionalTipo(cotizacion.getArchivoAdicionalTipo());
+        dto.setNotasComercialesNombre(cotizacion.getNotasComercialesNombre());
+        dto.setNotasComercialesTopo(cotizacion.getNotasComercialesTopo());
+        dto.setFichaTecnicaNombre(cotizacion.getFichaTecnicaNombre());
+        dto.setFichaTecnicaTipo(cotizacion.getFichaTecnicaTipo());
         return dto;
     }
 
@@ -348,53 +352,59 @@ public class CotizacionService {
     }
 
     @Transactional(readOnly = true)
-    public ByteArrayResource generateCotizacionPDF(Integer id, boolean incluirArchivo) throws Exception {
+    public ByteArrayResource generateCotizacionPDF(Integer id, boolean incluirArchivos) throws Exception {
         logger.info("Generando PDF para cotización con ID: {}", id);
 
         Cotizacion cotizacion = cotizacionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + id));
 
-        // Generar el PDF de la cotización como antes
-        ByteArrayResource cotizacionPDF = generarPDFCotizacion(cotizacion.getId());
+        // Generar el PDF de la cotización
+        ByteArrayResource cotizacionPDF = generarPDFCotizacion(id);
 
-        // Si tiene archivo adicional y se solicita incluirlo, combinar PDFs
-        if (incluirArchivo && cotizacion.getArchivoAdicionalContenido() != null) {
-            return combinarPDFs(cotizacionPDF, cotizacion.getArchivoAdicionalContenido());
+        // Si tiene archivos adicionales y se solicita incluirlos, combinar PDFs
+        if (incluirArchivos && (cotizacion.getNotasComercialesContenido() != null || cotizacion.getFichaTecnicaContenido() != null)) {
+            return combinarPDFs(cotizacionPDF, cotizacion.getNotasComercialesContenido(), cotizacion.getFichaTecnicaContenido());
         }
 
         return cotizacionPDF;
     }
 
-    private ByteArrayResource combinarPDFs(ByteArrayResource cotizacionPDF, byte[] archivoAdicional) throws Exception {
+    private ByteArrayResource combinarPDFs(ByteArrayResource cotizacionPDF, byte[] notasComerciales, byte[] fichaTecnica) throws Exception {
         try {
-            // Usar PdfReader y PdfWriter para combinar
             ByteArrayOutputStream combined = new ByteArrayOutputStream();
-            Document document = new Document();
-            PdfWriter writer = PdfWriter.getInstance(document, combined);
+
+            // Usar PdfCopy en lugar de Document para evitar márgenes
+            PdfReader mainReader = new PdfReader(cotizacionPDF.getByteArray());
+            com.lowagie.text.Document document = new com.lowagie.text.Document(mainReader.getPageSizeWithRotation(1));
+            PdfCopy copy = new PdfCopy(document, combined);
+
             document.open();
 
-            PdfContentByte cb = writer.getDirectContent();
+            // 1. Copiar páginas del PDF principal
+            for (int i = 1; i <= mainReader.getNumberOfPages(); i++) {
+                copy.addPage(copy.getImportedPage(mainReader, i));
+            }
+            mainReader.close();
 
-            // Agregar páginas del PDF de cotización
-            PdfReader reader1 = new PdfReader(cotizacionPDF.getByteArray());
-            for (int i = 1; i <= reader1.getNumberOfPages(); i++) {
-                document.newPage();
-                PdfImportedPage page1 = writer.getImportedPage(reader1, i);
-                cb.addTemplate(page1, 0, 0);
+            // 2. Copiar páginas de Notas Comerciales
+            if (notasComerciales != null) {
+                PdfReader notasReader = new PdfReader(notasComerciales);
+                for (int i = 1; i <= notasReader.getNumberOfPages(); i++) {
+                    copy.addPage(copy.getImportedPage(notasReader, i));
+                }
+                notasReader.close();
             }
 
-            // Agregar páginas del archivo adicional
-            PdfReader reader2 = new PdfReader(archivoAdicional);
-            for (int i = 1; i <= reader2.getNumberOfPages(); i++) {
-                document.newPage();
-                PdfImportedPage page2 = writer.getImportedPage(reader2, i);
-                cb.addTemplate(page2, 0, 0);
+            // 3. Copiar páginas de Ficha Técnica
+            if (fichaTecnica != null) {
+                PdfReader fichaReader = new PdfReader(fichaTecnica);
+                for (int i = 1; i <= fichaReader.getNumberOfPages(); i++) {
+                    copy.addPage(copy.getImportedPage(fichaReader, i));
+                }
+                fichaReader.close();
             }
 
             document.close();
-            reader1.close();
-            reader2.close();
-
             return new ByteArrayResource(combined.toByteArray());
 
         } catch (Exception e) {
@@ -681,16 +691,83 @@ public class CotizacionService {
     }
 
     @Transactional
-    public void subirArchivoAdicional(Integer cotizacionId, MultipartFile archivo) throws Exception {
+    public void subirArchivosAdicionales(Integer cotizacionId, MultipartFile notasComerciales, MultipartFile fichaTecnica) throws Exception {
         Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + cotizacionId));
 
-        cotizacion.setArchivoAdicionalNombre(archivo.getOriginalFilename());
-        cotizacion.setArchivoAdicionalContenido(archivo.getBytes());
-        cotizacion.setArchivoAdicionalTipo(archivo.getContentType());
+        // Procesar Notas Comerciales
+        if (notasComerciales != null && !notasComerciales.isEmpty()) {
+            String tipoNotas = notasComerciales.getContentType();
+            byte[] contenidoNotas;
+
+            if ("image/png".equals(tipoNotas)) {
+                // Convertir PNG a PDF
+                contenidoNotas = convertImageToPdf(notasComerciales.getBytes(), notasComerciales.getOriginalFilename());
+                tipoNotas = "application/pdf";
+                cotizacion.setNotasComercialesNombre(notasComerciales.getOriginalFilename().replace(".png", ".pdf"));
+            } else if ("application/pdf".equals(tipoNotas)) {
+                contenidoNotas = notasComerciales.getBytes();
+                cotizacion.setNotasComercialesNombre(notasComerciales.getOriginalFilename());
+            } else {
+                throw new IllegalArgumentException("Formato no soportado para Notas Comerciales. Solo PDF y PNG");
+            }
+
+            cotizacion.setNotasComercialesContenido(contenidoNotas);
+            cotizacion.setNotasComercialesTopo(tipoNotas);
+        }
+
+        // Procesar Ficha Técnica
+        if (fichaTecnica != null && !fichaTecnica.isEmpty()) {
+            String tipoFicha = fichaTecnica.getContentType();
+            byte[] contenidoFicha;
+
+            if ("image/png".equals(tipoFicha)) {
+                // Convertir PNG a PDF
+                contenidoFicha = convertImageToPdf(fichaTecnica.getBytes(), fichaTecnica.getOriginalFilename());
+                tipoFicha = "application/pdf";
+                cotizacion.setFichaTecnicaNombre(fichaTecnica.getOriginalFilename().replace(".png", ".pdf"));
+            } else if ("application/pdf".equals(tipoFicha)) {
+                contenidoFicha = fichaTecnica.getBytes();
+                cotizacion.setFichaTecnicaNombre(fichaTecnica.getOriginalFilename());
+            } else {
+                throw new IllegalArgumentException("Formato no soportado para Ficha Técnica. Solo PDF y PNG");
+            }
+
+            cotizacion.setFichaTecnicaContenido(contenidoFicha);
+            cotizacion.setFichaTecnicaTipo(tipoFicha);
+        }
 
         cotizacionRepository.save(cotizacion);
-        logger.info("Archivo adicional guardado para cotización ID: {}", cotizacionId);
+        logger.info("Archivos adicionales guardados para cotización ID: {}", cotizacionId);
     }
 
+    // Actualizar el método convertImageToPdf en CotizacionService
+    private byte[] convertImageToPdf(byte[] imageBytes, String originalFileName) throws Exception {
+        try {
+            BufferedImage image = ImageIO.read(new java.io.ByteArrayInputStream(imageBytes));
+
+            ByteArrayOutputStream pdfOut = new ByteArrayOutputStream();
+            Document document = new Document(PageSize.A4, 0, 0, 0, 0);
+            PdfWriter.getInstance(document, pdfOut);
+            document.open();
+
+            Image pdfImage = Image.getInstance(imageBytes);
+
+            float pageWidth = PageSize.A4.getWidth();
+            float pageHeight = PageSize.A4.getHeight();
+
+            pdfImage.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+
+            pdfImage.setAbsolutePosition(0, 0);
+
+
+            document.add(pdfImage);
+            document.close();
+
+            return pdfOut.toByteArray();
+        } catch (Exception e) {
+            logger.error("Error convirtiendo imagen {} a PDF: {}", originalFileName, e.getMessage());
+            throw new Exception("Error al convertir imagen a PDF", e);
+        }
+    }
 }

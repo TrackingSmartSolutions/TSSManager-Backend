@@ -76,12 +76,11 @@ public class CotizacionController {
     @GetMapping("/{id}/download-pdf")
     public ResponseEntity<ByteArrayResource> descargarCotizacionPDF(
             @PathVariable Integer id,
-            @RequestParam(value = "incluirArchivo", defaultValue = "true") boolean incluirArchivo) throws Exception {
+            @RequestParam(value = "incluirArchivos", defaultValue = "false") boolean incluirArchivos) throws Exception {
 
         logger.info("Solicitud para descargar PDF de cotización con ID: {}", id);
-        ByteArrayResource resource = cotizacionService.generateCotizacionPDF(id, incluirArchivo);
+        ByteArrayResource resource = cotizacionService.generateCotizacionPDF(id, incluirArchivos);
         Cotizacion cotizacion = cotizacionService.findById(id);
-
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -98,28 +97,45 @@ public class CotizacionController {
                 .body(resource);
     }
 
-    @PostMapping("/{id}/upload-archivo")
-    public ResponseEntity<Map<String, String>> subirArchivo(
+    @PostMapping("/{id}/upload-archivos")
+    public ResponseEntity<Map<String, String>> subirArchivos(
             @PathVariable Integer id,
-            @RequestParam("archivo") MultipartFile archivo) {
+            @RequestParam(value = "notasComerciales", required = false) MultipartFile notasComerciales,
+            @RequestParam(value = "fichaTecnica", required = false) MultipartFile fichaTecnica) {
         try {
-            if (archivo.isEmpty()) {
+            // Validar que si se sube un archivo, se suban ambos
+            boolean tieneNotas = notasComerciales != null && !notasComerciales.isEmpty();
+            boolean tieneFicha = fichaTecnica != null && !fichaTecnica.isEmpty();
+
+            if ((tieneNotas && !tieneFicha) || (!tieneNotas && tieneFicha)) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "El archivo no puede estar vacío"));
+                        .body(Map.of("error", "Si subes un archivo, debes subir ambos: Notas Comerciales y Ficha Técnica"));
             }
 
-            if (!"application/pdf".equals(archivo.getContentType())) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Solo se permiten archivos PDF"));
+            // Validar formatos
+            if (tieneNotas) {
+                String tipoNotas = notasComerciales.getContentType();
+                if (!"application/pdf".equals(tipoNotas) && !"image/png".equals(tipoNotas)) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "Notas Comerciales: Solo se permiten archivos PDF y PNG"));
+                }
             }
 
-            cotizacionService.subirArchivoAdicional(id, archivo);
-            return ResponseEntity.ok(Map.of("mensaje", "Archivo subido exitosamente"));
+            if (tieneFicha) {
+                String tipoFicha = fichaTecnica.getContentType();
+                if (!"application/pdf".equals(tipoFicha) && !"image/png".equals(tipoFicha)) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "Ficha Técnica: Solo se permiten archivos PDF y PNG"));
+                }
+            }
+
+            cotizacionService.subirArchivosAdicionales(id, notasComerciales, fichaTecnica);
+            return ResponseEntity.ok(Map.of("mensaje", "Archivos subidos exitosamente"));
 
         } catch (Exception e) {
-            logger.error("Error al subir archivo: {}", e.getMessage(), e);
+            logger.error("Error al subir archivos: {}", e.getMessage(), e);
             return ResponseEntity.status(500)
-                    .body(Map.of("error", "Error al subir el archivo"));
+                    .body(Map.of("error", "Error al subir los archivos: " + e.getMessage()));
         }
     }
 
