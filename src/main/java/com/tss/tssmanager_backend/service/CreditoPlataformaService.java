@@ -154,27 +154,75 @@ public class CreditoPlataformaService {
     }
 
     private List<Map<String, Object>> calcularHistorialSaldos(LocalDateTime fechaInicio, LocalDateTime fechaFin) {
-        List<Object[]> historialData = repository.getHistorialSaldos(fechaInicio, fechaFin);
+        // Obtener todos los movimientos hasta la fecha fin para calcular saldos acumulados
+        List<CreditoPlataforma> todosLosCreditos = repository.findByFechaLessThanEqualOrderByFecha(fechaFin);
 
-        return historialData.stream().map(row -> {
-            Map<String, Object> item = new HashMap<>();
-            item.put("fecha", row[0]);
+        // Agrupar por fecha y plataforma/subtipo
+        Map<LocalDate, Map<String, BigDecimal>> saldosPorFechaYPlataforma = new TreeMap<>();
 
-            PlataformaEquipoEnum plataforma = (PlataformaEquipoEnum) row[1];
-            String subtipo = (String) row[2];
-            BigDecimal saldo = (BigDecimal) row[3];
+        for (CreditoPlataforma credito : todosLosCreditos) {
+            LocalDate fecha = credito.getFecha().toLocalDate();
 
             String plataformaKey;
-            if (plataforma == PlataformaEquipoEnum.WHATSGPS && subtipo != null) {
-                plataformaKey = "WHATSGPS_" + subtipo;
+            if (credito.getPlataforma() == PlataformaEquipoEnum.WHATSGPS && credito.getSubtipo() != null) {
+                plataformaKey = "WHATSGPS_" + credito.getSubtipo();
             } else {
-                plataformaKey = plataforma.name();
+                plataformaKey = credito.getPlataforma().name();
             }
 
-            item.put("plataforma", plataformaKey);
-            item.put("saldo", saldo);
-            return item;
-        }).collect(Collectors.toList());
+            saldosPorFechaYPlataforma.computeIfAbsent(fecha, k -> new HashMap<>());
+
+            BigDecimal montoActual = saldosPorFechaYPlataforma.get(fecha).getOrDefault(plataformaKey, BigDecimal.ZERO);
+
+            if (credito.getTipo() == TipoCreditoEnum.ABONO) {
+                montoActual = montoActual.add(credito.getMonto());
+            } else { // CARGO
+                montoActual = montoActual.subtract(credito.getMonto());
+            }
+
+            saldosPorFechaYPlataforma.get(fecha).put(plataformaKey, montoActual);
+        }
+
+        // Calcular saldos acumulados
+        Map<String, BigDecimal> saldosAcumulados = new HashMap<>();
+        saldosAcumulados.put("TRACK_SOLID", BigDecimal.ZERO);
+        saldosAcumulados.put("WHATSGPS_ANUAL", BigDecimal.ZERO);
+        saldosAcumulados.put("WHATSGPS_VITALICIA", BigDecimal.ZERO);
+
+        List<Map<String, Object>> resultado = new ArrayList<>();
+
+        for (Map.Entry<LocalDate, Map<String, BigDecimal>> entry : saldosPorFechaYPlataforma.entrySet()) {
+            LocalDate fecha = entry.getKey();
+
+            // Solo incluir fechas dentro del rango solicitado
+            if (fecha.isBefore(fechaInicio.toLocalDate()) || fecha.isAfter(fechaFin.toLocalDate())) {
+                // Actualizar saldos acumulados pero no incluir en resultado si está fuera del rango
+                for (Map.Entry<String, BigDecimal> plataformaEntry : entry.getValue().entrySet()) {
+                    String plataforma = plataformaEntry.getKey();
+                    BigDecimal cambio = plataformaEntry.getValue();
+                    saldosAcumulados.put(plataforma, saldosAcumulados.getOrDefault(plataforma, BigDecimal.ZERO).add(cambio));
+                }
+                continue;
+            }
+
+            // Actualizar saldos acumulados con los cambios del día
+            for (Map.Entry<String, BigDecimal> plataformaEntry : entry.getValue().entrySet()) {
+                String plataforma = plataformaEntry.getKey();
+                BigDecimal cambio = plataformaEntry.getValue();
+                saldosAcumulados.put(plataforma, saldosAcumulados.getOrDefault(plataforma, BigDecimal.ZERO).add(cambio));
+            }
+
+            // Crear entradas para cada plataforma en esta fecha con su saldo acumulado
+            for (String plataforma : Arrays.asList("TRACK_SOLID", "WHATSGPS_ANUAL", "WHATSGPS_VITALICIA")) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("fecha", fecha.toString());
+                item.put("plataforma", plataforma);
+                item.put("saldo", saldosAcumulados.get(plataforma));
+                resultado.add(item);
+            }
+        }
+
+        return resultado;
     }
 
     @Transactional

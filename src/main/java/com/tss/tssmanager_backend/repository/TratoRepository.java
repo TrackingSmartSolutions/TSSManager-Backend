@@ -393,4 +393,12 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
             @Param("startDate") Instant startDate,
             @Param("endDate") Instant endDate
     );
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Trato t SET t.propietarioId = :nuevoPropietarioId WHERE t.propietarioId = :antiguoPropietarioId")
+    void updatePropietarioId(@Param("antiguoPropietarioId") Integer antiguoPropietarioId,
+                             @Param("nuevoPropietarioId") Integer nuevoPropietarioId);
+
+    Long countByPropietarioId(Integer propietarioId);
 }

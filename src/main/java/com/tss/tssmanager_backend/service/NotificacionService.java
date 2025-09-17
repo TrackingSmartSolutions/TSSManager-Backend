@@ -48,6 +48,10 @@ public class NotificacionService {
     private CuentaPorPagarRepository cuentaPorPagarRepository;
     @Autowired
     private EmpresaRepository empresaRepository;
+    @Autowired
+    private EmailRecordRepository emailRecordRepository;
+    @Autowired
+    private EmailService emailService;
 
     @PostConstruct
     public void inicializarNotificaciones() {
@@ -228,6 +232,11 @@ public class NotificacionService {
                             tipoMensaje, cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
 
                     notificarAdministradores("CUENTA_COBRAR", mensaje);
+
+                    // Enviar correo solo si vence mañana
+                    if (cuenta.getFechaPago().equals(manana)) {
+                        enviarCorreoCuentaPorCobrar(cuenta);
+                    }
                 });
     }
 
@@ -241,9 +250,163 @@ public class NotificacionService {
                             tipoMensaje, cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
 
                     notificarAdministradores("CUENTA_PAGAR", mensaje);
+
+                    // Enviar correo solo si vence mañana
+                    if (cuenta.getFechaPago().equals(manana)) {
+                        enviarCorreoCuentaPorPagar(cuenta);
+                    }
                 });
     }
 
+    private void enviarCorreoCuentaPorCobrar(CuentaPorCobrar cuenta) {
+        try {
+            List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
+
+            String asunto = "Recordatorio: Cuenta por Cobrar vence mañana";
+            String cuerpo = construirCuerpoCorreoCuentaPorCobrar(cuenta);
+
+            for (Usuario admin : admins) {
+                // Verificar si ya se envió correo en las últimas 24 horas para evitar duplicados
+                if (!existeCorreoRecienteCuentaPorCobrar(admin.getId(), cuenta.getFolio())) {
+                    emailService.enviarCorreo(
+                            admin.getCorreoElectronico(),
+                            asunto,
+                            cuerpo,
+                            null, // Sin adjuntos
+                            null  // Sin trato asociado
+                    );
+                    logger.info("Correo de cuenta por cobrar enviado a: {}", admin.getCorreoElectronico());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error al enviar correo de cuenta por cobrar: {}", e.getMessage());
+        }
+    }
+
+    private void enviarCorreoCuentaPorPagar(CuentaPorPagar cuenta) {
+        try {
+            List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
+
+            String asunto = "Recordatorio: Cuenta por Pagar vence mañana";
+            String cuerpo = construirCuerpoCorreoCuentaPorPagar(cuenta);
+
+            for (Usuario admin : admins) {
+                // Verificar si ya se envió correo en las últimas 24 horas para evitar duplicados
+                if (!existeCorreoRecienteCuentaPorPagar(admin.getId(), cuenta.getFolio())) {
+                    emailService.enviarCorreo(
+                            admin.getCorreoElectronico(),
+                            asunto,
+                            cuerpo,
+                            null, // Sin adjuntos
+                            null  // Sin trato asociado
+                    );
+                    logger.info("Correo de cuenta por pagar enviado a: {}", admin.getCorreoElectronico());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error al enviar correo de cuenta por pagar: {}", e.getMessage());
+        }
+    }
+
+    private String construirCuerpoCorreoCuentaPorCobrar(CuentaPorCobrar cuenta) {
+        return String.format("""
+            <html>
+            <body>
+                <h2>Recordatorio: Cuenta por Cobrar</h2>
+                <p>Estimado administrador,</p>
+                <p>Le recordamos que la siguiente cuenta por cobrar <strong>vence mañana</strong>:</p>
+                <ul>
+                    <li><strong>Folio:</strong> %s</li>
+                    <li><strong>Cliente:</strong> %s</li>
+                    <li><strong>Fecha de Vencimiento:</strong> %s</li>
+                    <li><strong>Monto:</strong> $%s</li>
+                </ul>
+                <p>Por favor, tome las acciones necesarias.</p>
+                <br>
+                <p>Saludos cordiales,<br>Sistema TSS Manager</p>
+            </body>
+            </html>
+            """,
+                cuenta.getFolio(),
+                cuenta.getCliente().getNombre(),
+                cuenta.getFechaPago(),
+                cuenta.getCantidadCobrar()
+        );
+    }
+
+    private String construirCuerpoCorreoCuentaPorPagar(CuentaPorPagar cuenta) {
+        return String.format("""
+            <html>
+            <body>
+                <h2>Recordatorio: Cuenta por Pagar</h2>
+                <p>Estimado administrador,</p>
+                <p>Le recordamos que la siguiente cuenta por pagar <strong>vence mañana</strong>:</p>
+                <ul>
+                    <li><strong>Folio:</strong> %s</li>
+                    <li><strong>Cuenta:</strong> %s</li>
+                    <li><strong>Fecha de Vencimiento:</strong> %s</li>
+                    <li><strong>Monto:</strong> $%s</li>
+                </ul>
+                <p>Por favor, tome las acciones necesarias.</p>
+                <br>
+                <p>Saludos cordiales,<br>Sistema TSS Manager</p>
+            </body>
+            </html>
+            """,
+                cuenta.getFolio(),
+                cuenta.getCuenta().getNombre(),
+                cuenta.getFechaPago(),
+                cuenta.getMonto()
+        );
+    }
+
+    private boolean existeCorreoRecienteCuentaPorCobrar(Integer adminId, String folio) {
+        try {
+            Usuario admin = usuarioRepository.findById(adminId).orElse(null);
+            if (admin == null || admin.getCorreoElectronico() == null) {
+                return false;
+            }
+
+            String correoAdmin = admin.getCorreoElectronico();
+            Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
+            ZonedDateTime hace24HorasZoned = convertirAZonaLocal(hace24Horas);
+
+            List<EmailRecord> correosRecientes = emailRecordRepository
+                    .findByDestinatarioContainingAndCuerpoContainingAndFechaEnvioAfterAndExitoTrue(
+                            correoAdmin, folio, hace24HorasZoned);
+
+            return !correosRecientes.isEmpty();
+
+        } catch (Exception e) {
+            logger.error("Error al verificar correo reciente de cuenta por cobrar: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean existeCorreoRecienteCuentaPorPagar(Integer adminId, String folio) {
+        try {
+            Usuario admin = usuarioRepository.findById(adminId).orElse(null);
+            if (admin == null || admin.getCorreoElectronico() == null) {
+                return false;
+            }
+
+            String correoAdmin = admin.getCorreoElectronico();
+            Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
+            ZonedDateTime hace24HorasZoned = convertirAZonaLocal(hace24Horas);
+
+            List<EmailRecord> correosRecientes = emailRecordRepository
+                    .findByDestinatarioContainingAndCuerpoContainingAndFechaEnvioAfterAndExitoTrue(
+                            correoAdmin, folio, hace24HorasZoned);
+
+            return !correosRecientes.isEmpty();
+
+        } catch (Exception e) {
+            logger.error("Error al verificar correo reciente de cuenta por pagar: {}", e.getMessage());
+            return false;
+        }
+    }
 
     // Nuevo método helper para notificar a todos los usuarios activos
     private void notificarTodosLosUsuarios(String tipo, String mensaje) {

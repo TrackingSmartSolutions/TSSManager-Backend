@@ -173,12 +173,34 @@ public class CuentaPorPagarService {
         if ("Pagado".equals(cuenta.getEstatus())) {
             throw new IllegalStateException("No se puede editar una cuenta que ya está pagada");
         }
+
         // Actualizar campos editables
         if (fechaPago != null) {
             cuenta.setFechaPago(fechaPago);
         }
         if (monto != null) {
             cuenta.setMonto(monto);
+
+            // Recalcular saldo pendiente y estatus cuando cambie el monto
+            BigDecimal montoPagado = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+            BigDecimal nuevoSaldo = monto.subtract(montoPagado);
+            cuenta.setSaldoPendiente(nuevoSaldo);
+
+            // Actualizar estatus basado en el nuevo saldo
+            if (nuevoSaldo.compareTo(BigDecimal.ZERO) <= 0) {
+                cuenta.setEstatus("Pagado");
+                // Si la cuenta queda pagada, actualizar vigencia de SIM si existe
+                if (cuenta.getSim() != null && fechaPago == null) {
+                    // Usar la fecha actual si no se especifica una nueva fecha de pago
+                    actualizarVigenciaSim(cuenta, LocalDate.now());
+                } else if (cuenta.getSim() != null) {
+                    actualizarVigenciaSim(cuenta, fechaPago);
+                }
+            } else if (montoPagado.compareTo(BigDecimal.ZERO) > 0) {
+                cuenta.setEstatus("En proceso");
+            } else {
+                cuenta.setEstatus("Pendiente");
+            }
         }
         if (formaPago != null && !formaPago.isEmpty()) {
             cuenta.setFormaPago(formaPago);
@@ -186,6 +208,7 @@ public class CuentaPorPagarService {
         if (nota != null) {
             cuenta.setNota(nota);
         }
+
         return cuentasPorPagarRepository.save(cuenta);
     }
 

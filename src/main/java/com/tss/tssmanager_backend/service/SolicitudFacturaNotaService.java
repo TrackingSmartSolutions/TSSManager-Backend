@@ -16,6 +16,7 @@ import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.config.CloudinaryConfig;
 import com.tss.tssmanager_backend.entity.UnidadCotizacion;
+import com.tss.tssmanager_backend.utils.DateUtils;
 import jakarta.persistence.EntityManager;
 import org.hibernate.Hibernate;
 import org.slf4j.Logger;
@@ -36,10 +37,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.text.NumberFormat;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.stream.Collectors;
 import com.cloudinary.Cloudinary;
 
@@ -228,7 +227,7 @@ public class SolicitudFacturaNotaService {
         }
         solicitud.setEmisor(emisor);
         solicitud.setCuentaPorCobrar(cuenta);
-        solicitud.setFechaEmision(Date.valueOf(LocalDate.now()));
+        solicitud.setFechaEmision(Date.valueOf(DateUtils.nowInMexico().toLocalDate()));
         solicitud.setFechaModificacion(LocalDateTime.now());
 
         // Obtener valores de la cotización vinculada
@@ -267,8 +266,7 @@ public class SolicitudFacturaNotaService {
         existingSolicitud.setTipo(solicitud.getTipo());
         existingSolicitud.setClaveProductoServicio(solicitud.getClaveProductoServicio());
         existingSolicitud.setClaveUnidad(solicitud.getClaveUnidad());
-        existingSolicitud.setFechaEmision(Date.valueOf(solicitud.getFechaEmision().toLocalDate()));
-        existingSolicitud.setFechaModificacion(LocalDateTime.now());
+        existingSolicitud.setFechaEmision(Date.valueOf(DateUtils.nowInMexico().toLocalDate()));        existingSolicitud.setFechaModificacion(LocalDateTime.now());
         existingSolicitud.setUsoCfdi(solicitud.getUsoCfdi());
 
         // Validar usoCfdi si el tipo es SOLICITUD_DE_FACTURA
@@ -519,100 +517,37 @@ public class SolicitudFacturaNotaService {
 
         Cotizacion cotizacion = solicitud.getCotizacion();
 
-// Priorizar mostrar conceptos personalizados si existen
-        if (solicitud.getConceptosSeleccionados() != null && !solicitud.getConceptosSeleccionados().trim().isEmpty()) {
-            // Si hay cotización, intentar filtrar sus unidades
-            if (cotizacion != null && cotizacion.getUnidades() != null) {
-                List<UnidadCotizacion> unidadesFiltradas = filtrarUnidadesPorConceptos(cotizacion, solicitud.getConceptosSeleccionados());
+        // Priorizar conceptos personalizados sobre los seleccionados y luego sobre los de cotización
+        String conceptosAUsar = null;
+        if (solicitud.getConceptosPersonalizados() != null && !solicitud.getConceptosPersonalizados().trim().isEmpty()) {
+            conceptosAUsar = solicitud.getConceptosPersonalizados();
+        } else if (solicitud.getConceptosSeleccionados() != null && !solicitud.getConceptosSeleccionados().trim().isEmpty()) {
+            conceptosAUsar = solicitud.getConceptosSeleccionados();
+        }
 
-                if (!unidadesFiltradas.isEmpty()) {
-                    // Mostrar unidades filtradas de la cotización
-                    boolean isEvenRow = false;
-                    for (UnidadCotizacion unidad : unidadesFiltradas) {
-                        Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
-
-                        conceptosTable.addCell(createStyledTableCell(
-                                String.valueOf(unidad.getCantidad()),
-                                Element.ALIGN_CENTER,
-                                normalFont,
-                                rowColor
-                        ));
-
-                        conceptosTable.addCell(createStyledTableCell(
-                                unidad.getUnidad(),
-                                Element.ALIGN_CENTER,
-                                normalFont,
-                                rowColor
-                        ));
-
-                        PdfPCell conceptoCell = new PdfPCell(new Phrase(unidad.getConcepto(), normalFont));
-                        conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                        conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
-                        conceptoCell.setPadding(8);
-                        conceptoCell.setBackgroundColor(rowColor);
-                        conceptoCell.setBorder(Rectangle.BOX);
-                        conceptoCell.setBorderColor(grisMedio);
-                        conceptoCell.setBorderWidth(0.5f);
-                        conceptosTable.addCell(conceptoCell);
-
-                        conceptosTable.addCell(createStyledTableCell(
-                                formatCurrency(unidad.getPrecioUnitario()),
-                                Element.ALIGN_RIGHT,
-                                normalFont,
-                                rowColor
-                        ));
-
-                        BigDecimal descuento = unidad.getDescuento() != null ? unidad.getDescuento() : BigDecimal.ZERO;
-                        BigDecimal descuentoEnDinero = unidad.getPrecioUnitario()
-                                .multiply(BigDecimal.valueOf(unidad.getCantidad()))
-                                .multiply(descuento.divide(BigDecimal.valueOf(100)));
-
-                        conceptosTable.addCell(createStyledTableCell(
-                                formatCurrency(descuentoEnDinero),
-                                Element.ALIGN_RIGHT,
-                                normalFont,
-                                rowColor
-                        ));
-
-                        conceptosTable.addCell(createStyledTableCell(
-                                formatCurrency(unidad.getImporteTotal()),
-                                Element.ALIGN_RIGHT,
-                                boldFont,
-                                rowColor
-                        ));
-
-                        isEvenRow = !isEvenRow;
-                    }
-                } else {
-                    // No se encontraron coincidencias, mostrar conceptos personalizados
-                    addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio);
-                }
-            } else {
-                // No hay cotización, mostrar solo conceptos personalizados
-                addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio);
-            }
+        if (conceptosAUsar != null) {
+            // Mostrar conceptos personalizados/seleccionados
+            addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio, conceptosAUsar);
         } else if (cotizacion != null && cotizacion.getUnidades() != null) {
-            // Fallback: mostrar todas las unidades de la cotización si no hay conceptos personalizados
-            List<UnidadCotizacion> unidadesFiltradas = filtrarUnidadesPorConceptos(cotizacion, solicitud.getConceptosSeleccionados());
-
+            // Fallback: mostrar todas las unidades de la cotización
+            List<UnidadCotizacion> todasLasUnidades = cotizacion.getUnidades();
             boolean isEvenRow = false;
-            for (UnidadCotizacion unidad : unidadesFiltradas) {
+            for (UnidadCotizacion unidad : todasLasUnidades) {
                 Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
+                // Código existente para mostrar las unidades de cotización
                 conceptosTable.addCell(createStyledTableCell(
                         String.valueOf(unidad.getCantidad()),
                         Element.ALIGN_CENTER,
                         normalFont,
                         rowColor
                 ));
-
                 conceptosTable.addCell(createStyledTableCell(
                         unidad.getUnidad(),
                         Element.ALIGN_CENTER,
                         normalFont,
                         rowColor
                 ));
-
                 PdfPCell conceptoCell = new PdfPCell(new Phrase(unidad.getConcepto(), normalFont));
                 conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
                 conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
@@ -622,33 +557,28 @@ public class SolicitudFacturaNotaService {
                 conceptoCell.setBorderColor(grisMedio);
                 conceptoCell.setBorderWidth(0.5f);
                 conceptosTable.addCell(conceptoCell);
-
                 conceptosTable.addCell(createStyledTableCell(
                         formatCurrency(unidad.getPrecioUnitario()),
                         Element.ALIGN_RIGHT,
                         normalFont,
                         rowColor
                 ));
-
                 BigDecimal descuento = unidad.getDescuento() != null ? unidad.getDescuento() : BigDecimal.ZERO;
                 BigDecimal descuentoEnDinero = unidad.getPrecioUnitario()
                         .multiply(BigDecimal.valueOf(unidad.getCantidad()))
                         .multiply(descuento.divide(BigDecimal.valueOf(100)));
-
                 conceptosTable.addCell(createStyledTableCell(
                         formatCurrency(descuentoEnDinero),
                         Element.ALIGN_RIGHT,
                         normalFont,
                         rowColor
                 ));
-
                 conceptosTable.addCell(createStyledTableCell(
                         formatCurrency(unidad.getImporteTotal()),
                         Element.ALIGN_RIGHT,
                         boldFont,
                         rowColor
                 ));
-
                 isEvenRow = !isEvenRow;
             }
         }
@@ -935,13 +865,16 @@ public class SolicitudFacturaNotaService {
     }
 
     private void addConceptosPersonalizados(PdfPTable conceptosTable, SolicitudFacturaNota solicitud,
-                                            Color blancoHueso, Font normalFont, Font boldFont, Color grisMedio) {
-        if (solicitud.getConceptosSeleccionados() == null) return;
+                                            Color blancoHueso, Font normalFont, Font boldFont, Color grisMedio,
+                                            String conceptosTexto) {
+        if (conceptosTexto == null || conceptosTexto.trim().isEmpty()) return;
 
-        String[] conceptos = solicitud.getConceptosSeleccionados().split(", ");
+        String[] conceptos = conceptosTexto.split(", ");
         boolean isEvenRow = false;
 
         for (String concepto : conceptos) {
+            if (concepto.trim().isEmpty()) continue;
+
             Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
             // Cantidad (default 1)
@@ -1010,5 +943,45 @@ public class SolicitudFacturaNotaService {
         solicitud.setIva(iva);
         solicitud.setTotal(total);
         solicitud.setImporteLetra(cotizacionService.convertToLetter(total));
+    }
+
+    @Transactional
+    public void actualizarConceptosPersonalizados(Integer id, String conceptosPersonalizados) {
+        logger.info("Actualizando conceptos personalizados para solicitud con ID: {}", id);
+        SolicitudFacturaNota solicitud = solicitudRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + id));
+
+        solicitud.setConceptosPersonalizados(conceptosPersonalizados);
+        solicitud.setFechaModificacion(LocalDateTime.now());
+
+        solicitudRepository.save(solicitud);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> obtenerConceptosSolicitud(Integer solicitudId) {
+        logger.info("Obteniendo conceptos para solicitud con ID: {}", solicitudId);
+
+        SolicitudFacturaNota solicitud = solicitudRepository.findById(solicitudId)
+                .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + solicitudId));
+
+        Map<String, Object> response = new HashMap<>();
+
+        // Obtener conceptos de la cotización vinculada
+        List<String> conceptosCotizacion = new ArrayList<>();
+        if (solicitud.getCotizacion() != null) {
+            // Forzar la inicialización de la colección lazy
+            Hibernate.initialize(solicitud.getCotizacion().getUnidades());
+            if (solicitud.getCotizacion().getUnidades() != null) {
+                conceptosCotizacion = solicitud.getCotizacion().getUnidades().stream()
+                        .map(UnidadCotizacion::getConcepto)
+                        .collect(Collectors.toList());
+            }
+        }
+
+        response.put("conceptosCotizacion", conceptosCotizacion);
+        response.put("conceptosSeleccionados", solicitud.getConceptosSeleccionados());
+        response.put("conceptosPersonalizados", solicitud.getConceptosPersonalizados());
+
+        return response;
     }
 }

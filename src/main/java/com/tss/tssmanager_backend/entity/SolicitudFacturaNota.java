@@ -73,4 +73,6 @@ public class SolicitudFacturaNota {
     @Column(name = "conceptos_seleccionados", columnDefinition = "TEXT")
     private String conceptosSeleccionados;
 
+    @Column(name = "conceptos_personalizados", columnDefinition = "TEXT")
+    private String conceptosPersonalizados;
 }

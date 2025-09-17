@@ -2,7 +2,10 @@ package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.UsuarioDTO;
 import com.tss.tssmanager_backend.entity.Usuario;
+import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
+import com.tss.tssmanager_backend.repository.ActividadRepository;
+import com.tss.tssmanager_backend.repository.TratoRepository;
 import com.tss.tssmanager_backend.repository.UsuarioRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +16,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,6 +28,12 @@ public class UsuarioService {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private TratoRepository tratoRepository;
+
+    @Autowired
+    private ActividadRepository actividadRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -104,5 +115,45 @@ public class UsuarioService {
         dto.setFechaCreacion(usuario.getFechaCreacion());
         dto.setFechaModificacion(usuario.getFechaModificacion());
         return dto;
+    }
+
+    @Transactional
+    public void desactivarUsuarioConReasignacion(Integer usuarioId, Integer usuarioDestinoId) {
+        // Verificar que ambos usuarios existan
+        Usuario usuarioOrigen = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuario origen no encontrado"));
+        Usuario usuarioDestino = usuarioRepository.findById(usuarioDestinoId)
+                .orElseThrow(() -> new RuntimeException("Usuario destino no encontrado"));
+
+        if (usuarioDestino.getEstatus() != EstatusUsuarioEnum.ACTIVO) {
+            throw new RuntimeException("El usuario destino debe estar activo");
+        }
+
+        // Reasignar tratos
+        tratoRepository.updatePropietarioId(usuarioId, usuarioDestinoId);
+
+        // Reasignar actividades
+        actividadRepository.updateAsignadoAId(usuarioId, usuarioDestinoId);
+
+        // Desactivar usuario
+        usuarioOrigen.setEstatus(EstatusUsuarioEnum.INACTIVO);
+        usuarioRepository.save(usuarioOrigen);
+
+        logger.info("Usuario {} desactivado. Tratos y actividades reasignados a usuario {}",
+                usuarioId, usuarioDestinoId);
+    }
+
+    public Map<String, Integer> obtenerContadoresAsignacion(Integer usuarioId) {
+        // Contar tratos donde es propietario
+        Long tratosCount = tratoRepository.countByPropietarioId(usuarioId);
+
+        // Contar actividades abiertas asignadas
+        Long actividadesAbiertasCount = actividadRepository.countByAsignadoAIdAndEstatus(usuarioId, EstatusActividadEnum.ABIERTA);
+
+        Map<String, Integer> counts = new HashMap<>();
+        counts.put("tratos", tratosCount.intValue());
+        counts.put("actividades", actividadesAbiertasCount.intValue());
+
+        return counts;
     }
 }

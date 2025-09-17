@@ -15,7 +15,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
+import java.util.*;
+
 import com.tss.tssmanager_backend.dto.FacturaDTO;
 import com.tss.tssmanager_backend.repository.FacturaRepository;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/solicitudes-factura-nota")
@@ -171,6 +173,35 @@ public class SolicitudFacturaNotaController {
         headers.setContentLength(fileContent.length);
 
         return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
+    }
+
+    @GetMapping("/solicitudes/{id}/conceptos")
+    public ResponseEntity<Map<String, Object>> obtenerConceptosSolicitud(@PathVariable Integer id) {
+        try {
+            logger.info("Obteniendo conceptos para solicitud con ID: {}", id);
+            Map<String, Object> response = solicitudService.obtenerConceptosSolicitud(id);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error al obtener conceptos para solicitud con ID {}: {}", id, e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/solicitudes/{id}/conceptos")
+    public ResponseEntity<Map<String, String>> actualizarConceptosSolicitud(
+            @PathVariable Integer id,
+            @RequestBody Map<String, String> conceptosData) {
+        try {
+            logger.info("Actualizando conceptos para solicitud con ID: {}", id);
+
+            String conceptosPersonalizados = conceptosData.get("conceptosPersonalizados");
+            solicitudService.actualizarConceptosPersonalizados(id, conceptosPersonalizados);
+
+            return ResponseEntity.ok(Map.of("mensaje", "Conceptos actualizados correctamente"));
+        } catch (Exception e) {
+            logger.error("Error al actualizar conceptos para solicitud con ID {}: {}", id, e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
     }
 
 }

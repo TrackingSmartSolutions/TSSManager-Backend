@@ -3,9 +3,11 @@ package com.tss.tssmanager_backend.repository;
 import com.tss.tssmanager_backend.entity.Actividad;
 import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -49,4 +51,12 @@ public interface ActividadRepository extends JpaRepository<Actividad, Integer> {
             @Param("start") LocalDate start,
             @Param("end") LocalDate end,
             @Param("estatus") EstatusActividadEnum estatus);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Actividad a SET a.asignadoAId = :nuevoAsignadoId WHERE a.asignadoAId = :antiguoAsignadoId AND a.estatus = 'ABIERTA'")
+    void updateAsignadoAId(@Param("antiguoAsignadoId") Integer antiguoAsignadoId,
+                           @Param("nuevoAsignadoId") Integer nuevoAsignadoId);
+
+    Long countByAsignadoAIdAndEstatus(Integer asignadoAId, EstatusActividadEnum estatus);
 }

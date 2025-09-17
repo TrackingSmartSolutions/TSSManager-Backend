@@ -54,4 +54,6 @@ public interface CreditoPlataformaRepository extends JpaRepository<CreditoPlataf
             "WHERE c.plataforma = 'WHATSGPS' AND c.subtipo IS NOT NULL " +
             "GROUP BY c.plataforma, c.subtipo")
     List<Object[]> getSaldosPorPlataformaYSubtipo();
+
+    List<CreditoPlataforma> findByFechaLessThanEqualOrderByFecha(LocalDateTime fecha);
 }

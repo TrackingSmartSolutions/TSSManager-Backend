@@ -87,11 +87,23 @@ public class AuthController {
     }
 
     @PatchMapping("/users/{userId}/status")
-    public ResponseEntity<Usuario> toggleUserStatus(@PathVariable Integer userId) {
+    public ResponseEntity<Usuario> toggleUserStatus(
+            @PathVariable Integer userId,
+            @RequestParam(required = false) Integer reasignarA) {
+
         Usuario usuario = usuarioRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        usuario.setEstatus(usuario.getEstatus() == EstatusUsuarioEnum.ACTIVO ? EstatusUsuarioEnum.INACTIVO : EstatusUsuarioEnum.ACTIVO);
-        Usuario updatedUsuario = usuarioRepository.save(usuario);
+
+        // Si se está desactivando un usuario y hay un usuario destino
+        if (usuario.getEstatus() == EstatusUsuarioEnum.ACTIVO && reasignarA != null) {
+            usuarioService.desactivarUsuarioConReasignacion(userId, reasignarA);
+        } else {
+            usuario.setEstatus(usuario.getEstatus() == EstatusUsuarioEnum.ACTIVO ?
+                    EstatusUsuarioEnum.INACTIVO : EstatusUsuarioEnum.ACTIVO);
+            usuarioRepository.save(usuario);
+        }
+
+        Usuario updatedUsuario = usuarioRepository.findById(userId).get();
         return ResponseEntity.ok(updatedUsuario);
     }
 
@@ -137,6 +149,16 @@ public class AuthController {
                     "success", false,
                     "message", "Error interno del servidor"
             ));
+        }
+    }
+
+    @GetMapping("/users/{userId}/assignment-counts")
+    public ResponseEntity<Map<String, Integer>> getAssignmentCounts(@PathVariable Integer userId) {
+        try {
+            Map<String, Integer> counts = usuarioService.obtenerContadoresAsignacion(userId);
+            return ResponseEntity.ok(counts);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", 0));
         }
     }
 }
