@@ -4,10 +4,7 @@ import com.cloudinary.Cloudinary;
 import com.tss.tssmanager_backend.config.CloudinaryConfig;
 import com.tss.tssmanager_backend.dto.CuentaPorCobrarDTO;
 import com.tss.tssmanager_backend.entity.*;
-import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
-import com.tss.tssmanager_backend.enums.EsquemaCobroEnum;
-import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
-import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
+import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.*;
 import org.slf4j.Logger;
@@ -49,6 +46,9 @@ public class CuentaPorCobrarService {
 
     @Autowired
     private CloudinaryConfig cloudinaryConfig;
+
+    @Autowired
+    private CotizacionService cotizacionService;
 
     @Transactional
     public List<CuentaPorCobrarDTO> crearCuentasPorCobrarFromCotizacion(Integer cotizacionId, EsquemaCobroEnum esquema, List<String> conceptosSeleccionados, Integer numeroPagos, LocalDate fechaInicial) {
@@ -207,13 +207,14 @@ public class CuentaPorCobrarService {
             throw new IllegalStateException("No se puede editar una cuenta que ya está pagada");
         }
 
-        // Actualizar campos editables
         if (dto.getFechaPago() != null) {
             cuenta.setFechaPago(dto.getFechaPago());
         }
 
-        if (dto.getCantidadCobrar() != null) {
+        boolean montoModificado = false;
+        if (dto.getCantidadCobrar() != null && !dto.getCantidadCobrar().equals(cuenta.getCantidadCobrar())) {
             cuenta.setCantidadCobrar(dto.getCantidadCobrar());
+            montoModificado = true;
         }
 
         if (dto.getConceptos() != null && !dto.getConceptos().isEmpty()) {
@@ -221,7 +222,54 @@ public class CuentaPorCobrarService {
         }
 
         CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
+
+        if (montoModificado) {
+            actualizarSolicitudesVinculadas(savedCuenta);
+        }
+
         return convertToDTO(savedCuenta);
+    }
+
+    private void actualizarSolicitudesVinculadas(CuentaPorCobrar cuenta) {
+        if (cuenta.getSolicitudesFacturasNotas() != null && !cuenta.getSolicitudesFacturasNotas().isEmpty()) {
+            for (SolicitudFacturaNota solicitud : cuenta.getSolicitudesFacturasNotas()) {
+                // Actualizar el subtotal con el nuevo monto de la cuenta
+                solicitud.setSubtotal(cuenta.getCantidadCobrar());
+
+                // Recalcular IVA (16%)
+                BigDecimal iva = cuenta.getCantidadCobrar().multiply(new BigDecimal("0.16"));
+                solicitud.setIva(iva);
+
+                // Calcular retenciones si aplica
+                BigDecimal isrEstatal = BigDecimal.ZERO;
+                BigDecimal isrFederal = BigDecimal.ZERO;
+
+                if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
+                        solicitud.getCliente().getRegimenFiscal().equals("601")) {
+
+                    String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
+                    boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
+                    boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
+
+                    if (cpMatch || hasGuanajuato) {
+                        isrEstatal = cuenta.getCantidadCobrar().multiply(new BigDecimal("0.02"));
+                        isrFederal = cuenta.getCantidadCobrar().multiply(new BigDecimal("0.0125"));
+                    } else if (!cpMatch && !hasGuanajuato) {
+                        isrFederal = cuenta.getCantidadCobrar().multiply(new BigDecimal("0.0125"));
+                    }
+                }
+
+                BigDecimal total = cuenta.getCantidadCobrar().add(iva).subtract(isrEstatal).subtract(isrFederal);
+                solicitud.setTotal(total);
+
+                solicitud.setImporteLetra(cotizacionService.convertToLetter(total));
+
+                solicitud.setFechaModificacion(java.time.LocalDateTime.now());
+
+                logger.info("Actualizando solicitud ID {} - Nuevo subtotal: {}, Total: {}",
+                        solicitud.getId(), cuenta.getCantidadCobrar(), total);
+            }
+        }
     }
 
     @Transactional

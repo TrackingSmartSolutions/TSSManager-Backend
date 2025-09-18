@@ -7,6 +7,7 @@ import com.tss.tssmanager_backend.repository.ActividadRepository;
 import com.tss.tssmanager_backend.repository.NotaTratoRepository;
 import com.tss.tssmanager_backend.repository.UsuarioRepository;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
+import com.tss.tssmanager_backend.utils.DateUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -54,8 +55,8 @@ public class ReporteService {
             userId = userDetails.getId();
         }
 
-        Instant start = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-        Instant end = endDate.atStartOfDay(ZoneId.systemDefault()).plusDays(1).toInstant();
+        Instant start = DateUtils.localDateToInstantStartOfDay(startDate);
+        Instant end = DateUtils.localDateToInstantEndOfDay(endDate);
 
         // Obtener actividades completadas
         List<Actividad> actividades = actividadRepository.findByUsuarioCompletadoIdAndFechaCompletadoBetween(

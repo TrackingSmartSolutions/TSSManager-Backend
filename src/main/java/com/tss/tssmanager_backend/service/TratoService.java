@@ -5,6 +5,7 @@ import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
+import com.tss.tssmanager_backend.utils.DateUtils;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -626,7 +627,7 @@ public class TratoService {
     public ActividadDTO completarActividad(Integer id, ActividadDTO actividadDTO) {
         Actividad actividad = actividadRepository.findById(id).orElseThrow(() -> new RuntimeException("Actividad no encontrada"));
         actividad.setEstatus(EstatusActividadEnum.CERRADA);
-        actividad.setFechaCompletado(Instant.now());
+        actividad.setFechaCompletado(DateUtils.nowInMexico().atZone(ZoneId.of("America/Mexico_City")).toInstant());
         actividad.setUsuarioCompletadoId(getCurrentUserId());
         actividad.setRespuesta(actividadDTO.getRespuesta());
         actividad.setInteres(actividadDTO.getInteres());
