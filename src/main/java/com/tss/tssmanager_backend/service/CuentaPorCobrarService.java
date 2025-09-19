@@ -411,6 +411,8 @@ public class CuentaPorCobrarService {
         dto.setMontoPagado(cuenta.getMontoPagado());
         dto.setSaldoPendiente(cuenta.getSaldoPendiente());
         dto.setCotizacionId(cuenta.getCotizacion() != null ? cuenta.getCotizacion().getId() : null);
+        int equiposEnEstaCuenta = calcularEquiposEnCuenta(cuenta);
+        dto.setNumeroEquipos(equiposEnEstaCuenta);
         return dto;
     }
 
@@ -475,5 +477,22 @@ public class CuentaPorCobrarService {
         connection.disconnect();
 
         return fileContent;
+    }
+
+    private int calcularEquiposEnCuenta(CuentaPorCobrar cuenta) {
+        if (cuenta.getCotizacion() == null || cuenta.getConceptos() == null) {
+            return 0;
+        }
+        List<String> conceptosCuenta = List.of(cuenta.getConceptos().split(", "));
+
+        return cuenta.getCotizacion().getUnidades().stream()
+                .filter(unidad ->
+                        "Equipos".equals(unidad.getUnidad()) &&
+                                conceptosCuenta.stream().anyMatch(concepto ->
+                                        concepto.trim().equalsIgnoreCase(unidad.getConcepto().trim())
+                                )
+                )
+                .mapToInt(UnidadCotizacion::getCantidad)
+                .sum();
     }
 }

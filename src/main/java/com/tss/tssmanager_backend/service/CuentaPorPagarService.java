@@ -300,7 +300,7 @@ public class CuentaPorPagarService {
             nuevaTransaccion.setFechaPago(proximaFechaPago);
 
             nuevaTransaccion.setFormaPago(transaccionOriginal.getFormaPago());
-            nuevaTransaccion.setNotas("Transacción generada desde Cuentas por Pagar - Serie regenerada - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
+            nuevaTransaccion.setNotas("Serie regenerada - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
             nuevaTransaccion.setNumeroPagos(transaccionOriginal.getNumeroPagos());
             nuevaTransaccion.setFechaCreacion(LocalDateTime.now());
             nuevaTransaccion.setFechaModificacion(LocalDateTime.now());

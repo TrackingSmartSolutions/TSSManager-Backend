@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -26,6 +27,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class NotificacionService {
@@ -223,52 +225,78 @@ public class NotificacionService {
     }
 
     private void procesarCuentasPorCobrar(LocalDate hoy, LocalDate manana) {
-        cuentaPorCobrarRepository.findAll().stream()
+        List<CuentaPorCobrar> cuentasVencenHoy = cuentaPorCobrarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
-                .filter(cuenta -> cuenta.getFechaPago().equals(hoy) || cuenta.getFechaPago().equals(manana))
-                .forEach(cuenta -> {
-                    String tipoMensaje = cuenta.getFechaPago().equals(manana) ? "mañana" : "hoy";
-                    String mensaje = String.format("Cuenta por cobrar vence %s: %s, Cliente: %s, Fecha: %s",
-                            tipoMensaje, cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+                .filter(cuenta -> cuenta.getFechaPago().equals(hoy))
+                .collect(Collectors.toList());
 
-                    notificarAdministradores("CUENTA_COBRAR", mensaje);
+        List<CuentaPorCobrar> cuentasVencenManana = cuentaPorCobrarRepository.findAll().stream()
+                .filter(cuenta -> cuenta.getFechaPago() != null)
+                .filter(cuenta -> cuenta.getFechaPago().equals(manana))
+                .collect(Collectors.toList());
 
-                    // Enviar correo solo si vence mañana
-                    if (cuenta.getFechaPago().equals(manana)) {
-                        enviarCorreoCuentaPorCobrar(cuenta);
-                    }
-                });
+        // Procesar cuentas que vencen hoy (solo notificaciones internas)
+        cuentasVencenHoy.forEach(cuenta -> {
+            String mensaje = String.format("Cuenta por cobrar vence hoy: %s, Cliente: %s, Fecha: %s",
+                    cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+            notificarAdministradores("CUENTA_COBRAR", mensaje);
+        });
+
+        // Procesar cuentas que vencen mañana (notificaciones + correo consolidado)
+        cuentasVencenManana.forEach(cuenta -> {
+            String mensaje = String.format("Cuenta por cobrar vence mañana: %s, Cliente: %s, Fecha: %s",
+                    cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+            notificarAdministradores("CUENTA_COBRAR", mensaje);
+        });
+
+        // Enviar correo consolidado solo para las cuentas que vencen mañana
+        if (!cuentasVencenManana.isEmpty()) {
+            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenManana);
+        }
     }
 
     private void procesarCuentasPorPagar(LocalDate hoy, LocalDate manana) {
-        cuentaPorPagarRepository.findAll().stream()
+        List<CuentaPorPagar> cuentasVencenHoy = cuentaPorPagarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
-                .filter(cuenta -> cuenta.getFechaPago().equals(hoy) || cuenta.getFechaPago().equals(manana))
-                .forEach(cuenta -> {
-                    String tipoMensaje = cuenta.getFechaPago().equals(manana) ? "mañana" : "hoy";
-                    String mensaje = String.format("Cuenta por pagar vence %s: %s, Cuenta: %s, Fecha: %s",
-                            tipoMensaje, cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+                .filter(cuenta -> cuenta.getFechaPago().equals(hoy))
+                .collect(Collectors.toList());
 
-                    notificarAdministradores("CUENTA_PAGAR", mensaje);
+        List<CuentaPorPagar> cuentasVencenManana = cuentaPorPagarRepository.findAll().stream()
+                .filter(cuenta -> cuenta.getFechaPago() != null)
+                .filter(cuenta -> cuenta.getFechaPago().equals(manana))
+                .collect(Collectors.toList());
 
-                    // Enviar correo solo si vence mañana
-                    if (cuenta.getFechaPago().equals(manana)) {
-                        enviarCorreoCuentaPorPagar(cuenta);
-                    }
-                });
+        // Procesar cuentas que vencen hoy (solo notificaciones internas)
+        cuentasVencenHoy.forEach(cuenta -> {
+            String mensaje = String.format("Cuenta por pagar vence hoy: %s, Cuenta: %s, Fecha: %s",
+                    cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+            notificarAdministradores("CUENTA_PAGAR", mensaje);
+        });
+
+        // Procesar cuentas que vencen mañana (notificaciones + correo consolidado)
+        cuentasVencenManana.forEach(cuenta -> {
+            String mensaje = String.format("Cuenta por pagar vence mañana: %s, Cuenta: %s, Fecha: %s",
+                    cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+            notificarAdministradores("CUENTA_PAGAR", mensaje);
+        });
+
+        // Enviar correo consolidado solo para las cuentas que vencen mañana
+        if (!cuentasVencenManana.isEmpty()) {
+            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenManana);
+        }
     }
 
-    private void enviarCorreoCuentaPorCobrar(CuentaPorCobrar cuenta) {
+    private void enviarCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas) {
         try {
             List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(
                     RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
 
-            String asunto = "Recordatorio: Cuenta por Cobrar vence mañana";
-            String cuerpo = construirCuerpoCorreoCuentaPorCobrar(cuenta);
+            String asunto = "Recordatorio: Cuentas por Cobrar";
+            String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas);
 
             for (Usuario admin : admins) {
-                // Verificar si ya se envió correo en las últimas 24 horas para evitar duplicados
-                if (!existeCorreoRecienteCuentaPorCobrar(admin.getId(), cuenta.getFolio())) {
+                // Verificar si ya se envió correo consolidado en las últimas 24 horas
+                if (!existeCorreoConsolidadoReciente(admin.getId(), "Cuentas por Cobrar")) {
                     emailService.enviarCorreo(
                             admin.getCorreoElectronico(),
                             asunto,
@@ -276,25 +304,25 @@ public class NotificacionService {
                             null, // Sin adjuntos
                             null  // Sin trato asociado
                     );
-                    logger.info("Correo de cuenta por cobrar enviado a: {}", admin.getCorreoElectronico());
+                    logger.info("Correo consolidado de cuentas por cobrar enviado a: {}", admin.getCorreoElectronico());
                 }
             }
         } catch (Exception e) {
-            logger.error("Error al enviar correo de cuenta por cobrar: {}", e.getMessage());
+            logger.error("Error al enviar correo consolidado de cuentas por cobrar: {}", e.getMessage());
         }
     }
 
-    private void enviarCorreoCuentaPorPagar(CuentaPorPagar cuenta) {
+    private void enviarCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas) {
         try {
             List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(
                     RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
 
-            String asunto = "Recordatorio: Cuenta por Pagar vence mañana";
-            String cuerpo = construirCuerpoCorreoCuentaPorPagar(cuenta);
+            String asunto = "Recordatorio: Cuentas por Pagar";
+            String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas);
 
             for (Usuario admin : admins) {
-                // Verificar si ya se envió correo en las últimas 24 horas para evitar duplicados
-                if (!existeCorreoRecienteCuentaPorPagar(admin.getId(), cuenta.getFolio())) {
+                // Verificar si ya se envió correo consolidado en las últimas 24 horas
+                if (!existeCorreoConsolidadoReciente(admin.getId(), "Cuentas por Pagar")) {
                     emailService.enviarCorreo(
                             admin.getCorreoElectronico(),
                             asunto,
@@ -302,67 +330,130 @@ public class NotificacionService {
                             null, // Sin adjuntos
                             null  // Sin trato asociado
                     );
-                    logger.info("Correo de cuenta por pagar enviado a: {}", admin.getCorreoElectronico());
+                    logger.info("Correo consolidado de cuentas por pagar enviado a: {}", admin.getCorreoElectronico());
                 }
             }
         } catch (Exception e) {
-            logger.error("Error al enviar correo de cuenta por pagar: {}", e.getMessage());
+            logger.error("Error al enviar correo consolidado de cuentas por pagar: {}", e.getMessage());
         }
     }
 
-    private String construirCuerpoCorreoCuentaPorCobrar(CuentaPorCobrar cuenta) {
+    private String construirCuerpoCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas) {
+        BigDecimal montoTotal = cuentas.stream()
+                .map(CuentaPorCobrar::getCantidadCobrar)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        LocalDate fechaVencimiento = cuentas.get(0).getFechaPago(); // Todas tienen la misma fecha
+
+        StringBuilder listadoCuentas = new StringBuilder();
+        for (CuentaPorCobrar cuenta : cuentas) {
+            listadoCuentas.append(String.format(
+                    "<tr><td>%s</td><td>%s</td><td>$%s</td></tr>",
+                    cuenta.getFolio(),
+                    cuenta.getCliente().getNombre(),
+                    cuenta.getCantidadCobrar()
+            ));
+        }
+
         return String.format("""
-            <html>
-            <body>
-                <h2>Recordatorio: Cuenta por Cobrar</h2>
-                <p>Estimado administrador,</p>
-                <p>Le recordamos que la siguiente cuenta por cobrar <strong>vence mañana</strong>:</p>
-                <ul>
-                    <li><strong>Folio:</strong> %s</li>
-                    <li><strong>Cliente:</strong> %s</li>
-                    <li><strong>Fecha de Vencimiento:</strong> %s</li>
-                    <li><strong>Monto:</strong> $%s</li>
-                </ul>
-                <p>Por favor, tome las acciones necesarias.</p>
-                <br>
-                <p>Saludos cordiales,<br>Sistema TSS Manager</p>
-            </body>
-            </html>
-            """,
-                cuenta.getFolio(),
-                cuenta.getCliente().getNombre(),
-                cuenta.getFechaPago(),
-                cuenta.getCantidadCobrar()
+        <html>
+        <body>
+            <h2>Recordatorio: Cuentas por Cobrar</h2>
+            <p>Estimado administrador,</p>
+            <p>Le recordamos que las siguientes cuentas por cobrar <strong>vencen mañana</strong>:</p>
+            <ul>
+                <li><strong>Total de cuentas:</strong> %d</li>
+                <li><strong>Monto total:</strong> $%s</li>
+                <li><strong>Fecha de Vencimiento:</strong> %s</li>
+            </ul>
+            <p>A continuación se muestra el listado individual de las cuentas:</p>
+            <table border="1" style="border-collapse: collapse; width: 100%%;">
+                <thead>
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="padding: 8px;">Folio</th>
+                        <th style="padding: 8px;">Cliente</th>
+                        <th style="padding: 8px;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    %s
+                </tbody>
+            </table>
+            <p>Por favor, tome las acciones necesarias.</p>
+            <br>
+            <p>Saludos cordiales,<br>Sistema TSS Manager</p>
+        </body>
+        </html>
+        """,
+                cuentas.size(),
+                montoTotal,
+                fechaVencimiento,
+                listadoCuentas.toString()
         );
     }
 
-    private String construirCuerpoCorreoCuentaPorPagar(CuentaPorPagar cuenta) {
+    private String construirCuerpoCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas) {
+        BigDecimal montoTotal = cuentas.stream()
+                .map(CuentaPorPagar::getMonto)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        LocalDate fechaVencimiento = cuentas.get(0).getFechaPago(); // Todas tienen la misma fecha
+
+        StringBuilder listadoCuentas = new StringBuilder();
+        for (CuentaPorPagar cuenta : cuentas) {
+            String categoria = cuenta.getTransaccion() != null && cuenta.getTransaccion().getCategoria() != null
+                    ? cuenta.getTransaccion().getCategoria().getDescripcion() : "Sin categoría";
+            String cuentaNombre = cuenta.getCuenta() != null ? cuenta.getCuenta().getNombre() : "Sin cuenta";
+            String simNumero = cuenta.getSim() != null ? cuenta.getSim().getNumero() : "N/A";
+
+            listadoCuentas.append(String.format(
+                    "<tr><td>%s</td><td>%s</td><td>%s</td><td>$%s</td></tr>",
+                    categoria,
+                    cuentaNombre,
+                    simNumero,
+                    cuenta.getMonto()
+            ));
+        }
+
         return String.format("""
-            <html>
-            <body>
-                <h2>Recordatorio: Cuenta por Pagar</h2>
-                <p>Estimado administrador,</p>
-                <p>Le recordamos que la siguiente cuenta por pagar <strong>vence mañana</strong>:</p>
-                <ul>
-                    <li><strong>Folio:</strong> %s</li>
-                    <li><strong>Cuenta:</strong> %s</li>
-                    <li><strong>Fecha de Vencimiento:</strong> %s</li>
-                    <li><strong>Monto:</strong> $%s</li>
-                </ul>
-                <p>Por favor, tome las acciones necesarias.</p>
-                <br>
-                <p>Saludos cordiales,<br>Sistema TSS Manager</p>
-            </body>
-            </html>
-            """,
-                cuenta.getFolio(),
-                cuenta.getCuenta().getNombre(),
-                cuenta.getFechaPago(),
-                cuenta.getMonto()
+        <html>
+        <body>
+            <h2>Recordatorio: Cuentas por Pagar</h2>
+            <p>Estimado administrador,</p>
+            <p>Le recordamos que las siguientes cuentas por pagar <strong>vencen mañana</strong>:</p>
+            <ul>
+                <li><strong>Total de cuentas:</strong> %d</li>
+                <li><strong>Monto total:</strong> $%s</li>
+                <li><strong>Fecha de Vencimiento:</strong> %s</li>
+            </ul>
+            <p>A continuación se muestra el listado individual de las cuentas:</p>
+            <table border="1" style="border-collapse: collapse; width: 100%%;">
+                <thead>
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="padding: 8px;">Categoría</th>
+                        <th style="padding: 8px;">Cuenta</th>
+                        <th style="padding: 8px;">SIM</th>
+                        <th style="padding: 8px;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    %s
+                </tbody>
+            </table>
+            <p>Por favor, tome las acciones necesarias.</p>
+            <br>
+            <p>Saludos cordiales,<br>Sistema TSS Manager</p>
+        </body>
+        </html>
+        """,
+                cuentas.size(),
+                montoTotal,
+                fechaVencimiento,
+                listadoCuentas.toString()
         );
     }
 
-    private boolean existeCorreoRecienteCuentaPorCobrar(Integer adminId, String folio) {
+    private boolean existeCorreoConsolidadoReciente(Integer adminId, String tipoCuenta) {
         try {
             Usuario admin = usuarioRepository.findById(adminId).orElse(null);
             if (admin == null || admin.getCorreoElectronico() == null) {
@@ -373,37 +464,17 @@ public class NotificacionService {
             Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
             ZonedDateTime hace24HorasZoned = convertirAZonaLocal(hace24Horas);
 
+            // Buscar por asunto específico del correo consolidado
+            String asuntoConsolidado = "Recordatorio: " + tipoCuenta;
+
             List<EmailRecord> correosRecientes = emailRecordRepository
-                    .findByDestinatarioContainingAndCuerpoContainingAndFechaEnvioAfterAndExitoTrue(
-                            correoAdmin, folio, hace24HorasZoned);
+                    .findByDestinatarioContainingAndAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
+                            correoAdmin, asuntoConsolidado, hace24HorasZoned);
 
             return !correosRecientes.isEmpty();
 
         } catch (Exception e) {
-            logger.error("Error al verificar correo reciente de cuenta por cobrar: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    private boolean existeCorreoRecienteCuentaPorPagar(Integer adminId, String folio) {
-        try {
-            Usuario admin = usuarioRepository.findById(adminId).orElse(null);
-            if (admin == null || admin.getCorreoElectronico() == null) {
-                return false;
-            }
-
-            String correoAdmin = admin.getCorreoElectronico();
-            Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
-            ZonedDateTime hace24HorasZoned = convertirAZonaLocal(hace24Horas);
-
-            List<EmailRecord> correosRecientes = emailRecordRepository
-                    .findByDestinatarioContainingAndCuerpoContainingAndFechaEnvioAfterAndExitoTrue(
-                            correoAdmin, folio, hace24HorasZoned);
-
-            return !correosRecientes.isEmpty();
-
-        } catch (Exception e) {
-            logger.error("Error al verificar correo reciente de cuenta por pagar: {}", e.getMessage());
+            logger.error("Error al verificar correo consolidado reciente: {}", e.getMessage());
             return false;
         }
     }
