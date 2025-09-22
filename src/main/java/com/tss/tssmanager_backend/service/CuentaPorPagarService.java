@@ -101,7 +101,7 @@ public class CuentaPorPagarService {
         registrarAbonoCreditos(transaccionOriginal, montoPago, cuenta, cantidadCreditos);
 
         if (cuentaCompletamentePagada) {
-            verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal, regenerarAutomaticamente, fechaPago);
+            verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal, regenerarAutomaticamente, cuenta.getFechaPago());
         }
     }
 
@@ -238,19 +238,15 @@ public class CuentaPorPagarService {
         }
     }
 
-    @Transactional
     private void verificarYRegenerarSiEsNecesario(CuentaPorPagar cuentaPagada, Transaccion transaccionOriginal, boolean regenerarAutomaticamente, LocalDate fechaPagoReal) {
         if (!"Pagado".equals(cuentaPagada.getEstatus())) {
             return;
         }
 
-        boolean hayPendientes = cuentasPorPagarRepository
-                .existsByTransaccionIdAndEstatusNot(transaccionOriginal.getId(), "Pagado");
-
         boolean esUltimaCuentaDeLaSerie = cuentaPagada.getNumeroPago().equals(cuentaPagada.getTotalPagos());
         boolean noEsUnica = !transaccionOriginal.getEsquema().name().equals("UNICA");
 
-        if (!hayPendientes && esUltimaCuentaDeLaSerie && noEsUnica) {
+        if (esUltimaCuentaDeLaSerie && noEsUnica) {
             System.out.println("Última cuenta de la serie pagada para transacción " + transaccionOriginal.getId());
 
             if (regenerarAutomaticamente) {
@@ -288,7 +284,7 @@ public class CuentaPorPagarService {
             }
 
             Transaccion nuevaTransaccion = new Transaccion();
-            nuevaTransaccion.setFecha(LocalDate.now());
+            nuevaTransaccion.setFecha(fechaUltimoPago);
             nuevaTransaccion.setTipo(transaccionOriginal.getTipo());
             nuevaTransaccion.setCategoria(transaccionOriginal.getCategoria());
             nuevaTransaccion.setCuenta(transaccionOriginal.getCuenta());

@@ -544,4 +544,10 @@ public class EmpresaService {
         return empresaRepository.findEmpresasSinTratos();
     }
 
+    @Transactional(readOnly = true)
+    public List<Object[]> contarEmpresasPorPropietario() {
+        logger.info("Contando empresas por propietario");
+        return empresaRepository.contarEmpresasPorPropietario();
+    }
+
 }

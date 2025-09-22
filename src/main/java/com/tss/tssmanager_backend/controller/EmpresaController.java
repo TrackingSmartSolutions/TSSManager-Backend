@@ -15,7 +15,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/empresas")
@@ -254,5 +257,27 @@ public class EmpresaController {
     public ResponseEntity<List<Integer>> getEmpresasSinTratos() {
         List<Integer> empresasSinTratos = empresaService.getEmpresasSinTratos();
         return ResponseEntity.ok(empresasSinTratos);
+    }
+
+    @GetMapping("/contar-por-propietario")
+    public ResponseEntity<List<Map<String, Object>>> contarEmpresasPorPropietario() {
+        try {
+            logger.debug("Solicitud para contar empresas por propietario");
+            List<Object[]> resultados = empresaService.contarEmpresasPorPropietario();
+
+            List<Map<String, Object>> response = resultados.stream()
+                    .map(result -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("propietarioNombre", result[0]);
+                        map.put("numeroUnidades", result[1]);
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error al contar empresas por propietario: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 }

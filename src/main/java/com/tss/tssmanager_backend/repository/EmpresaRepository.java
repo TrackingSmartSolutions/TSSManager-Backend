@@ -45,4 +45,7 @@ public interface EmpresaRepository extends JpaRepository<Empresa, Integer> {
 
     @Query(value = "SELECT e.id FROM \"Empresas\" e WHERE NOT EXISTS (SELECT 1 FROM \"Tratos\" t WHERE t.empresa_id = e.id)", nativeQuery = true)
     List<Integer> findEmpresasSinTratos();
+
+    @Query("SELECT u.nombre, COUNT(e) FROM Empresa e JOIN e.propietario u GROUP BY u.id, u.nombre")
+    List<Object[]> contarEmpresasPorPropietario();
 }

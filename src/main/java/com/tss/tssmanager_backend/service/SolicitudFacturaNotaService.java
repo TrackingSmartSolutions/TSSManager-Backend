@@ -230,22 +230,36 @@ public class SolicitudFacturaNotaService {
         solicitud.setFechaEmision(Date.valueOf(DateUtils.nowInMexico().toLocalDate()));
         solicitud.setFechaModificacion(LocalDateTime.now());
 
-        // Obtener valores de la cotización vinculada
-        if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getId() != null) {
-            Cotizacion cotizacion = cotizacionRepository.findById(solicitud.getCotizacion().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + solicitud.getCotizacion().getId()));
+        BigDecimal subtotal = cuenta.getCantidadCobrar();
 
-            // Filtrar unidades por los conceptos de la cuenta por cobrar
-            List<UnidadCotizacion> unidadesFiltradas = filtrarUnidadesPorConceptos(cotizacion, solicitud.getConceptosSeleccionados());
+// Calcular IVA
+        BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
 
-            // Recalcular totales solo con las unidades filtradas
-            recalcularTotalesConConceptosFiltrados(solicitud, unidadesFiltradas);
-        } else {
-            solicitud.setSubtotal(BigDecimal.ZERO);
-            solicitud.setIva(BigDecimal.ZERO);
-            solicitud.setTotal(BigDecimal.ZERO);
-            solicitud.setImporteLetra("");
+// Calcular retenciones si aplica
+        BigDecimal isrEstatal = BigDecimal.ZERO;
+        BigDecimal isrFederal = BigDecimal.ZERO;
+
+        if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
+                solicitud.getCliente().getRegimenFiscal().equals("601")) {
+
+            String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
+            boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
+            boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
+
+            if (cpMatch || hasGuanajuato) {
+                isrEstatal = subtotal.multiply(new BigDecimal("0.02"));
+                isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
+            } else if (!cpMatch && !hasGuanajuato) {
+                isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
+            }
         }
+
+        BigDecimal total = subtotal.add(iva).subtract(isrEstatal).subtract(isrFederal);
+
+        solicitud.setSubtotal(subtotal);
+        solicitud.setIva(iva);
+        solicitud.setTotal(total);
+        solicitud.setImporteLetra(cotizacionService.convertToLetter(total));
 
         SolicitudFacturaNota savedSolicitud = solicitudRepository.save(solicitud);
         entityManager.flush();
@@ -291,26 +305,35 @@ public class SolicitudFacturaNotaService {
         if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getId() != null) {
             existingSolicitud.setCotizacion(cotizacionRepository.findById(solicitud.getCotizacion().getId())
                     .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada")));
-            Cotizacion cotizacion = cotizacionRepository.findById(solicitud.getCotizacion().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada"));
-            existingSolicitud.setSubtotal(cotizacion.getSubtotal());
-            existingSolicitud.setIva(cotizacion.getIva());
-            BigDecimal subtotal = cotizacion.getSubtotal();
+
+            // Usar valores de la cuenta por cobrar actualizada
+            BigDecimal subtotal = existingSolicitud.getCuentaPorCobrar().getCantidadCobrar();
+            BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
+
+            BigDecimal isrEstatal = BigDecimal.ZERO;
+            BigDecimal isrFederal = BigDecimal.ZERO;
+
             if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
-                    cotizacion.getCliente().getRegimenFiscal().equals("601")) {
-                String domicilioFiscal = cotizacion.getCliente().getDomicilioFiscal().toLowerCase();
+                    existingSolicitud.getCliente().getRegimenFiscal().equals("601")) {
+
+                String domicilioFiscal = existingSolicitud.getCliente().getDomicilioFiscal().toLowerCase();
                 boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
                 boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
 
                 if (cpMatch || hasGuanajuato) {
-                    cotizacion.setIsrEstatal(subtotal.multiply(new BigDecimal("0.02")));
-                    cotizacion.setIsrFederal(subtotal.multiply(new BigDecimal("0.0125")));
+                    isrEstatal = subtotal.multiply(new BigDecimal("0.02"));
+                    isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
                 } else if (!cpMatch && !hasGuanajuato) {
-                    cotizacion.setIsrFederal(subtotal.multiply(new BigDecimal("0.0125")));
+                    isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
                 }
             }
-            existingSolicitud.setTotal(cotizacion.getTotal().subtract(cotizacion.getIsrEstatal()).subtract(cotizacion.getIsrFederal()));
-            existingSolicitud.setImporteLetra(cotizacionService.convertToLetter(existingSolicitud.getTotal()));
+
+            BigDecimal total = subtotal.add(iva).subtract(isrEstatal).subtract(isrFederal);
+
+            existingSolicitud.setSubtotal(subtotal);
+            existingSolicitud.setIva(iva);
+            existingSolicitud.setTotal(total);
+            existingSolicitud.setImporteLetra(cotizacionService.convertToLetter(total));
         } else {
             existingSolicitud.setSubtotal(BigDecimal.ZERO);
             existingSolicitud.setIva(BigDecimal.ZERO);
@@ -360,8 +383,17 @@ public class SolicitudFacturaNotaService {
                 throw new Exception("No se pudo encontrar el archivo de membrete");
             }
 
-            byte[] imageBytes = inputStream.readAllBytes();
-            Image membrete = Image.getInstance(imageBytes);
+            // Leer en chunks para reducir uso de memoria
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            byte[] data = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(data, 0, data.length)) != -1) {
+                buffer.write(data, 0, bytesRead);
+            }
+            inputStream.close();
+
+            Image membrete = Image.getInstance(buffer.toByteArray());
+            buffer = null;
 
             membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
 
@@ -376,6 +408,7 @@ public class SolicitudFacturaNotaService {
         }
     }
 
+
     @Transactional(readOnly = true)
     public ByteArrayResource generateSolicitudPDF(Integer id) throws Exception {
         logger.info("Generando PDF para solicitud con ID: {}", id);
@@ -384,8 +417,11 @@ public class SolicitudFacturaNotaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + id));
 
         Document document = new Document(PageSize.A4, 40, 40, 90, 50);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream out = new ByteArrayOutputStream(8192);
         PdfWriter writer = PdfWriter.getInstance(document, out);
+
+        writer.setCompressionLevel(9);
+        writer.setFullCompression();
 
         document.open();
 
@@ -531,8 +567,11 @@ public class SolicitudFacturaNotaService {
         } else if (cotizacion != null && cotizacion.getUnidades() != null) {
             // Fallback: mostrar todas las unidades de la cotización
             List<UnidadCotizacion> todasLasUnidades = cotizacion.getUnidades();
+            int maxUnidades = Math.min(todasLasUnidades.size(), 50);
             boolean isEvenRow = false;
-            for (UnidadCotizacion unidad : todasLasUnidades) {
+
+            for (int i = 0; i < maxUnidades; i++) {
+                UnidadCotizacion unidad = todasLasUnidades.get(i);
                 Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
                 // Código existente para mostrar las unidades de cotización
@@ -589,7 +628,16 @@ public class SolicitudFacturaNotaService {
                 normalFont, boldFont, totalFont, headerTableFont, rojoDestacado);
 
         document.close();
-        return new ByteArrayResource(out.toByteArray());
+
+        byte[] pdfBytes = out.toByteArray();
+        out.close();
+        out = null;
+
+        if (pdfBytes.length > 1024 * 1024) {
+            System.gc();
+        }
+
+        return new ByteArrayResource(pdfBytes);
     }
 
     private String buildReceptorDataFactura(Empresa cliente, SolicitudFacturaNota solicitud) {
