@@ -1,5 +1,5 @@
-# Usa una imagen base con JDK
-FROM openjdk:21-jdk-slim
+# Usa Eclipse Temurin en lugar de openjdk oficial
+FROM eclipse-temurin:21-jdk-slim
 
 # Instala Maven
 RUN apt-get update && \
@@ -9,6 +9,7 @@ RUN apt-get update && \
 # Establece el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
+# Copia los archivos de configuración primero (para aprovechar el cache de Docker)
 COPY pom.xml .
 COPY src ./src
 
