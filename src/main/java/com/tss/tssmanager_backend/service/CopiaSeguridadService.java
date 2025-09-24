@@ -6,6 +6,8 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.FileContent;
 import com.google.api.client.http.javanet.NetHttpTransport;
+import com.tss.tssmanager_backend.entity.Sector;
+import com.tss.tssmanager_backend.repository.SectorRepository;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.drive.Drive;
@@ -23,6 +25,7 @@ import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -56,9 +59,11 @@ public class CopiaSeguridadService {
     private final TratoRepository tratosRepository;
     private final EmpresaRepository empresasRepository;
     private final ContactoRepository contactosRepository;
+    private final SectorRepository sectorRepository;
     private final EquipoRepository equiposRepository;
     private final SimRepository simsRepository;
     private final UsuarioRepository usuarioRepository;
+    private final PlataformaService plataformaService;
 
     @Value("${google.drive.client.id}")
     private String clientId;
@@ -502,7 +507,7 @@ public class CopiaSeguridadService {
                         empresa.getPropietario() != null ? empresa.getPropietario().getNombreUsuario() : "",
                         empresa.getEstatus() != null ? empresa.getEstatus().toString() : "",
                         empresa.getSitioWeb() != null ? empresa.getSitioWeb() : "",
-                        empresa.getSector() != null ? empresa.getSector().toString() : "",
+                        empresa.getSector() != null ? empresa.getSector().getNombreSector() : "",
                         empresa.getDomicilioFisico() != null ? empresa.getDomicilioFisico() : "",
                         empresa.getDomicilioFiscal() != null ? empresa.getDomicilioFiscal() : "",
                         empresa.getRfc() != null ? empresa.getRfc() : "",
@@ -1075,11 +1080,23 @@ public class CopiaSeguridadService {
         }
     }
 
-    private SectorEmpresaEnum validarSectorEmpresa(String valor) {
+    private Sector validarSectorEmpresa(String valor) {
         try {
-            return valor != null && !valor.trim().isEmpty() ?
-                    SectorEmpresaEnum.valueOf(valor.trim()) : null;
-        } catch (IllegalArgumentException e) {
+            if (valor != null && !valor.trim().isEmpty()) {
+                Optional<Sector> sectorOpt = sectorRepository.findByNombreSectorIgnoreCase(valor.trim());
+                if (sectorOpt.isPresent()) {
+                    return sectorOpt.get();
+                } else {
+                    // Crear sector si no existe durante restauración
+                    Sector nuevoSector = new Sector();
+                    nuevoSector.setNombreSector(valor.trim());
+                    nuevoSector.setCreadoPor("SISTEMA_RESTAURACION");
+                    nuevoSector.setModificadoPor("SISTEMA_RESTAURACION");
+                    return sectorRepository.save(nuevoSector);
+                }
+            }
+            return null;
+        } catch (Exception e) {
             return null;
         }
     }
@@ -1120,11 +1137,37 @@ public class CopiaSeguridadService {
         }
     }
 
-    private PlataformaEquipoEnum validarPlataforma(String valor) {
+    private Plataforma validarPlataforma(String valor) {
+        if (valor == null || valor.trim().isEmpty()) {
+            return null;
+        }
         try {
-            return valor != null && !valor.trim().isEmpty() ?
-                    PlataformaEquipoEnum.valueOf(valor.trim()) : null;
-        } catch (IllegalArgumentException e) {
+            String nombrePlataforma = null;
+            switch (valor.trim()) {
+                case "TRACK_SOLID":
+                    nombrePlataforma = "Track Solid";
+                    break;
+                case "WHATSGPS":
+                    nombrePlataforma = "WhatsGPS";
+                    break;
+                case "TRACKERKING":
+                    nombrePlataforma = "TrackerKing";
+                    break;
+                case "JOINTCLOUD":
+                    nombrePlataforma = "Joint Cloud";
+                    break;
+            }
+
+            if (nombrePlataforma != null) {
+                List<Plataforma> plataformas = plataformaService.obtenerTodasLasPlataformas();
+                for (Plataforma p : plataformas) {
+                    if (nombrePlataforma.equals(p.getNombrePlataforma())) {
+                        return p;
+                    }
+                }
+            }
+            return null;
+        } catch (Exception e) {
             return null;
         }
     }

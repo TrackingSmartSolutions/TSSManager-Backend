@@ -48,6 +48,9 @@ public class EmpresaService {
     @Autowired
     private TratoRepository tratoRepository;
 
+    @Autowired
+    private SectorRepository sectorRepository;
+
     @Cacheable(value = "empresas", key = "#id")
     public Empresa findById(Integer id) {
         return empresaRepository.findById(id).orElse(null);
@@ -170,12 +173,20 @@ public class EmpresaService {
         empresa.setNombre(empresaActualizada.getNombre());
         empresa.setEstatus(empresaActualizada.getEstatus());
         empresa.setSitioWeb(empresaActualizada.getSitioWeb());
-        empresa.setSector(empresaActualizada.getSector());
         empresa.setDomicilioFisico(empresaActualizada.getDomicilioFisico());
+        empresa.setLatitud(empresaActualizada.getLatitud());
+        empresa.setLongitud(empresaActualizada.getLongitud());
         empresa.setDomicilioFiscal(empresaActualizada.getDomicilioFiscal());
         empresa.setRfc(empresaActualizada.getRfc());
         empresa.setRazonSocial(empresaActualizada.getRazonSocial());
         empresa.setRegimenFiscal(empresaActualizada.getRegimenFiscal());
+        if (empresaActualizada.getSector() != null && empresaActualizada.getSector().getId() != null) {
+            Sector sector = sectorRepository.findById(empresaActualizada.getSector().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Sector no encontrado con id: " + empresaActualizada.getSector().getId()));
+            empresa.setSector(sector);
+        } else if (empresaActualizada.getSector() == null) {
+            empresa.setSector(null);
+        }
         empresa.setFechaModificacion(Instant.now());
         empresa.setFechaUltimaActividad(Instant.now());
 
@@ -445,7 +456,10 @@ public class EmpresaService {
         dto.setNombre(empresa.getNombre());
         dto.setEstatus(empresa.getEstatus());
         dto.setSitioWeb(empresa.getSitioWeb());
-        dto.setSector(empresa.getSector());
+        if (empresa.getSector() != null) {
+            dto.setSectorId(empresa.getSector().getId());
+            dto.setSectorNombre(empresa.getSector().getNombreSector());
+        }
         dto.setDomicilioFisico(empresa.getDomicilioFisico());
         dto.setDomicilioFiscal(empresa.getDomicilioFiscal());
         dto.setRfc(empresa.getRfc());
@@ -460,6 +474,8 @@ public class EmpresaService {
             propietarioDTO.setNombreUsuario(empresa.getPropietario().getNombreUsuario());
             dto.setPropietario(propietarioDTO);
         }
+        dto.setLatitud(empresa.getLatitud());
+        dto.setLongitud(empresa.getLongitud());
         return dto;
     }
 
@@ -548,6 +564,17 @@ public class EmpresaService {
     public List<Object[]> contarEmpresasPorPropietario() {
         logger.info("Contando empresas por propietario");
         return empresaRepository.contarEmpresasPorPropietario();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmpresaDTO> getEmpresasConCoordenadas() {
+        logger.info("Obteniendo empresas con coordenadas");
+        List<Empresa> empresas = empresaRepository.findAll();
+        List<EmpresaDTO> result = empresas.stream()
+                .map(this::convertToEmpresaDTO)
+                .collect(Collectors.toList());
+        logger.info("Se encontraron {} empresas", result.size());
+        return result;
     }
 
 }

@@ -49,13 +49,14 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
             END, 
             'OFFLINE'
         ) as estatus_reporte,
-        CAST(e.plataforma AS VARCHAR) as plataforma,
+        COALESCE(p.nombre_plataforma, 'Sin Plataforma') as plataforma,
         e.nombre as equipo_nombre,
         e.imei,
         COALESCE(es.motivo, 'Sin reporte de estatus') as motivo,
         es.fecha_check
     FROM "Equipos" e
     LEFT JOIN empresa_nombres en ON e.cliente_id = en.id
+    LEFT JOIN plataformas p ON e.plataforma_id = p.id
     LEFT JOIN LATERAL (
         SELECT CAST(estatus AS VARCHAR) as estatus, motivo, fecha_check 
         FROM "Equipos_Estatus" 
@@ -68,13 +69,13 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
     """, nativeQuery = true)
     List<Object[]> findDashboardEstatusData();
 
-    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada WHERE e.tipo IN ('VENDIDO', 'DEMO') ORDER BY e.nombre")
+    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada LEFT JOIN FETCH e.plataforma WHERE e.tipo IN ('VENDIDO', 'DEMO') ORDER BY e.nombre")  // Agregado FETCH e.plataforma
     List<Equipo> findEquiposParaCheck();
 
     @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada WHERE e IN :equipos")
     List<Equipo> findAllWithSimReferenciada(@Param("equipos") List<Equipo> equipos);
 
-    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada ORDER BY e.id")
+    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada LEFT JOIN FETCH e.plataforma ORDER BY e.id")
     List<Equipo> findAllWithSims();
 
 }

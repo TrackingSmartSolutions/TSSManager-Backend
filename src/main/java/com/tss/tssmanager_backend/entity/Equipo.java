@@ -45,9 +45,9 @@ public class Equipo {
     @Column(name = "tipo_activacion")
     private TipoActivacionEquipoEnum tipoActivacion;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "plataforma")
-    private PlataformaEquipoEnum plataforma;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "plataforma_id", foreignKey = @ForeignKey(name = "fk_equipos_plataforma"))
+    private Plataforma plataforma;
 
     @OneToOne(mappedBy = "equipo", cascade = CascadeType.ALL)
     @JsonManagedReference

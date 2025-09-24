@@ -4,6 +4,7 @@ import com.tss.tssmanager_backend.dto.ContactoDTO;
 import com.tss.tssmanager_backend.dto.EmpresaConContactoDTO;
 import com.tss.tssmanager_backend.dto.EmpresaDTO;
 import com.tss.tssmanager_backend.entity.Empresa;
+import com.tss.tssmanager_backend.entity.Sector;
 import com.tss.tssmanager_backend.entity.Usuario;
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
@@ -176,8 +177,14 @@ public class EmpresaController {
         empresa.setNombre(empresaDTO.getNombre());
         empresa.setEstatus(empresaDTO.getEstatus());
         empresa.setSitioWeb(empresaDTO.getSitioWeb());
-        empresa.setSector(empresaDTO.getSector());
+        if (empresaDTO.getSectorId() != null) {
+            Sector sector = new Sector();
+            sector.setId(empresaDTO.getSectorId());
+            empresa.setSector(sector);
+        }
         empresa.setDomicilioFisico(empresaDTO.getDomicilioFisico());
+        empresa.setLatitud(empresaDTO.getLatitud());
+        empresa.setLongitud(empresaDTO.getLongitud());
         empresa.setDomicilioFiscal(empresaDTO.getDomicilioFiscal());
         empresa.setRfc(empresaDTO.getRfc());
         empresa.setRazonSocial(empresaDTO.getRazonSocial());
@@ -202,7 +209,11 @@ public class EmpresaController {
         empresa.setNombre(empresaConContactoDTO.getNombre());
         empresa.setEstatus(empresaConContactoDTO.getEstatus());
         empresa.setSitioWeb(empresaConContactoDTO.getSitioWeb());
-        empresa.setSector(empresaConContactoDTO.getSector());
+        if (empresaConContactoDTO.getSectorId() != null) {
+            Sector sector = new Sector();
+            sector.setId(empresaConContactoDTO.getSectorId());
+            empresa.setSector(sector);
+        }
         empresa.setDomicilioFisico(empresaConContactoDTO.getDomicilioFisico());
         empresa.setDomicilioFiscal(empresaConContactoDTO.getDomicilioFiscal());
         empresa.setRfc(empresaConContactoDTO.getRfc());
@@ -277,6 +288,18 @@ public class EmpresaController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error al contar empresas por propietario: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @GetMapping("/coordenadas/empresas")
+    public ResponseEntity<List<EmpresaDTO>> getEmpresasConCoordenadas() {
+        try {
+            logger.debug("Solicitud para obtener empresas con coordenadas");
+            List<EmpresaDTO> empresas = empresaService.getEmpresasConCoordenadas();
+            return ResponseEntity.ok(empresas);
+        } catch (Exception e) {
+            logger.error("Error interno al obtener empresas con coordenadas: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }

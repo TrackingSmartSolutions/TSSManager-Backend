@@ -1,7 +1,6 @@
 package com.tss.tssmanager_backend.dto;
 
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
-import com.tss.tssmanager_backend.enums.SectorEmpresaEnum;
 import lombok.Data;
 import java.time.Instant;
 
@@ -11,7 +10,8 @@ public class EmpresaDTO {
     private String nombre;
     private EstatusEmpresaEnum estatus;
     private String sitioWeb;
-    private SectorEmpresaEnum sector;
+    private Integer sectorId;
+    private String sectorNombre;
     private String domicilioFisico;
     private String domicilioFiscal;
     private String rfc;
@@ -22,5 +22,7 @@ public class EmpresaDTO {
     private Instant fechaUltimaActividad;
     private PropietarioDTO propietario;
     private Integer propietarioId;
+    private Double latitud;
+    private Double longitud;
 
 }

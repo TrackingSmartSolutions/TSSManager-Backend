@@ -1,7 +1,6 @@
 package com.tss.tssmanager_backend.entity;
 
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
-import com.tss.tssmanager_backend.enums.SectorEmpresaEnum;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -40,9 +39,9 @@ public class Empresa {
     @Column(name = "sitio_web")
     private String sitioWeb;
 
-    @Column(name = "sector")
-    @Enumerated(EnumType.STRING)
-    private SectorEmpresaEnum sector;
+    @ManyToOne
+    @JoinColumn(name = "sector_id")
+    private Sector sector;
 
     @Column(name = "domicilio_fisico")
     private String domicilioFisico;
@@ -82,4 +81,10 @@ public class Empresa {
     @OneToMany(mappedBy = "empresa", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<Contacto> contactos = new ArrayList<>();
+
+    @Column(name = "latitud")
+    private Double latitud;
+
+    @Column(name = "longitud")
+    private Double longitud;
 }

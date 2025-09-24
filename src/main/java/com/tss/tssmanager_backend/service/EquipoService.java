@@ -7,6 +7,8 @@ import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
 import com.tss.tssmanager_backend.repository.EquiposEstatusRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -37,6 +39,7 @@ public class EquipoService {
     @Autowired
     private CreditoPlataformaService creditoPlataformaService;
 
+    private static final Logger logger = LoggerFactory.getLogger(EquipoService.class);
     public Iterable<Equipo> obtenerTodosLosEquipos() {
         return repository.findAllWithSims();
     }
@@ -86,8 +89,8 @@ public class EquipoService {
 
             if (equipo.getCreditosUsados() != null &&
                     equipo.getCreditosUsados() > 0 &&
-                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
-                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                    (equipo.getPlataforma() != null &&
+                            (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
                 debeRegistrarCargo = true;
                 creditosARegistrar = equipo.getCreditosUsados();
             }
@@ -104,7 +107,7 @@ public class EquipoService {
 
         if (debeRegistrarCargo) {
             String subtipo = null;
-            if (equipoGuardado.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+            if (equipoGuardado.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
                 subtipo = equipoGuardado.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
             }
 
@@ -158,8 +161,8 @@ public class EquipoService {
                     equipo.getCreditosUsados() != null &&
                     equipo.getCreditosUsados() > 0 &&
                     (creditosAnteriores == null || creditosAnteriores == 0) &&
-                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
-                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                    (equipo.getPlataforma() != null &&
+                            (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
                 debeRegistrarCargo = true;
                 creditosARegistrar = equipo.getCreditosUsados();
             }
@@ -170,8 +173,8 @@ public class EquipoService {
                     equipo.getCreditosUsados() != null &&
                     !equipo.getCreditosUsados().equals(creditosAnteriores) &&
                     equipo.getCreditosUsados() > creditosAnteriores &&
-                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
-                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                    (equipo.getPlataforma() != null &&
+                            (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
                 debeRegistrarCargo = true;
                 creditosARegistrar = equipo.getCreditosUsados() - creditosAnteriores;
             }
@@ -192,7 +195,7 @@ public class EquipoService {
         // DESPUÉS registrar el cargo si es necesario
         if (debeRegistrarCargo) {
             String subtipo = null;
-            if (equipoActualizado.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+            if (equipoActualizado.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
                 subtipo = equipoActualizado.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
             }
 
@@ -311,22 +314,40 @@ public class EquipoService {
     @CacheEvict(value = "dashboard-stats", key = "'estatus-plataforma'")
     @Transactional(readOnly = true)
     public Map<String, Object> obtenerDashboardEstatusOptimizado() {
+        logger.info("Iniciando obtención de datos para dashboard de estatus");
         Map<String, Object> result = new HashMap<>();
 
-        Timestamp fechaUltimoCheck = equiposEstatusRepository.findMaxFechaCheck();
-        result.put("fechaUltimoCheck", fechaUltimoCheck);
+        try {
+            Timestamp fechaUltimoCheck = equiposEstatusRepository.findMaxFechaCheck();
+            result.put("fechaUltimoCheck", fechaUltimoCheck);
+            logger.debug("Fecha último check: {}", fechaUltimoCheck);
 
-        List<Object[]> dashboardData = repository.findDashboardEstatusData();
+            List<Object[]> dashboardData = repository.findDashboardEstatusData();
+            logger.debug("Datos obtenidos de findDashboardEstatusData: {} filas", dashboardData.size());
 
-        List<Map<String, Object>> equiposOffline = procesarEquiposOfflineOptimizado(dashboardData, fechaUltimoCheck);
+            List<Map<String, Object>> equiposOffline = procesarEquiposOfflineOptimizado(dashboardData, fechaUltimoCheck);
+            logger.debug("Equipos offline procesados: {} equipos", equiposOffline.size());
 
-        result.put("estatusPorCliente", procesarEstatusPorClienteOptimizado(dashboardData));
-        result.put("equiposPorPlataforma", procesarEquiposPorPlataformaOptimizado(dashboardData));
-        result.put("equiposOffline", equiposOffline);
-        result.put("equiposPorMotivo", procesarEquiposPorMotivo(equiposOffline));
-        result.put("equiposParaCheck", repository.findEquiposParaCheck());
+            result.put("estatusPorCliente", procesarEstatusPorClienteOptimizado(dashboardData));
+            logger.debug("Estatus por cliente procesado");
 
-        return result;
+            result.put("equiposPorPlataforma", procesarEquiposPorPlataformaOptimizado(dashboardData));
+            logger.debug("Equipos por plataforma procesado");
+
+            result.put("equiposOffline", equiposOffline);
+            result.put("equiposPorMotivo", procesarEquiposPorMotivo(equiposOffline));
+            logger.debug("Motivos procesados");
+
+            List<Equipo> paraCheck = repository.findEquiposParaCheck();
+            logger.debug("Equipos para check: {} equipos", paraCheck.size());
+            result.put("equiposParaCheck", paraCheck);
+
+            logger.info("Dashboard de estatus procesado exitosamente");
+            return result;
+        } catch (Exception e) {
+            logger.error("Error al procesar dashboard de estatus: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al obtener datos del dashboard: " + e.getMessage(), e);
+        }
     }
 
     private List<Map<String, Object>> procesarEstatusPorClienteOptimizado(List<Object[]> data) {
@@ -428,11 +449,11 @@ public class EquipoService {
 
             // Registrar cargo en créditos plataforma
             if (creditosUsados != null && creditosUsados > 0 &&
-                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
-                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                    (equipo.getPlataforma() != null &&
+                            (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
 
                 String subtipo = null;
-                if (equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                if (equipo.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
                     subtipo = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
                 }
 
@@ -460,12 +481,12 @@ public class EquipoService {
 
             // Registrar cargo en créditos plataforma solo para TRACK_SOLID y WHATSGPS
             if (creditosUsados != null && creditosUsados > 0 &&
-                    (equipo.getPlataforma() == PlataformaEquipoEnum.TRACK_SOLID ||
-                            equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS)) {
+                    (equipo.getPlataforma() != null &&
+                            (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
 
                 ConceptoCreditoEnum concepto;
                 // Para WhatsGPS, distinguir entre anual y vitalicia
-                if (equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                if (equipo.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
                     concepto = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL
                             ? ConceptoCreditoEnum.RENOVACION_ANUAL
                             : ConceptoCreditoEnum.RENOVACION_VITALICIA;
@@ -477,7 +498,7 @@ public class EquipoService {
                 }
 
                 String subtipo = null;
-                if (equipo.getPlataforma() == PlataformaEquipoEnum.WHATSGPS) {
+                if (equipo.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
                     subtipo = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL ? "ANUAL" : "VITALICIA";
                 }
 

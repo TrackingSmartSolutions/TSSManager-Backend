@@ -7,7 +7,11 @@ import com.tss.tssmanager_backend.enums.PlataformaEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoActivacionEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoEquipoEnum;
 import com.tss.tssmanager_backend.service.EquipoService;
+import com.tss.tssmanager_backend.service.PlataformaService;
 import com.tss.tssmanager_backend.service.SimService;
+import jakarta.persistence.EntityNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +29,11 @@ public class EquipoController {
 
     @Autowired
     private SimService simService;
+
+    @Autowired
+    private PlataformaService plataformaService;
+
+    private static final Logger logger = LoggerFactory.getLogger(EquipoController.class);
 
     @GetMapping
     public ResponseEntity<Iterable<Equipo>> obtenerTodosLosEquipos() {
@@ -138,7 +147,19 @@ public class EquipoController {
         equipo.setTipo(TipoEquipoEnum.valueOf((String) equipoMap.get("tipo")));
         equipo.setEstatus(EstatusEquipoEnum.valueOf((String) equipoMap.get("estatus")));
         equipo.setTipoActivacion(TipoActivacionEquipoEnum.valueOf((String) equipoMap.get("tipoActivacion")));
-        equipo.setPlataforma(PlataformaEquipoEnum.valueOf((String) equipoMap.get("plataforma")));
+        Object plataformaObj = equipoMap.get("plataforma");
+        if (plataformaObj instanceof String) {
+            try {
+                Integer plataformaId = Integer.parseInt((String) plataformaObj);
+                equipo.setPlataforma(plataformaService.obtenerPlataforma(plataformaId));
+            } catch (NumberFormatException | EntityNotFoundException e) {
+                equipo.setPlataforma(null);
+            }
+        } else if (plataformaObj instanceof Integer) {
+            equipo.setPlataforma(plataformaService.obtenerPlataforma((Integer) plataformaObj));
+        } else {
+            equipo.setPlataforma(null);
+        }
 
         // Manejo de clienteId y clienteDefault
         Object clienteIdObj = equipoMap.get("clienteId");
@@ -191,7 +212,15 @@ public class EquipoController {
 
     @GetMapping("/dashboard-estatus")
     public ResponseEntity<Map<String, Object>> obtenerDashboardEstatus() {
-        return ResponseEntity.ok(service.obtenerDashboardEstatusOptimizado());
+        logger.debug("Llamada al endpoint /dashboard-estatus");
+        try {
+            Map<String, Object> data = service.obtenerDashboardEstatusOptimizado();
+            logger.debug("Datos obtenidos: {}", data.keySet());  // Log keys para no imprimir todo
+            return ResponseEntity.ok(data);
+        } catch (Exception e) {
+            logger.error("Error en controller al obtener dashboard: {}", e.getMessage(), e);
+            throw e;  // Re-lanza para que se maneje globalmente
+        }
     }
 
     @PostMapping("/{id}/activar-con-creditos")

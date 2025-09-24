@@ -115,7 +115,11 @@ public class TratoService {
                 // Agregar información adicional de empresa si existe
                 if (row[17] != null) dto.setDomicilio((String) row[17]);
                 if (row[18] != null) dto.setSitioWeb((String) row[18]);
-                if (row[19] != null) dto.setSector((String) row[19]);
+                if (row[19] != null) {
+                    dto.setSectorNombre((String) row[19]);
+                } else {
+                    dto.setSectorNombre("No especificado");
+                }
 
                 dto.setContactoId((Integer) row[20]);
 
@@ -906,18 +910,27 @@ public class TratoService {
                 dto.setEmpresaNombre(empresa.getNombre());
                 dto.setDomicilio(empresa.getDomicilioFisico());
                 dto.setSitioWeb(empresa.getSitioWeb());
-                dto.setSector(empresa.getSector() != null ? empresa.getSector().name() : "No especificado");
+
+                if (empresa.getSector() != null) {
+                    dto.setSectorNombre(empresa.getSector().getNombreSector());
+                    dto.setSectorId(empresa.getSector().getId());
+                } else {
+                    dto.setSectorNombre("No especificado");
+                    dto.setSectorId(null);
+                }
             } else {
                 dto.setEmpresaNombre("Empresa Asociada");
                 dto.setDomicilio("No especificado");
                 dto.setSitioWeb("No especificado");
-                dto.setSector("No especificado");
+                dto.setSectorNombre("No especificado");
+                dto.setSectorId(null);
             }
         } else {
             dto.setEmpresaNombre("Empresa Asociada");
             dto.setDomicilio("No especificado");
             dto.setSitioWeb("No especificado");
-            dto.setSector("No especificado");
+            dto.setSectorNombre("No especificado");
+            dto.setSectorId(null);
         }
 
         List<Actividad> actividades = actividadRepository.findByTratoId(trato.getId());

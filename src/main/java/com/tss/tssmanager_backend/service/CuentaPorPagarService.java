@@ -1,6 +1,7 @@
 package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.entity.CuentaPorPagar;
+import com.tss.tssmanager_backend.entity.Plataforma;
 import com.tss.tssmanager_backend.entity.Sim;
 import com.tss.tssmanager_backend.entity.Transaccion;
 import com.tss.tssmanager_backend.enums.ConceptoCreditoEnum;
@@ -38,6 +39,9 @@ public class CuentaPorPagarService {
 
     @Autowired
     private SimRepository simRepository;
+
+    @Autowired
+    private PlataformaService plataformaService;
 
     public List<CuentaPorPagar> obtenerTodas() {
         return cuentasPorPagarRepository.findAllByOrderByFechaPagoAsc();
@@ -109,7 +113,7 @@ public class CuentaPorPagarService {
         if (transaccion.getCategoria() != null &&
                 transaccion.getCategoria().getDescripcion().toLowerCase().contains("créditos plataforma")) {
 
-            PlataformaEquipoEnum plataforma = determinarPlataformaPorCuenta(transaccion.getCuenta());
+            Plataforma plataforma = determinarPlataformaPorCuenta(transaccion.getCuenta());
             String subtipo = determinarSubtipoPorCuenta(transaccion.getCuenta());
 
             if (plataforma != null && cantidadCreditos != null && cantidadCreditos > 0) {
@@ -132,6 +136,7 @@ public class CuentaPorPagarService {
         }
     }
 
+
     private String determinarSubtipoPorCuenta(com.tss.tssmanager_backend.entity.CuentasTransacciones cuenta) {
         if (cuenta == null || cuenta.getNombre() == null) return null;
 
@@ -146,15 +151,22 @@ public class CuentaPorPagarService {
         return null;
     }
 
-    private PlataformaEquipoEnum determinarPlataformaPorCuenta(com.tss.tssmanager_backend.entity.CuentasTransacciones cuenta) {
+    private Plataforma determinarPlataformaPorCuenta(com.tss.tssmanager_backend.entity.CuentasTransacciones cuenta) {
         if (cuenta == null || cuenta.getNombre() == null) return null;
 
         String nombreCuenta = cuenta.getNombre().toLowerCase();
 
-        if (nombreCuenta.contains("WhatsGPS") || nombreCuenta.contains("whatsgps")) {
-            return PlataformaEquipoEnum.WHATSGPS;
-        } else if (nombreCuenta.contains("Tracksolid") || nombreCuenta.contains("tracksolid")) {
-            return PlataformaEquipoEnum.TRACK_SOLID;
+
+        if (nombreCuenta.contains("whatsgps")) {
+            return plataformaService.obtenerTodasLasPlataformas().stream()
+                    .filter(p -> "WhatsGPS".equals(p.getNombrePlataforma()))
+                    .findFirst()
+                    .orElse(null);
+        } else if (nombreCuenta.contains("tracksolid")) {
+            return plataformaService.obtenerTodasLasPlataformas().stream()
+                    .filter(p -> "Track Solid".equals(p.getNombrePlataforma()))
+                    .findFirst()
+                    .orElse(null);
         }
         return null;
     }

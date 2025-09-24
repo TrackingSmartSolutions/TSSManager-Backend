@@ -4,8 +4,8 @@ import com.tss.tssmanager_backend.dto.CreditoPlataformaDTO;
 import com.tss.tssmanager_backend.dto.DashboardCreditosDTO;
 import com.tss.tssmanager_backend.entity.CreditoPlataforma;
 import com.tss.tssmanager_backend.entity.Equipo;
+import com.tss.tssmanager_backend.entity.Plataforma;
 import com.tss.tssmanager_backend.enums.ConceptoCreditoEnum;
-import com.tss.tssmanager_backend.enums.PlataformaEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoCreditoEnum;
 import com.tss.tssmanager_backend.repository.CreditoPlataformaRepository;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
@@ -30,6 +30,10 @@ public class CreditoPlataformaService {
     @Autowired
     private EquipoRepository equipoRepository;
 
+    @Autowired
+    private PlataformaService plataformaService;
+
+    @Transactional(readOnly = true)
     public DashboardCreditosDTO getDashboardData(LocalDate fechaInicio, LocalDate fechaFin, String filtroPlataforma) {
         LocalDateTime fechaInicioDateTime = fechaInicio.atStartOfDay();
         LocalDateTime fechaFinDateTime = fechaFin.atTime(LocalTime.MAX);
@@ -39,17 +43,22 @@ public class CreditoPlataformaService {
         if ("Todos".equals(filtroPlataforma)) {
             creditos = repository.findByFechaBetween(fechaInicioDateTime, fechaFinDateTime);
         } else {
-            PlataformaEquipoEnum plataforma = PlataformaEquipoEnum.valueOf(filtroPlataforma.replace(" ", "_").toUpperCase());
-            creditos = repository.findByPlataformaAndFechaBetween(plataforma, fechaInicioDateTime, fechaFinDateTime);
+            Plataforma plataforma = plataformaService.obtenerTodasLasPlataformas().stream()
+                    .filter(p -> p.getNombrePlataforma().equalsIgnoreCase(filtroPlataforma))
+                    .findFirst()
+                    .orElse(null);
+
+            if (plataforma != null) {
+                creditos = repository.findByPlataformaAndFechaBetween(plataforma, fechaInicioDateTime, fechaFinDateTime);
+            } else {
+                creditos = new ArrayList<>();
+            }
         }
 
-        // Convertir a DTOs
         List<CreditoPlataformaDTO> estadoCuenta = convertToDTO(creditos);
 
-        // Calcular saldos
         Map<String, BigDecimal> saldos = calcularSaldos();
 
-        // Calcular historial
         List<Map<String, Object>> historial = calcularHistorialSaldos(fechaInicioDateTime, fechaFinDateTime);
 
         return new DashboardCreditosDTO(saldos, estadoCuenta, historial);
@@ -60,14 +69,13 @@ public class CreditoPlataformaService {
             CreditoPlataformaDTO dto = new CreditoPlataformaDTO();
             dto.setId(credito.getId());
             dto.setFecha(credito.getFecha());
-            dto.setPlataforma(credito.getPlataforma());
+            dto.setPlataforma(credito.getPlataforma().getNombrePlataforma());
             dto.setConcepto(credito.getConcepto());
             dto.setTipo(credito.getTipo());
             dto.setMonto(credito.getMonto());
             dto.setNota(credito.getNota());
             dto.setEquipoId(credito.getEquipoId());
 
-            // Buscar nombre del equipo si existe
             if (credito.getEquipoId() != null) {
                 equipoRepository.findById(credito.getEquipoId())
                         .ifPresent(equipo -> dto.setEquipoNombre(equipo.getNombre()));
@@ -78,7 +86,7 @@ public class CreditoPlataformaService {
     }
 
     @Transactional
-    public void registrarAbonoConSubtipo(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
+    public void registrarAbonoConSubtipo(Plataforma plataforma, ConceptoCreditoEnum concepto,
                                          BigDecimal monto, String nota, Integer transaccionId,
                                          Integer cuentaPorPagarId, String subtipo, LocalDateTime fechaCustom) {
         CreditoPlataforma credito = new CreditoPlataforma();
@@ -98,7 +106,7 @@ public class CreditoPlataformaService {
     }
 
     @Transactional
-    public void registrarAbonoConSubtipo(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
+    public void registrarAbonoConSubtipo(Plataforma plataforma, ConceptoCreditoEnum concepto,
                                          BigDecimal monto, String nota, Integer transaccionId,
                                          Integer cuentaPorPagarId, String subtipo) {
         registrarAbonoConSubtipo(plataforma, concepto, monto, nota, transaccionId,
@@ -106,7 +114,7 @@ public class CreditoPlataformaService {
     }
 
     @Transactional
-    public void registrarCargoConSubtipo(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
+    public void registrarCargoConSubtipo(Plataforma plataforma, ConceptoCreditoEnum concepto,
                                          BigDecimal monto, String nota, Integer equipoId, String subtipo) {
         CreditoPlataforma credito = new CreditoPlataforma();
         credito.setFecha(DateUtils.nowInMexico());
@@ -127,25 +135,28 @@ public class CreditoPlataformaService {
 
         Map<String, BigDecimal> saldos = new HashMap<>();
 
-        // Inicializar con 0
+        // Inicializar con las claves que espera el frontend
         saldos.put("TRACK_SOLID", BigDecimal.ZERO);
         saldos.put("WHATSGPS", BigDecimal.ZERO);
         saldos.put("WHATSGPS_ANUAL", BigDecimal.ZERO);
         saldos.put("WHATSGPS_VITALICIA", BigDecimal.ZERO);
 
         for (Object[] row : saldosData) {
-            PlataformaEquipoEnum plataforma = (PlataformaEquipoEnum) row[0];
+            String nombrePlataforma = (String) row[0];
             BigDecimal saldo = (BigDecimal) row[1];
-            saldos.put(plataforma.name(), saldo);
+
+            // Mapear nombre de BD a clave esperada por frontend
+            String claveParaFrontend = mapearNombrePlataformaParaFrontend(nombrePlataforma);
+            saldos.put(claveParaFrontend, saldo);
         }
 
         // Calcular saldos por subtipo de WhatsGPS
         for (Object[] row : saldosSubtipos) {
-            PlataformaEquipoEnum plataforma = (PlataformaEquipoEnum) row[0];
+            String nombrePlataforma = (String) row[0];
             String subtipo = (String) row[1];
             BigDecimal saldo = (BigDecimal) row[2];
 
-            if (plataforma == PlataformaEquipoEnum.WHATSGPS && subtipo != null) {
+            if ("WhatsGPS".equals(nombrePlataforma) && subtipo != null) {
                 saldos.put("WHATSGPS_" + subtipo, saldo);
             }
         }
@@ -154,20 +165,20 @@ public class CreditoPlataformaService {
     }
 
     private List<Map<String, Object>> calcularHistorialSaldos(LocalDateTime fechaInicio, LocalDateTime fechaFin) {
-        // Obtener todos los movimientos hasta la fecha fin para calcular saldos acumulados
         List<CreditoPlataforma> todosLosCreditos = repository.findByFechaLessThanEqualOrderByFecha(fechaFin);
 
-        // Agrupar por fecha y plataforma/subtipo
         Map<LocalDate, Map<String, BigDecimal>> saldosPorFechaYPlataforma = new TreeMap<>();
 
         for (CreditoPlataforma credito : todosLosCreditos) {
             LocalDate fecha = credito.getFecha().toLocalDate();
 
             String plataformaKey;
-            if (credito.getPlataforma() == PlataformaEquipoEnum.WHATSGPS && credito.getSubtipo() != null) {
+            if ("WhatsGPS".equals(credito.getPlataforma().getNombrePlataforma()) && credito.getSubtipo() != null) {
                 plataformaKey = "WHATSGPS_" + credito.getSubtipo();
             } else {
-                plataformaKey = credito.getPlataforma().name();
+                // Mapear nombres de BD a formato esperado por frontend para gráfica
+                String nombrePlataforma = credito.getPlataforma().getNombrePlataforma();
+                plataformaKey = mapearNombrePlataformaParaFrontend(nombrePlataforma);
             }
 
             saldosPorFechaYPlataforma.computeIfAbsent(fecha, k -> new HashMap<>());
@@ -225,8 +236,38 @@ public class CreditoPlataformaService {
         return resultado;
     }
 
+    private String mapearNombrePlataforma(String nombreBD) {
+        switch (nombreBD) {
+            case "Track Solid":
+                return "TRACK_SOLID";
+            case "WhatsGPS":
+                return "WHATSGPS";
+            case "TrackerKing":
+                return "TRACKERKING";
+            case "Joint Cloud":
+                return "JOINTCLOUD";
+            default:
+                return nombreBD;
+        }
+    }
+
+    private String mapearNombrePlataformaParaFrontend(String nombreBD) {
+        switch (nombreBD) {
+            case "Track Solid":
+                return "TRACK_SOLID";
+            case "WhatsGPS":
+                return "WHATSGPS";
+            case "TrackerKing":
+                return "TRACKERKING";
+            case "Joint Cloud":
+                return "JOINTCLOUD";
+            default:
+                return nombreBD.toUpperCase().replace(" ", "_");
+        }
+    }
+
     @Transactional
-    public void registrarCargo(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
+    public void registrarCargo(Plataforma plataforma, ConceptoCreditoEnum concepto,
                                BigDecimal monto, String nota, Integer equipoId) {
         CreditoPlataforma credito = new CreditoPlataforma();
         credito.setFecha(LocalDateTime.now());
@@ -241,7 +282,7 @@ public class CreditoPlataformaService {
     }
 
     @Transactional
-    public void registrarAbono(PlataformaEquipoEnum plataforma, ConceptoCreditoEnum concepto,
+    public void registrarAbono(Plataforma plataforma, ConceptoCreditoEnum concepto,
                                BigDecimal monto, String nota, Integer transaccionId, Integer cuentaPorPagarId) {
         CreditoPlataforma credito = new CreditoPlataforma();
         credito.setFecha(DateUtils.nowInMexico());

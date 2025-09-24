@@ -25,9 +25,9 @@ public class CreditoPlataforma {
     @Column(nullable = false)
     private LocalDateTime fecha;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private PlataformaEquipoEnum plataforma;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "plataforma_id", nullable = false, foreignKey = @ForeignKey(name = "fk_creditos_plataforma"))
+    private Plataforma plataforma;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

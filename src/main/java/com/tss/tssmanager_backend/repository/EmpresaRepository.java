@@ -26,21 +26,22 @@ public interface EmpresaRepository extends JpaRepository<Empresa, Integer> {
     Optional<Empresa> findByNombreAndPropietario_Id(String nombre, Integer propietarioId);
 
     @Query(value = """
-    SELECT 
-        e.id,
-        e.nombre,
-        e.domicilio_fisico,
-        e.sector,
-        e.estatus,
-        e.sitio_web,
-        cc.lat,
-        cc.lng
-    FROM "Empresas" e
-    LEFT JOIN coordenadas_cache cc ON cc.direccion_hash = encode(sha256(lower(trim(e.domicilio_fisico))::bytea), 'hex')
-    WHERE e.domicilio_fisico IS NOT NULL 
-    AND e.domicilio_fisico != ''
-    ORDER BY e.nombre
-    """, nativeQuery = true)
+SELECT 
+    e.id,
+    e.nombre,
+    e.domicilio_fisico,
+    s.nombre_sector as sector_nombre, 
+    e.estatus,
+    e.sitio_web,
+    cc.lat,
+    cc.lng
+FROM "Empresas" e
+LEFT JOIN "Sectores" s ON e.sector_id = s.id 
+LEFT JOIN coordenadas_cache cc ON cc.direccion_hash = encode(sha256(lower(trim(e.domicilio_fisico))::bytea), 'hex')
+WHERE e.domicilio_fisico IS NOT NULL 
+AND e.domicilio_fisico != ''
+ORDER BY e.nombre
+""", nativeQuery = true)
     List<Object[]> findEmpresasConCoordenadas();
 
     @Query(value = "SELECT e.id FROM \"Empresas\" e WHERE NOT EXISTS (SELECT 1 FROM \"Tratos\" t WHERE t.empresa_id = e.id)", nativeQuery = true)

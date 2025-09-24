@@ -9,6 +9,8 @@ import com.lowagie.text.Font;
 import com.tss.tssmanager_backend.dto.*;
 import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.*;
+import com.tss.tssmanager_backend.entity.Sector;
+import com.tss.tssmanager_backend.repository.SectorRepository;
 import com.tss.tssmanager_backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.csv.CSVFormat;
@@ -20,6 +22,7 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFFont;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -56,10 +59,12 @@ public class AdministradorDatosService {
     private final ModeloEquipoRepository modeloRepository;
     private final ProveedorEquipoRepository proveedorRepository;
     private final EquipoRepository equipoRepository;
+    private final SectorRepository sectorRepository;
     private final SimRepository simRepository;
     private final HistorialSaldosSimRepository historialSaldoRepository;
     private final UsuarioRepository usuarioRepository;
     private final ResourceLoader resourceLoader;
+    private final PlataformaService plataformaService;
 
     @Value("${app.archivos.exportaciones:/exportaciones}")
     private String rutaExportaciones;
@@ -323,7 +328,33 @@ public class AdministradorDatosService {
 
             String plataformaStr = record.get("plataforma");
             if (plataformaStr != null && !plataformaStr.isEmpty()) {
-                equipo.setPlataforma(PlataformaEquipoEnum.valueOf(plataformaStr));
+                String nombrePlataforma = null;
+                switch (plataformaStr) {
+                    case "TRACK_SOLID":
+                        nombrePlataforma = "Track Solid";
+                        break;
+                    case "WHATSGPS":
+                        nombrePlataforma = "WhatsGPS";
+                        break;
+                    case "TRACKERKING":
+                        nombrePlataforma = "TrackerKing";
+                        break;
+                    case "JOINTCLOUD":
+                        nombrePlataforma = "Joint Cloud";
+                        break;
+                }
+
+                if (nombrePlataforma != null) {
+                    List<Plataforma> plataformas = plataformaService.obtenerTodasLasPlataformas();
+                    Plataforma plataforma = null;
+                    for (Plataforma p : plataformas) {
+                        if (nombrePlataforma.equals(p.getNombrePlataforma())) {
+                            plataforma = p;
+                            break;
+                        }
+                    }
+                    equipo.setPlataforma(plataforma);
+                }
             }
 
             String fechaActivacionStr = record.get("fecha_activacion");
@@ -567,7 +598,18 @@ public class AdministradorDatosService {
 
             String sectorStr = record.get("sector");
             if (sectorStr != null && !sectorStr.trim().isEmpty()) {
-                empresa.setSector(SectorEmpresaEnum.valueOf(sectorStr));
+                Optional<Sector> sectorOpt = sectorRepository.findByNombreSectorIgnoreCase(sectorStr.trim());
+                if (sectorOpt.isPresent()) {
+                    empresa.setSector(sectorOpt.get());
+                } else {
+                    // Crear el sector si no existe
+                    Sector nuevoSector = new Sector();
+                    nuevoSector.setNombreSector(sectorStr.trim());
+                    nuevoSector.setCreadoPor("SISTEMA_IMPORTACION");
+                    nuevoSector.setModificadoPor("SISTEMA_IMPORTACION");
+                    Sector sectorGuardado = sectorRepository.save(nuevoSector);
+                    empresa.setSector(sectorGuardado);
+                }
             }
 
             String domicilioFiscal = record.get("domicilio_fiscal");
@@ -818,7 +860,7 @@ public class AdministradorDatosService {
                 valores.add(empresa.getEstatus().toString());
                 valores.add(empresa.getPropietario() != null ? empresa.getPropietario().getId().toString() : "");
                 valores.add(empresa.getSitioWeb() != null ? empresa.getSitioWeb() : "");
-                valores.add(empresa.getSector() != null ? empresa.getSector().toString() : "");
+                valores.add(empresa.getSector() != null ? empresa.getSector().getNombreSector() : "");
                 valores.add(empresa.getDomicilioFisico());
                 valores.add(empresa.getDomicilioFiscal() != null ? empresa.getDomicilioFiscal() : "");
                 valores.add(empresa.getRfc() != null ? empresa.getRfc() : "");
@@ -867,7 +909,7 @@ public class AdministradorDatosService {
                 valores.add(equipo.getTipo().toString());
                 valores.add(equipo.getEstatus().toString());
                 valores.add(equipo.getTipoActivacion() != null ? equipo.getTipoActivacion().toString() : "");
-                valores.add(equipo.getPlataforma() != null ? equipo.getPlataforma().toString() : "");
+                valores.add(equipo.getPlataforma() != null ? equipo.getPlataforma().getNombrePlataforma() : "");
                 valores.add(equipo.getFechaActivacion() != null ? equipo.getFechaActivacion().toString() : "");
                 valores.add(equipo.getFechaExpiracion() != null ? equipo.getFechaExpiracion().toString() : "");
                 break;

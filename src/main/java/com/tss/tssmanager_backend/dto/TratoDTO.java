@@ -34,7 +34,8 @@ public class TratoDTO {
     private ContactoDTO contacto;
     private String domicilio;
     private String sitioWeb;
-    private String sector;
+    private String sectorNombre;
+    private Integer sectorId;
 
     private boolean escalado;
     private String nuevoAdministradorNombre;
