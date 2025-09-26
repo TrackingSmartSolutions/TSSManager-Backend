@@ -16,9 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -391,7 +389,65 @@ public class CuentaPorCobrarService {
     @Transactional(readOnly = true)
     public List<CuentaPorCobrarDTO> listarCuentasPorCobrar() {
         logger.info("Listando todas las cuentas por cobrar");
-        return cuentaPorCobrarRepository.findAll().stream().map(this::convertToDTO).collect(Collectors.toList());
+
+        // CAMBIO: Usar la nueva query optimizada
+        List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository.findAllWithRelations();
+
+        // CAMBIO: Obtener IDs vinculadas en una sola consulta
+        List<Integer> idsVinculadas = cuentaPorCobrarRepository.findAllVinculatedIds();
+        Set<Integer> vinculadasSet = new HashSet<>(idsVinculadas);
+
+        return cuentas.stream()
+                .map(cuenta -> convertToDTOOptimized(cuenta, vinculadasSet.contains(cuenta.getId())))
+                .collect(Collectors.toList());
+    }
+
+    private CuentaPorCobrarDTO convertToDTOOptimized(CuentaPorCobrar cuenta, boolean isVinculada) {
+        CuentaPorCobrarDTO dto = new CuentaPorCobrarDTO();
+        dto.setId(cuenta.getId());
+        dto.setFolio(cuenta.getFolio());
+        dto.setFechaPago(cuenta.getFechaPago());
+
+        dto.setClienteNombre(cuenta.getCliente().getNombre());
+        dto.setClienteId(cuenta.getCliente().getId());
+
+        dto.setEstatus(cuenta.getEstatus());
+        dto.setEsquema(cuenta.getEsquema());
+        dto.setNoEquipos(cuenta.getNoEquipos());
+        dto.setCantidadCobrar(cuenta.getCantidadCobrar());
+        dto.setConceptos(cuenta.getConceptos() != null ? List.of(cuenta.getConceptos().split(", ")) : List.of());
+        dto.setComprobantePagoUrl(cuenta.getComprobantePagoUrl());
+        dto.setFechaRealPago(cuenta.getFechaRealPago());
+        dto.setMontoPagado(cuenta.getMontoPagado());
+        dto.setSaldoPendiente(cuenta.getSaldoPendiente());
+        dto.setCotizacionId(cuenta.getCotizacion().getId());
+
+        int equiposEnEstaCuenta = calcularEquiposEnCuentaOptimized(cuenta);
+        dto.setNumeroEquipos(equiposEnEstaCuenta);
+
+        return dto;
+    }
+
+    private int calcularEquiposEnCuentaOptimized(CuentaPorCobrar cuenta) {
+        if (cuenta.getCotizacion() == null || cuenta.getConceptos() == null) {
+            return 0;
+        }
+
+        List<String> conceptosCuenta = List.of(cuenta.getConceptos().split(", "));
+
+        if (cuenta.getCotizacion().getUnidades() != null && !cuenta.getCotizacion().getUnidades().isEmpty()) {
+            return cuenta.getCotizacion().getUnidades().stream()
+                    .filter(unidad ->
+                            "Equipos".equals(unidad.getUnidad()) &&
+                                    conceptosCuenta.stream().anyMatch(concepto ->
+                                            concepto.trim().equalsIgnoreCase(unidad.getConcepto().trim())
+                                    )
+                    )
+                    .mapToInt(UnidadCotizacion::getCantidad)
+                    .sum();
+        }
+
+        return 0;
     }
 
     private CuentaPorCobrarDTO convertToDTO(CuentaPorCobrar cuenta) {

@@ -121,4 +121,16 @@ public class CuentaPorCobrarController {
         return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
     }
 
+    @GetMapping("/vinculaciones")
+    public ResponseEntity<Map<String, List<Integer>>> obtenerVinculaciones() {
+        logger.info("Obteniendo todas las vinculaciones de cuentas por cobrar");
+        try {
+            List<Integer> idsVinculadas = cuentaPorCobrarRepository.findAllVinculatedIds();
+            return ResponseEntity.ok(Map.of("idsVinculadas", idsVinculadas));
+        } catch (Exception e) {
+            logger.error("Error al obtener vinculaciones: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
 }

@@ -744,14 +744,35 @@ public class SolicitudFacturaNotaService {
                     normalFont, boldFont, Color.WHITE);
 
             if (cotizacion != null) {
-                if (cotizacion.getIsrFederal() != null && cotizacion.getIsrFederal().compareTo(BigDecimal.ZERO) > 0) {
-                    addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(cotizacion.getIsrFederal()),
-                            normalFont, boldFont, Color.WHITE);
-                }
+                // Recalcular ISR basado en el subtotal de la solicitud, no de la cotización
+                if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
+                        solicitud.getCliente().getRegimenFiscal().equals("601")) {
 
-                if (cotizacion.getIsrEstatal() != null && cotizacion.getIsrEstatal().compareTo(BigDecimal.ZERO) > 0) {
-                    addTotalRow(rightTable, "ISR Estatal (2%):", formatCurrency(cotizacion.getIsrEstatal()),
-                            normalFont, boldFont, Color.WHITE);
+                    String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
+                    boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
+                    boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
+
+                    if (cpMatch || hasGuanajuato) {
+                        BigDecimal isrEstatal = solicitud.getSubtotal().multiply(new BigDecimal("0.02"));
+                        BigDecimal isrFederal = solicitud.getSubtotal().multiply(new BigDecimal("0.0125"));
+
+                        if (isrFederal.compareTo(BigDecimal.ZERO) > 0) {
+                            addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(isrFederal),
+                                    normalFont, boldFont, Color.WHITE);
+                        }
+
+                        if (isrEstatal.compareTo(BigDecimal.ZERO) > 0) {
+                            addTotalRow(rightTable, "ISR Estatal (2%):", formatCurrency(isrEstatal),
+                                    normalFont, boldFont, Color.WHITE);
+                        }
+                    } else if (!cpMatch && !hasGuanajuato) {
+                        BigDecimal isrFederal = solicitud.getSubtotal().multiply(new BigDecimal("0.0125"));
+
+                        if (isrFederal.compareTo(BigDecimal.ZERO) > 0) {
+                            addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(isrFederal),
+                                    normalFont, boldFont, Color.WHITE);
+                        }
+                    }
                 }
             }
 
