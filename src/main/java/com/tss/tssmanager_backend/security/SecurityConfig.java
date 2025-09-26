@@ -39,7 +39,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/geocoding/**").permitAll()
                         .requestMatchers("/api/copias-seguridad/google-drive/callback").permitAll()
-                        .requestMatchers("/ping", "/health", "/").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMINISTRADOR")
                         .requestMatchers("/api/employee/**").hasAnyRole("ADMINISTRADOR", "EMPLEADO")
                         .anyRequest().authenticated())
