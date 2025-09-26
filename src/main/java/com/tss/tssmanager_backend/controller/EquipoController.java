@@ -240,4 +240,10 @@ public class EquipoController {
         service.renovarEquipoConCreditos(id, creditosUsados);
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/actualizar-expirados")
+    public ResponseEntity<Void> actualizarEquiposExpirados() {
+        service.actualizarEquiposExpirados();
+        return ResponseEntity.ok().build();
+    }
 }

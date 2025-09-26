@@ -78,4 +78,7 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
     @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada LEFT JOIN FETCH e.plataforma ORDER BY e.id")
     List<Equipo> findAllWithSims();
 
+    @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada LEFT JOIN FETCH e.plataforma ORDER BY CASE WHEN e.fechaExpiracion IS NULL THEN 0 ELSE 1 END, e.fechaExpiracion ASC")
+    List<Equipo> findAllWithSimsOrderedByExpiration();
+
 }

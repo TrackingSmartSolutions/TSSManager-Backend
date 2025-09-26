@@ -122,4 +122,21 @@ ORDER BY
     AND (:numero IS NULL OR LOWER(s.numero) LIKE LOWER(CONCAT('%', :numero, '%')))
     """, nativeQuery = true)
     Long countSimsWithFilters(@Param("grupo") Integer grupo, @Param("numero") String numero);
+
+    @Query(value = """
+SELECT s.id, s.numero, s.tarifa, s.vigencia, s.recarga, s.responsable, 
+       s.principal, s.grupo, s.equipo_imei, s.contrasena,
+       e.imei as equipo_imei, e.nombre as equipo_nombre
+FROM "SIMs" s 
+LEFT JOIN "Equipos" e ON s.equipo_imei = e.imei 
+WHERE (:grupo IS NULL OR s.grupo = :grupo)
+AND (:numero IS NULL OR s.numero ILIKE CONCAT('%', :numero, '%'))
+ORDER BY 
+    CASE WHEN s.vigencia IS NULL THEN 1 ELSE 0 END,
+    s.vigencia ASC,
+    s.id DESC
+LIMIT 100
+""", nativeQuery = true)
+    List<Object[]> findSimsOptimizedWithLimit(@Param("grupo") Integer grupo,
+                                              @Param("numero") String numero);
 }

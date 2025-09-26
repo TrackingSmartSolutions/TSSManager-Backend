@@ -392,25 +392,32 @@ public class SimService {
     }
 
     public List<SimDTO> obtenerTodasLasSimsConFiltros(Integer grupo, String numero) {
-        List<Object[]> results = simRepository.findSimsPaginatedWithFilters(grupo, numero);
+        // Usar la nueva consulta optimizada
+        List<Object[]> results = simRepository.findSimsOptimizedWithLimit(grupo, numero);
 
         List<SimDTO> content = results.stream()
                 .map(this::convertFromOptimizedQuery)
                 .collect(Collectors.toList());
 
-        // Obtener saldos de forma más eficiente
-        List<Integer> simIds = content.stream()
-                .map(SimDTO::getId)
-                .collect(Collectors.toList());
-
-        Map<Integer, String> ultimosSaldos = obtenerUltimosSaldosParaLista(simIds);
-
-        content.forEach(sim -> {
-            String ultimoSaldo = ultimosSaldos.getOrDefault(sim.getId(), "N/A");
-            sim.setUltimoSaldoRegistrado(ultimoSaldo);
-        });
-
         return content;
+    }
+
+    @Transactional(readOnly = true)
+    public String obtenerUltimoSaldoParaSim(Integer simId, TarifaSimEnum tarifa) {
+        try {
+            HistorialSaldosSim ultimoSaldo = obtenerUltimoSaldo(simId);
+            if (ultimoSaldo == null) return "Sin registros";
+
+            if (tarifa == TarifaSimEnum.POR_SEGUNDO && ultimoSaldo.getSaldoActual() != null) {
+                return "$" + ultimoSaldo.getSaldoActual().toString();
+            } else if ((tarifa == TarifaSimEnum.SIN_LIMITE || tarifa == TarifaSimEnum.M2M_GLOBAL_15)
+                    && ultimoSaldo.getDatos() != null) {
+                return ultimoSaldo.getDatos().intValue() + " MB";
+            }
+            return "N/A";
+        } catch (Exception e) {
+            return "Error";
+        }
     }
 
     public List<SimDTO> obtenerTodasLasSims() {
@@ -575,11 +582,19 @@ public class SimService {
         Sim sim = simRepository.findById(simId)
                 .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada con ID: " + simId));
 
-        List<HistorialSaldosSim> historial = historialSaldosSimRepository.findBySimNumero(sim.getNumero());
+        List<HistorialSaldosSim> historial = historialSaldosSimRepository.findBySimNumeroOrderByFechaDesc(sim.getNumero());
 
-        return historial.stream()
+        HistorialSaldosSim ultimoSaldo = historial.stream()
                 .findFirst()
                 .orElse(null);
+
+        if (ultimoSaldo != null) {
+            System.out.println("DEBUG - SIM " + simId + " ultimo saldo: saldoActual=" + ultimoSaldo.getSaldoActual() + ", datos=" + ultimoSaldo.getDatos());
+        } else {
+            System.out.println("DEBUG - SIM " + simId + " no tiene historial de saldos");
+        }
+
+        return ultimoSaldo;
     }
 
     @Transactional(readOnly = true)

@@ -282,11 +282,18 @@ public class SimController {
     }
 
     @GetMapping("/{id}/ultimo-saldo")
-    public ResponseEntity<HistorialSaldosSim> obtenerUltimoSaldo(@PathVariable Integer id) {
+    public ResponseEntity<Map<String, Object>> obtenerUltimoSaldo(@PathVariable Integer id) {
         try {
             HistorialSaldosSim ultimoSaldo = simService.obtenerUltimoSaldo(id);
             if (ultimoSaldo != null) {
-                return ResponseEntity.ok(ultimoSaldo);
+                Map<String, Object> response = new HashMap<>();
+                response.put("id", ultimoSaldo.getId());
+                response.put("sim", ultimoSaldo.getSim());
+                response.put("fecha", ultimoSaldo.getFecha());
+                response.put("saldoActual", ultimoSaldo.getSaldoActual());
+                response.put("datos", ultimoSaldo.getDatos());
+
+                return ResponseEntity.ok(response);
             } else {
                 return ResponseEntity.noContent().build();
             }

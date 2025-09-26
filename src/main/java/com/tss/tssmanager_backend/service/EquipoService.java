@@ -41,7 +41,7 @@ public class EquipoService {
 
     private static final Logger logger = LoggerFactory.getLogger(EquipoService.class);
     public Iterable<Equipo> obtenerTodosLosEquipos() {
-        return repository.findAllWithSims();
+        return repository.findAllWithSimsOrderedByExpiration();
     }
 
     @Cacheable(value = "equipos", key = "#id")
@@ -251,24 +251,29 @@ public class EquipoService {
     }
 
     private boolean needsRenewal(Equipo equipo) {
-        if (equipo.getFechaExpiracion() == null || equipo.getEstatus() != EstatusEquipoEnum.ACTIVO) return false;
+        if (equipo.getFechaExpiracion() == null) return false;
         LocalDate today = LocalDate.now();
         LocalDate expirationDate = equipo.getFechaExpiracion().toLocalDate();
         long daysUntilExpiration = expirationDate.toEpochDay() - today.toEpochDay();
-        return daysUntilExpiration <= 30;
+
+        return (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO && daysUntilExpiration <= 30) ||
+                (equipo.getEstatus() == EstatusEquipoEnum.EXPIRADO);
     }
 
     private boolean isExpired(Equipo equipo) {
         if (equipo.getFechaExpiracion() == null) return false;
         LocalDate today = LocalDate.now();
-        return equipo.getFechaExpiracion().toLocalDate().isBefore(today) && equipo.getEstatus() == EstatusEquipoEnum.ACTIVO;
+        return equipo.getFechaExpiracion().toLocalDate().isBefore(today) &&
+                (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO || equipo.getEstatus() == EstatusEquipoEnum.EXPIRADO);
     }
 
     public void checkExpiredEquipos() {
         List<Equipo> equipos = repository.findAll();
         LocalDate today = LocalDate.now();
         for (Equipo equipo : equipos) {
-            if (isExpired(equipo)) {
+            if (equipo.getFechaExpiracion() != null &&
+                    equipo.getFechaExpiracion().toLocalDate().isBefore(today) &&
+                    equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
                 equipo.setEstatus(EstatusEquipoEnum.EXPIRADO);
                 repository.save(equipo);
             }
@@ -510,6 +515,21 @@ public class EquipoService {
                         equipo.getId(),
                         subtipo
                 );
+            }
+        }
+    }
+
+    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
+    public void actualizarEquiposExpirados() {
+        List<Equipo> equipos = repository.findAll();
+        LocalDate today = LocalDate.now();
+
+        for (Equipo equipo : equipos) {
+            if (equipo.getFechaExpiracion() != null &&
+                    equipo.getFechaExpiracion().toLocalDate().isBefore(today) &&
+                    equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
+                equipo.setEstatus(EstatusEquipoEnum.EXPIRADO);
+                repository.save(equipo);
             }
         }
     }
