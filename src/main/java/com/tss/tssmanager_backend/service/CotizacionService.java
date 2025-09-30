@@ -87,7 +87,8 @@ public class CotizacionService {
 
         BigDecimal subtotal = cotizacionDTO.getUnidades().stream()
                 .map(u -> {
-                    BigDecimal descuentoPorcentaje = u.getDescuento().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+                    BigDecimal descuento = u.getDescuento() != null ? u.getDescuento() : BigDecimal.ZERO;
+                    BigDecimal descuentoPorcentaje = descuento.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
                     BigDecimal descuentoMonto = u.getPrecioUnitario().multiply(descuentoPorcentaje).multiply(new BigDecimal(u.getCantidad()));
                     return u.getPrecioUnitario().multiply(new BigDecimal(u.getCantidad())).subtract(descuentoMonto);
                 })
@@ -114,9 +115,10 @@ public class CotizacionService {
             unidad.setUnidad(u.getUnidad());
             unidad.setConcepto(u.getConcepto());
             unidad.setPrecioUnitario(u.getPrecioUnitario());
-            BigDecimal descuentoPorcentaje = u.getDescuento().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            BigDecimal descuento = u.getDescuento() != null ? u.getDescuento() : BigDecimal.ZERO;
+            BigDecimal descuentoPorcentaje = descuento.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
             BigDecimal descuentoMonto = u.getPrecioUnitario().multiply(descuentoPorcentaje).multiply(new BigDecimal(u.getCantidad()));
-            unidad.setDescuento(u.getDescuento());
+            unidad.setDescuento(descuento);
             unidad.setImporteTotal(u.getPrecioUnitario().multiply(new BigDecimal(u.getCantidad())).subtract(descuentoMonto));
             return unidad;
         }).collect(Collectors.toList());
@@ -146,7 +148,8 @@ public class CotizacionService {
 
         BigDecimal subtotal = cotizacionDTO.getUnidades().stream()
                 .map(u -> {
-                    BigDecimal descuentoPorcentaje = u.getDescuento().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+                    BigDecimal descuento = u.getDescuento() != null ? u.getDescuento() : BigDecimal.ZERO;
+                    BigDecimal descuentoPorcentaje = descuento.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
                     BigDecimal descuentoMonto = u.getPrecioUnitario().multiply(descuentoPorcentaje).multiply(new BigDecimal(u.getCantidad()));
                     return u.getPrecioUnitario().multiply(new BigDecimal(u.getCantidad())).subtract(descuentoMonto);
                 })
@@ -173,9 +176,10 @@ public class CotizacionService {
             unidad.setUnidad(u.getUnidad());
             unidad.setConcepto(u.getConcepto());
             unidad.setPrecioUnitario(u.getPrecioUnitario());
-            BigDecimal descuentoPorcentaje = u.getDescuento().divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            BigDecimal descuento = u.getDescuento() != null ? u.getDescuento() : BigDecimal.ZERO;
+            BigDecimal descuentoPorcentaje = descuento.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
             BigDecimal descuentoMonto = u.getPrecioUnitario().multiply(descuentoPorcentaje).multiply(new BigDecimal(u.getCantidad()));
-            unidad.setDescuento(u.getDescuento());
+            unidad.setDescuento(descuento);
             unidad.setImporteTotal(u.getPrecioUnitario().multiply(new BigDecimal(u.getCantidad())).subtract(descuentoMonto));
             return unidad;
         }).collect(Collectors.toList());

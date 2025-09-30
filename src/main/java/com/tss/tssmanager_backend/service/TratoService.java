@@ -124,23 +124,47 @@ public class TratoService {
                 dto.setContactoId((Integer) row[20]);
 
                 // Información de contacto
-                if (row[21] != null) {
-                    ContactoDTO contacto = new ContactoDTO();
-                    contacto.setId((Integer) row[20]);
-                    contacto.setNombre((String) row[21]);
-                    contacto.setCelular((String) row[22]);
+                if (row[20] != null) {
+                    Integer contactoId = (Integer) row[20];
 
-                    String telefono = (String) row[23];
-                    String correo = (String) row[24];
+                    // Cargar el contacto completo con sus relaciones de teléfonos y correos
+                    Contacto contactoCompleto = entityManager.find(Contacto.class, contactoId);
 
-                    dto.setContacto(new ContactoDTO(
-                            (String) row[21],
-                            telefono != null ? telefono : "",
-                            (String) row[22],
-                            correo != null ? correo : ""
-                    ));
+                    if (contactoCompleto != null) {
+                        ContactoDTO contactoDTO = new ContactoDTO();
+                        contactoDTO.setId(contactoCompleto.getId());
+                        contactoDTO.setNombre(contactoCompleto.getNombre());
+                        contactoDTO.setCelular(contactoCompleto.getCelular());
 
-                    dto.getContacto().setId((Integer) row[20]);
+                        // Convertir lista de teléfonos
+                        if (contactoCompleto.getTelefonos() != null && !contactoCompleto.getTelefonos().isEmpty()) {
+                            List<TelefonoDTO> telefonosDTO = contactoCompleto.getTelefonos().stream()
+                                    .map(tel -> new TelefonoDTO(tel.getTelefono()))
+                                    .collect(Collectors.toList());
+                            contactoDTO.setTelefonos(telefonosDTO);
+                        } else {
+                            contactoDTO.setTelefonos(new ArrayList<>());
+                        }
+
+                        // Convertir lista de correos
+                        if (contactoCompleto.getCorreos() != null && !contactoCompleto.getCorreos().isEmpty()) {
+                            List<CorreoDTO> correosDTO = contactoCompleto.getCorreos().stream()
+                                    .map(correo -> new CorreoDTO(correo.getCorreo()))
+                                    .collect(Collectors.toList());
+                            contactoDTO.setCorreos(correosDTO);
+                        } else {
+                            contactoDTO.setCorreos(new ArrayList<>());
+                        }
+
+                        // Mantener compatibilidad con campos legacy
+                        contactoDTO.setTelefono(contactoCompleto.getTelefonos() != null && !contactoCompleto.getTelefonos().isEmpty()
+                                ? contactoCompleto.getTelefonos().get(0).getTelefono() : "");
+                        contactoDTO.setWhatsapp(contactoCompleto.getCelular() != null ? contactoCompleto.getCelular() : "");
+                        contactoDTO.setEmail(contactoCompleto.getCorreos() != null && !contactoCompleto.getCorreos().isEmpty()
+                                ? contactoCompleto.getCorreos().get(0).getCorreo() : "");
+
+                        dto.setContacto(contactoDTO);
+                    }
                 }
                 dto.setFases(generateFases(dto.getFase()));
             }
@@ -178,56 +202,53 @@ public class TratoService {
                     }
 
                     actividad.setEnlaceReunion((String) row[36]);
+
                     if (row[37] != null) {
-                        String finalidadStr = (String) row[37];
-                        actividad.setFinalidad(FinalidadActividadEnum.valueOf(finalidadStr));
-                    }
-                    if (row[38] != null) {
-                        String estatusStr = (String) row[38];
+                        String estatusStr = (String) row[37];
                         actividad.setEstatus(EstatusActividadEnum.valueOf(estatusStr));
                     }
 
-                    actividad.setFechaCompletado(convertToInstant(row[39]));
-                    actividad.setUsuarioCompletadoId((Integer) row[40]);
+                    actividad.setFechaCompletado(convertToInstant(row[38]));
+                    actividad.setUsuarioCompletadoId((Integer) row[39]);
 
-                    if (row[41] != null) {
-                        String respuestaStr = (String) row[41];
+                    if (row[40] != null) {
+                        String respuestaStr = (String) row[40];
                         actividad.setRespuesta(RespuestaEnum.valueOf(respuestaStr));
                     }
-                    if (row[42] != null) {
-                        String interesStr = (String) row[42];
+                    if (row[41] != null) {
+                        String interesStr = (String) row[41];
                         actividad.setInteres(InteresEnum.valueOf(interesStr));
                     }
-                    if (row[43] != null) {
-                        String informacionStr = (String) row[43];
+                    if (row[42] != null) {
+                        String informacionStr = (String) row[42];
                         actividad.setInformacion(InformacionEnum.valueOf(informacionStr));
                     }
-                    if (row[44] != null) {
-                        String siguienteAccionStr = (String) row[44];
+                    if (row[43] != null) {
+                        String siguienteAccionStr = (String) row[43];
                         actividad.setSiguienteAccion(SiguienteAccionEnum.valueOf(siguienteAccionStr));
                     }
 
-                    actividad.setNotas((String) row[45]);
-                    actividad.setFechaCreacion(convertToInstant(row[46]));
-                    actividad.setFechaModificacion(convertToInstant(row[47]));
-                    actividad.setContactoId((Integer) row[48]);
-                    actividad.setAsignadoANombre((String) row[49]);
+                    actividad.setNotas((String) row[44]);
+                    actividad.setFechaCreacion(convertToInstant(row[45]));
+                    actividad.setFechaModificacion(convertToInstant(row[46]));
+                    actividad.setContactoId((Integer) row[47]);
+                    actividad.setAsignadoANombre((String) row[48]);
 
                     actividadesMap.put(actividadId, actividad);
                 }
             }
 
-            if (row[50] != null) {
+            if (row[49] != null) {
                 NotaTratoDTO nota = new NotaTratoDTO();
-                nota.setId((Integer) row[50]);
-                nota.setTratoId((Integer) row[51]);
-                nota.setUsuarioId((Integer) row[52]);
-                nota.setNota(((String) row[53]).replaceAll("^\"|\"$", "").replaceAll("\\\\\"", "\""));
-                nota.setFechaCreacion(convertToInstant(row[54]));
-                nota.setEditadoPor((Integer) row[55]);
-                nota.setFechaEdicion(convertToInstant(row[56]));
-                nota.setAutorNombre((String) row[57]);
-                nota.setEditadoPorNombre((String) row[58]);
+                nota.setId((Integer) row[49]);
+                nota.setTratoId((Integer) row[50]);
+                nota.setUsuarioId((Integer) row[51]);
+                nota.setNota(((String) row[52]).replaceAll("^\"|\"$", "").replaceAll("\\\\\"", "\""));
+                nota.setFechaCreacion(convertToInstant(row[53]));
+                nota.setEditadoPor((Integer) row[54]);
+                nota.setFechaEdicion(convertToInstant(row[55]));
+                nota.setAutorNombre((String) row[56]);
+                nota.setEditadoPorNombre((String) row[57]);
 
                 if (notas.stream().noneMatch(n -> n.getId().equals(nota.getId()))) {
                     notas.add(nota);
@@ -469,7 +490,6 @@ public class TratoService {
         actividad.setLugarReunion(actividadDTO.getLugarReunion());
         actividad.setMedio(actividadDTO.getMedio());
         actividad.setEnlaceReunion(actividadDTO.getEnlaceReunion());
-        actividad.setFinalidad(actividadDTO.getFinalidad());
         actividad.setNotas(actividadDTO.getNotas());
         actividad.setEstatus(EstatusActividadEnum.ABIERTA);
         actividad.setFechaCreacion(Instant.now());
@@ -529,7 +549,6 @@ public class TratoService {
         actividad.setLugarReunion(actividadDTO.getLugarReunion() != null ? actividadDTO.getLugarReunion() : actividad.getLugarReunion());
         actividad.setMedio(actividadDTO.getMedio() != null ? actividadDTO.getMedio() : actividad.getMedio());
         actividad.setEnlaceReunion(actividadDTO.getEnlaceReunion() != null ? actividadDTO.getEnlaceReunion() : actividad.getEnlaceReunion());
-        actividad.setFinalidad(actividadDTO.getFinalidad() != null ? actividadDTO.getFinalidad() : actividad.getFinalidad());
         actividad.setSubtipoTarea(actividadDTO.getSubtipoTarea() != null ? actividadDTO.getSubtipoTarea() : actividad.getSubtipoTarea());
         actividad.setContactoId(actividadDTO.getContactoId() != null ? actividadDTO.getContactoId() : actividad.getContactoId());
         actividad.setNotas(actividadDTO.getNotas() != null ? actividadDTO.getNotas() : actividad.getNotas());
@@ -987,17 +1006,44 @@ public class TratoService {
 
         if (trato.getContacto() != null) {
             Contacto contacto = trato.getContacto();
-            dto.setContacto(new ContactoDTO(
-                    contacto.getNombre(),
-                    contacto.getTelefonos() != null ? contacto.getTelefonos().stream().findFirst().map(t -> t.getTelefono()).orElse("") : "",
-                    contacto.getCelular() != null ? contacto.getCelular() : "",
-                    contacto.getCorreos() != null ? contacto.getCorreos().stream().findFirst().map(c -> c.getCorreo()).orElse("") : ""
-            ));
-            dto.getContacto().setPropietarioId(contacto.getPropietario() != null ? contacto.getPropietario().getId() : null);
-            dto.getContacto().setCreadoPor(contacto.getCreadoPor());
-            dto.getContacto().setFechaCreacion(contacto.getFechaCreacion());
-            dto.getContacto().setFechaModificacion(contacto.getFechaModificacion());
-            dto.getContacto().setFechaUltimaActividad(contacto.getFechaUltimaActividad());
+            ContactoDTO contactoDTO = new ContactoDTO();
+            contactoDTO.setId(contacto.getId());
+            contactoDTO.setNombre(contacto.getNombre());
+            contactoDTO.setCelular(contacto.getCelular() != null ? contacto.getCelular() : "");
+
+            // Convertir lista de teléfonos
+            if (contacto.getTelefonos() != null && !contacto.getTelefonos().isEmpty()) {
+                List<TelefonoDTO> telefonosDTO = contacto.getTelefonos().stream()
+                        .map(tel -> new TelefonoDTO(tel.getTelefono()))
+                        .collect(Collectors.toList());
+                contactoDTO.setTelefonos(telefonosDTO);
+            } else {
+                contactoDTO.setTelefonos(new ArrayList<>());
+            }
+
+            // Convertir lista de correos
+            if (contacto.getCorreos() != null && !contacto.getCorreos().isEmpty()) {
+                List<CorreoDTO> correosDTO = contacto.getCorreos().stream()
+                        .map(correo -> new CorreoDTO(correo.getCorreo()))
+                        .collect(Collectors.toList());
+                contactoDTO.setCorreos(correosDTO);
+            } else {
+                contactoDTO.setCorreos(new ArrayList<>());
+            }
+
+            contactoDTO.setTelefono(contacto.getTelefonos() != null && !contacto.getTelefonos().isEmpty()
+                    ? contacto.getTelefonos().get(0).getTelefono() : "");
+            contactoDTO.setWhatsapp(contacto.getCelular() != null ? contacto.getCelular() : "");
+            contactoDTO.setEmail(contacto.getCorreos() != null && !contacto.getCorreos().isEmpty()
+                    ? contacto.getCorreos().get(0).getCorreo() : "");
+
+            contactoDTO.setPropietarioId(contacto.getPropietario() != null ? contacto.getPropietario().getId() : null);
+            contactoDTO.setCreadoPor(contacto.getCreadoPor());
+            contactoDTO.setFechaCreacion(contacto.getFechaCreacion());
+            contactoDTO.setFechaModificacion(contacto.getFechaModificacion());
+            contactoDTO.setFechaUltimaActividad(contacto.getFechaUltimaActividad());
+
+            dto.setContacto(contactoDTO);
         }
         dto.setHistorialInteracciones(
                 actividades.stream()
@@ -1026,7 +1072,6 @@ public class TratoService {
         dto.setLugarReunion(actividad.getLugarReunion());
         dto.setMedio(actividad.getMedio());
         dto.setEnlaceReunion(actividad.getEnlaceReunion());
-        dto.setFinalidad(actividad.getFinalidad());
         dto.setEstatus(actividad.getEstatus());
         dto.setFechaCompletado(actividad.getFechaCompletado());
         dto.setUsuarioCompletadoId(actividad.getUsuarioCompletadoId());

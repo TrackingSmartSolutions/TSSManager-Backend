@@ -22,7 +22,6 @@ public class ActividadDTO {
     private String lugarReunion;
     private MedioReunionEnum medio;
     private String enlaceReunion;
-    private FinalidadActividadEnum finalidad;
     private EstatusActividadEnum estatus;
     private Instant fechaCompletado;
     private Integer usuarioCompletadoId;

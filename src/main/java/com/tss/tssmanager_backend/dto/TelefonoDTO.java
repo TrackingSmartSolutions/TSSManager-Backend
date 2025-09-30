@@ -6,4 +6,10 @@ import lombok.Data;
 public class TelefonoDTO {
     private String telefono;
 
+    public TelefonoDTO() {
+    }
+
+    public TelefonoDTO(String telefono) {
+        this.telefono = telefono;
+    }
 }

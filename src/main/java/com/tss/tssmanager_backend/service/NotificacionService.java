@@ -113,8 +113,8 @@ public class NotificacionService {
                         tipoMensaje,
                         trato.getNombre(),
                         fechaActividad,
-                        actividad.getHoraInicio() != null ? actividad.getHoraInicio().toLocalTime() : "Todo el día",
-                        actividad.getFinalidad());
+                        actividad.getHoraInicio() != null ? actividad.getHoraInicio().toLocalTime() : "Todo el día");
+
 
                 // Notificar al asignado (evitar duplicados)
                 if (!existeNotificacionReciente(asignadoA.getId(), "ACTIVIDAD", mensaje)) {
@@ -235,21 +235,26 @@ public class NotificacionService {
                 .filter(cuenta -> cuenta.getFechaPago().equals(manana))
                 .collect(Collectors.toList());
 
-        // Procesar cuentas que vencen hoy (solo notificaciones internas)
+        // Procesar cuentas que vencen hoy (notificaciones internas + correo consolidado)
         cuentasVencenHoy.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por cobrar vence hoy: %s, Cliente: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_COBRAR", mensaje);
         });
 
-        // Procesar cuentas que vencen mañana (notificaciones + correo consolidado)
+        // Procesar cuentas que vencen mañana (notificaciones internas + correo consolidado)
         cuentasVencenManana.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por cobrar vence mañana: %s, Cliente: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_COBRAR", mensaje);
         });
 
-        // Enviar correo consolidado solo para las cuentas que vencen mañana
+        // Enviar correo consolidado para cuentas que vencen hoy
+        if (!cuentasVencenHoy.isEmpty()) {
+            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenHoy);
+        }
+
+        // Enviar correo consolidado para cuentas que vencen mañana
         if (!cuentasVencenManana.isEmpty()) {
             enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenManana);
         }
@@ -266,21 +271,26 @@ public class NotificacionService {
                 .filter(cuenta -> cuenta.getFechaPago().equals(manana))
                 .collect(Collectors.toList());
 
-        // Procesar cuentas que vencen hoy (solo notificaciones internas)
+        // Procesar cuentas que vencen hoy (notificaciones internas + correo consolidado)
         cuentasVencenHoy.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por pagar vence hoy: %s, Cuenta: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_PAGAR", mensaje);
         });
 
-        // Procesar cuentas que vencen mañana (notificaciones + correo consolidado)
+        // Procesar cuentas que vencen mañana (notificaciones internas + correo consolidado)
         cuentasVencenManana.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por pagar vence mañana: %s, Cuenta: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_PAGAR", mensaje);
         });
 
-        // Enviar correo consolidado solo para las cuentas que vencen mañana
+        // Enviar correo consolidado para cuentas que vencen hoy
+        if (!cuentasVencenHoy.isEmpty()) {
+            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenHoy);
+        }
+
+        // Enviar correo consolidado para cuentas que vencen mañana
         if (!cuentasVencenManana.isEmpty()) {
             enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenManana);
         }
@@ -288,21 +298,24 @@ public class NotificacionService {
 
     private void enviarCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas) {
         try {
-            List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
+            List<Usuario> adminsYGestores = new ArrayList<>();
+            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
+            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
 
             String asunto = "Recordatorio: Cuentas por Cobrar";
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas);
 
-            for (Usuario admin : admins) {
+            for (Usuario admin : adminsYGestores) {
                 // Verificar si ya se envió correo consolidado en las últimas 24 horas
                 if (!existeCorreoConsolidadoReciente(admin.getId(), "Cuentas por Cobrar")) {
                     emailService.enviarCorreo(
                             admin.getCorreoElectronico(),
                             asunto,
                             cuerpo,
-                            null, // Sin adjuntos
-                            null  // Sin trato asociado
+                            null,
+                            null
                     );
                     logger.info("Correo consolidado de cuentas por cobrar enviado a: {}", admin.getCorreoElectronico());
                 }
@@ -314,13 +327,16 @@ public class NotificacionService {
 
     private void enviarCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas) {
         try {
-            List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
+            List<Usuario> adminsYGestores = new ArrayList<>();
+            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
+            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
 
             String asunto = "Recordatorio: Cuentas por Pagar";
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas);
 
-            for (Usuario admin : admins) {
+            for (Usuario admin : adminsYGestores) {
                 // Verificar si ya se envió correo consolidado en las últimas 24 horas
                 if (!existeCorreoConsolidadoReciente(admin.getId(), "Cuentas por Pagar")) {
                     emailService.enviarCorreo(

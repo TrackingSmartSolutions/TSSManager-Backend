@@ -54,10 +54,6 @@ public class Actividad {
     private String enlaceReunion;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "finalidad")
-    private FinalidadActividadEnum finalidad;
-
-    @Enumerated(EnumType.STRING)
     @Column(name = "estatus", nullable = false)
     private EstatusActividadEnum estatus;
 

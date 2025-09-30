@@ -6,4 +6,10 @@ import lombok.Data;
 public class CorreoDTO {
     private String correo;
 
+    public CorreoDTO() {
+    }
+
+    public CorreoDTO(String correo) {
+        this.correo = correo;
+    }
 }

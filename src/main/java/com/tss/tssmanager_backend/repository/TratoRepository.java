@@ -15,12 +15,8 @@ import java.util.Optional;
 
 @Repository
 public interface TratoRepository extends JpaRepository<Trato, Integer> {
-    List<Trato> findByPropietarioIdAndFechaCreacionBetween(Integer propietarioId, Instant startDate, Instant endDate);
     List<Trato> findByEmpresaId(Integer empresaId);
-    List<Trato> findByFechaCreacionBetween(Instant startDate, Instant endDate);
     boolean existsByEmpresaId(Integer empresaId);
-    List<Trato> findByEmpresaIdAndFechaCreacionBetween(Integer empresaId, Instant start, Instant end);
-    List<Trato> findByEmpresaIdAndPropietarioIdAndFechaCreacionBetween(Integer empresaId, Integer propietarioId, Instant start, Instant end);
     List<Trato> findAllById(Iterable<Integer> ids);
 
     @Query("SELECT t FROM Trato t LEFT JOIN FETCH t.contacto c LEFT JOIN FETCH c.telefonos WHERE t.id = :id")
@@ -222,7 +218,7 @@ public interface TratoRepository extends JpaRepository<Trato, Integer> {
         -- Actividades
         a.id as actividad_id, a.trato_id, a.tipo, a.subtipo_tarea, a.asignado_a_id,
         a.fecha_limite, a.hora_inicio, a.duracion, a.modalidad, a.lugar_reunion,
-        a.medio, a.enlace_reunion, a.finalidad, a.estatus, a.fecha_completado,
+        a.medio, a.enlace_reunion, a.estatus, a.fecha_completado,
         a.usuario_completado_id, a.respuesta, a.interes, a.informacion,
         a.siguiente_accion, a.notas as actividad_notas, a.fecha_creacion as actividad_fecha_creacion,
         a.fecha_modificacion as actividad_fecha_modificacion, a.contacto_id as actividad_contacto_id,
@@ -262,7 +258,7 @@ SELECT
     -- Actividades
     a.id as actividad_id, a.trato_id, a.tipo, a.subtipo_tarea, a.asignado_a_id,
     a.fecha_limite, a.hora_inicio, a.duracion, a.modalidad, a.lugar_reunion,
-    a.medio, a.enlace_reunion, a.finalidad, a.estatus, a.fecha_completado,
+    a.medio, a.enlace_reunion, a.estatus, a.fecha_completado,
     a.usuario_completado_id, a.respuesta, a.interes, a.informacion,
     a.siguiente_accion, a.notas as actividad_notas, a.fecha_creacion as actividad_fecha_creacion,
     a.fecha_modificacion as actividad_fecha_modificacion, a.contacto_id as actividad_contacto_id,
