@@ -19,12 +19,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -359,7 +362,7 @@ public class NotificacionService {
                 .map(CuentaPorCobrar::getCantidadCobrar)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        LocalDate fechaVencimiento = cuentas.get(0).getFechaPago(); // Todas tienen la misma fecha
+        LocalDate fechaVencimiento = cuentas.get(0).getFechaPago();
 
         StringBuilder listadoCuentas = new StringBuilder();
         for (CuentaPorCobrar cuenta : cuentas) {
@@ -371,39 +374,78 @@ public class NotificacionService {
             ));
         }
 
+        // Generar URL para Google Calendar
+        String tituloEvento = String.format("Recordatorio: %d Cuentas por Cobrar - Total $%s",
+                cuentas.size(), montoTotal);
+        String descripcionEvento = String.format(
+                "Recordatorio de cuentas por cobrar:%n" +
+                        "Total de cuentas: %d%n" +
+                        "Monto total: $%s%n" +
+                        "Fecha de vencimiento: %s",
+                cuentas.size(), montoTotal, fechaVencimiento
+        );
+
+        String urlCalendario = generarUrlGoogleCalendar(tituloEvento, descripcionEvento, fechaVencimiento);
+
         return String.format("""
-        <html>
-        <body>
-            <h2>Recordatorio: Cuentas por Cobrar</h2>
-            <p>Estimado administrador,</p>
-            <p>Le recordamos que las siguientes cuentas por cobrar <strong>vencen mañana</strong>:</p>
-            <ul>
-                <li><strong>Total de cuentas:</strong> %d</li>
-                <li><strong>Monto total:</strong> $%s</li>
-                <li><strong>Fecha de Vencimiento:</strong> %s</li>
-            </ul>
-            <p>A continuación se muestra el listado individual de las cuentas:</p>
-            <table border="1" style="border-collapse: collapse; width: 100%%;">
-                <thead>
-                    <tr style="background-color: #f2f2f2;">
-                        <th style="padding: 8px;">Folio</th>
-                        <th style="padding: 8px;">Cliente</th>
-                        <th style="padding: 8px;">Monto</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    %s
-                </tbody>
-            </table>
-            <p>Por favor, tome las acciones necesarias.</p>
-            <br>
-            <p>Saludos cordiales,<br>Sistema TSS Manager</p>
-        </body>
-        </html>
-        """,
+    <html>
+    <head>
+        <style>
+            .calendar-button {
+                display: inline-block;
+                padding: 12px 24px;
+                background-color: #4285F4;
+                color: white;
+                text-decoration: none;
+                border-radius: 5px;
+                font-weight: bold;
+                margin: 20px 0;
+            }
+            .calendar-button:hover {
+                background-color: #357AE8;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Recordatorio: Cuentas por Cobrar</h2>
+        <p>Estimado administrador,</p>
+        <p>Le recordamos que las siguientes cuentas por cobrar <strong>vencen mañana</strong>:</p>
+        <ul>
+            <li><strong>Total de cuentas:</strong> %d</li>
+            <li><strong>Monto total:</strong> $%s</li>
+            <li><strong>Fecha de Vencimiento:</strong> %s</li>
+        </ul>
+        
+        <!-- Botón para agregar a Google Calendar -->
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="%s" class="calendar-button" target="_blank">
+                📅 Agregar Recordatorio a Google Calendar
+            </a>
+        </div>
+        
+        <p>A continuación se muestra el listado individual de las cuentas:</p>
+        <table border="1" style="border-collapse: collapse; width: 100%%;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th style="padding: 8px;">Folio</th>
+                    <th style="padding: 8px;">Cliente</th>
+                    <th style="padding: 8px;">Monto</th>
+                </tr>
+            </thead>
+            <tbody>
+                %s
+            </tbody>
+        </table>
+        <p>Por favor, tome las acciones necesarias.</p>
+        <br>
+        <p>Saludos cordiales,<br>Sistema TSS Manager</p>
+    </body>
+    </html>
+    """,
                 cuentas.size(),
                 montoTotal,
                 fechaVencimiento,
+                urlCalendario != null ? urlCalendario : "#",
                 listadoCuentas.toString()
         );
     }
@@ -413,7 +455,7 @@ public class NotificacionService {
                 .map(CuentaPorPagar::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        LocalDate fechaVencimiento = cuentas.get(0).getFechaPago(); // Todas tienen la misma fecha
+        LocalDate fechaVencimiento = cuentas.get(0).getFechaPago();
 
         StringBuilder listadoCuentas = new StringBuilder();
         for (CuentaPorPagar cuenta : cuentas) {
@@ -431,40 +473,79 @@ public class NotificacionService {
             ));
         }
 
+        // Generar URL para Google Calendar
+        String tituloEvento = String.format("Recordatorio: %d Cuentas por Pagar - Total $%s",
+                cuentas.size(), montoTotal);
+        String descripcionEvento = String.format(
+                "Recordatorio de cuentas por pagar:%n" +
+                        "Total de cuentas: %d%n" +
+                        "Monto total: $%s%n" +
+                        "Fecha de vencimiento: %s",
+                cuentas.size(), montoTotal, fechaVencimiento
+        );
+
+        String urlCalendario = generarUrlGoogleCalendar(tituloEvento, descripcionEvento, fechaVencimiento);
+
         return String.format("""
-        <html>
-        <body>
-            <h2>Recordatorio: Cuentas por Pagar</h2>
-            <p>Estimado administrador,</p>
-            <p>Le recordamos que las siguientes cuentas por pagar <strong>vencen mañana</strong>:</p>
-            <ul>
-                <li><strong>Total de cuentas:</strong> %d</li>
-                <li><strong>Monto total:</strong> $%s</li>
-                <li><strong>Fecha de Vencimiento:</strong> %s</li>
-            </ul>
-            <p>A continuación se muestra el listado individual de las cuentas:</p>
-            <table border="1" style="border-collapse: collapse; width: 100%%;">
-                <thead>
-                    <tr style="background-color: #f2f2f2;">
-                        <th style="padding: 8px;">Categoría</th>
-                        <th style="padding: 8px;">Cuenta</th>
-                        <th style="padding: 8px;">SIM</th>
-                        <th style="padding: 8px;">Monto</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    %s
-                </tbody>
-            </table>
-            <p>Por favor, tome las acciones necesarias.</p>
-            <br>
-            <p>Saludos cordiales,<br>Sistema TSS Manager</p>
-        </body>
-        </html>
-        """,
+    <html>
+    <head>
+        <style>
+            .calendar-button {
+                display: inline-block;
+                padding: 12px 24px;
+                background-color: #4285F4;
+                color: white;
+                text-decoration: none;
+                border-radius: 5px;
+                font-weight: bold;
+                margin: 20px 0;
+            }
+            .calendar-button:hover {
+                background-color: #357AE8;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Recordatorio: Cuentas por Pagar</h2>
+        <p>Estimado administrador,</p>
+        <p>Le recordamos que las siguientes cuentas por pagar <strong>vencen mañana</strong>:</p>
+        <ul>
+            <li><strong>Total de cuentas:</strong> %d</li>
+            <li><strong>Monto total:</strong> $%s</li>
+            <li><strong>Fecha de Vencimiento:</strong> %s</li>
+        </ul>
+        
+        <!-- Botón para agregar a Google Calendar -->
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="%s" class="calendar-button" target="_blank">
+                📅 Agregar Recordatorio a Google Calendar
+            </a>
+        </div>
+        
+        <p>A continuación se muestra el listado individual de las cuentas:</p>
+        <table border="1" style="border-collapse: collapse; width: 100%%;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th style="padding: 8px;">Categoría</th>
+                    <th style="padding: 8px;">Cuenta</th>
+                    <th style="padding: 8px;">SIM</th>
+                    <th style="padding: 8px;">Monto</th>
+                </tr>
+            </thead>
+            <tbody>
+                %s
+            </tbody>
+        </table>
+        <p>Por favor, tome las acciones necesarias.</p>
+        <br>
+        <p>Saludos cordiales,<br>Sistema TSS Manager</p>
+    </body>
+    </html>
+    """,
                 cuentas.size(),
                 montoTotal,
                 fechaVencimiento,
+                urlCalendario != null ? urlCalendario : "#",
                 listadoCuentas.toString()
         );
     }
@@ -492,6 +573,25 @@ public class NotificacionService {
         } catch (Exception e) {
             logger.error("Error al verificar correo consolidado reciente: {}", e.getMessage());
             return false;
+        }
+    }
+
+    private String generarUrlGoogleCalendar(String titulo, String descripcion, LocalDate fecha) {
+        try {
+            // Formato de fecha para Google Calendar: yyyyMMdd
+            String fechaInicio = fecha.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String fechaFin = fecha.plusDays(1).format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+
+            // Construir la URL de Google Calendar para evento de todo el día
+            String baseUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE";
+            String text = "&text=" + URLEncoder.encode(titulo, StandardCharsets.UTF_8);
+            String dates = "&dates=" + fechaInicio + "/" + fechaFin;
+            String details = "&details=" + URLEncoder.encode(descripcion, StandardCharsets.UTF_8);
+
+            return baseUrl + text + dates + details;
+        } catch (Exception e) {
+            logger.error("Error generando URL de Google Calendar: {}", e.getMessage());
+            return null;
         }
     }
 

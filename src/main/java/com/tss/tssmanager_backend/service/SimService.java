@@ -1,6 +1,5 @@
 package com.tss.tssmanager_backend.service;
 
-import com.tss.tssmanager_backend.dto.PagedResponseDTO;
 import com.tss.tssmanager_backend.dto.SimDTO;
 import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
@@ -12,10 +11,6 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -170,14 +165,24 @@ public class SimService {
 
         else if (savedSim.getResponsable() == ResponsableSimEnum.TSS && !esSimNueva) {
             try {
-                actualizarCuentasPorPagarExistentes(savedSim);
+
+                Sim simAnterior = simRepository.findById(savedSim.getId()).orElse(null);
+
+                if (simAnterior != null) {
+                    Integer equipoAnteriorId = simAnterior.getEquipo() != null ? simAnterior.getEquipo().getId() : null;
+                    Integer equipoNuevoId = savedSim.getEquipo() != null ? savedSim.getEquipo().getId() : null;
+
+                    boolean cambioEquipo = !Objects.equals(equipoAnteriorId, equipoNuevoId);
+
+                    if (cambioEquipo) {
+                        actualizarCuentasPorPagarExistentes(savedSim);
+                    }
+                }
             } catch (Exception e) {
                 System.err.println("Error al actualizar cuentas por pagar para SIM " + savedSim.getNumero() + ": " + e.getMessage());
                 e.printStackTrace();
             }
         }
-
-        // Limpiar caché al final del proceso
         limpiarCacheSims();
 
         return savedSim;
@@ -327,6 +332,10 @@ public class SimService {
         List<CuentaPorPagar> cuentasExistentes = cuentaPorPagarRepository.findBySimId(sim.getId());
 
         for (CuentaPorPagar cuenta : cuentasExistentes) {
+            if ("Pagado".equals(cuenta.getEstatus())) {
+                continue;
+            }
+
             // Actualizar el monto si cambió la recarga
             if (sim.getRecarga() != null) {
                 cuenta.setMonto(sim.getRecarga());
