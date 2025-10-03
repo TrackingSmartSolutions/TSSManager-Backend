@@ -597,12 +597,6 @@ public class SimService {
                 .findFirst()
                 .orElse(null);
 
-        if (ultimoSaldo != null) {
-            System.out.println("DEBUG - SIM " + simId + " ultimo saldo: saldoActual=" + ultimoSaldo.getSaldoActual() + ", datos=" + ultimoSaldo.getDatos());
-        } else {
-            System.out.println("DEBUG - SIM " + simId + " no tiene historial de saldos");
-        }
-
         return ultimoSaldo;
     }
 

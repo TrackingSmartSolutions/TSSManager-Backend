@@ -332,17 +332,23 @@ public class CuentaPorCobrarService {
         CategoriaTransacciones categoria = categoriaTransaccionesRepository.findById(categoriaId)
                 .orElseThrow(() -> new ResourceNotFoundException("Categoría no encontrada con ID: " + categoriaId));
 
-        CuentasTransacciones cuentaTransaccion = cuentasTransaccionesRepository
+        List<CuentasTransacciones> cuentasExistentes = cuentasTransaccionesRepository
                 .findByNombreAndCategoria(cuenta.getCliente().getNombre(), categoria);
 
-// Si no existe, crear una nueva cuenta en la categoría seleccionada
-        if (cuentaTransaccion == null) {
+        CuentasTransacciones cuentaTransaccion;
+
+        if (cuentasExistentes == null || cuentasExistentes.isEmpty()) {
             logger.info("Creando nueva cuenta de transacciones para cliente: {} en categoría: {}",
                     cuenta.getCliente().getNombre(), categoria.getDescripcion());
             cuentaTransaccion = new CuentasTransacciones();
             cuentaTransaccion.setNombre(cuenta.getCliente().getNombre());
             cuentaTransaccion.setCategoria(categoria);
             cuentaTransaccion = cuentasTransaccionesRepository.save(cuentaTransaccion);
+        } else {
+            // Usar la primera si hay múltiples (por si quedaron duplicados)
+            cuentaTransaccion = cuentasExistentes.get(0);
+            logger.info("Usando cuenta existente ID: {} para cliente: {} en categoría: {}",
+                    cuentaTransaccion.getId(), cuenta.getCliente().getNombre(), categoria.getDescripcion());
         }
 
 

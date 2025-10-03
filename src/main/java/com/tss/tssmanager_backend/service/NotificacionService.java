@@ -111,7 +111,7 @@ public class NotificacionService {
             // Verificar si es el día antes o el mismo día
             if (fechaActividad.equals(manana) || fechaActividad.equals(hoy)) {
                 String tipoMensaje = fechaActividad.equals(manana) ? "mañana" : "hoy";
-                String mensaje = String.format("Actividad %s programada para %s: %s, Fecha: %s, Hora: %s, Descripción: %s",
+                String mensaje = String.format("Actividad %s programada para %s: %s, Fecha: %s, Hora: %s",
                         actividad.getTipo().name(),
                         tipoMensaje,
                         trato.getNombre(),
@@ -187,6 +187,14 @@ public class NotificacionService {
         verificarActividadesProximas();
     }
 
+    @Scheduled(cron = "0 0 10 * * *") // A las 10:00 AM todos los días
+    @Transactional
+    public void verificarNotificacionesMatutina() {
+        logger.info("Verificación matutina de las 10 AM ejecutada");
+        generarNotificacionCuentasYSims();
+        verificarActividadesProximas();
+    }
+
     // Método separado para verificar actividades próximas
     @Transactional
     public void verificarActividadesProximas() {
@@ -231,75 +239,78 @@ public class NotificacionService {
         List<CuentaPorCobrar> cuentasVencenHoy = cuentaPorCobrarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
                 .filter(cuenta -> cuenta.getFechaPago().equals(hoy))
+                .filter(cuenta -> !"PAGADO".equals(cuenta.getEstatus()))
                 .collect(Collectors.toList());
 
         List<CuentaPorCobrar> cuentasVencenManana = cuentaPorCobrarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
                 .filter(cuenta -> cuenta.getFechaPago().equals(manana))
+                .filter(cuenta -> !"PAGADO".equals(cuenta.getEstatus()))
                 .collect(Collectors.toList());
 
-        // Procesar cuentas que vencen hoy (notificaciones internas + correo consolidado)
+        // Procesar cuentas que vencen HOY (notificaciones internas)
         cuentasVencenHoy.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por cobrar vence hoy: %s, Cliente: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_COBRAR", mensaje);
         });
 
-        // Procesar cuentas que vencen mañana (notificaciones internas + correo consolidado)
+        // Procesar cuentas que vencen MAÑANA (notificaciones internas)
         cuentasVencenManana.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por cobrar vence mañana: %s, Cliente: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_COBRAR", mensaje);
         });
 
-        // Enviar correo consolidado para cuentas que vencen hoy
+        // Enviar correos consolidados SOLO si no se han enviado hoy
         if (!cuentasVencenHoy.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenHoy);
+            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenHoy, "HOY", hoy);
         }
 
-        // Enviar correo consolidado para cuentas que vencen mañana
         if (!cuentasVencenManana.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenManana);
+            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenManana, "MAÑANA", manana);
         }
     }
+
 
     private void procesarCuentasPorPagar(LocalDate hoy, LocalDate manana) {
         List<CuentaPorPagar> cuentasVencenHoy = cuentaPorPagarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
                 .filter(cuenta -> cuenta.getFechaPago().equals(hoy))
+                .filter(cuenta -> !"Pagado".equals(cuenta.getEstatus()))
                 .collect(Collectors.toList());
 
         List<CuentaPorPagar> cuentasVencenManana = cuentaPorPagarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
                 .filter(cuenta -> cuenta.getFechaPago().equals(manana))
+                .filter(cuenta -> !"Pagado".equals(cuenta.getEstatus()))
                 .collect(Collectors.toList());
 
-        // Procesar cuentas que vencen hoy (notificaciones internas + correo consolidado)
+        // Procesar cuentas que vencen HOY (notificaciones internas)
         cuentasVencenHoy.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por pagar vence hoy: %s, Cuenta: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_PAGAR", mensaje);
         });
 
-        // Procesar cuentas que vencen mañana (notificaciones internas + correo consolidado)
+        // Procesar cuentas que vencen MAÑANA (notificaciones internas)
         cuentasVencenManana.forEach(cuenta -> {
             String mensaje = String.format("Cuenta por pagar vence mañana: %s, Cuenta: %s, Fecha: %s",
                     cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
             notificarAdministradores("CUENTA_PAGAR", mensaje);
         });
 
-        // Enviar correo consolidado para cuentas que vencen hoy
+        // Enviar correos consolidados SOLO si no se han enviado hoy
         if (!cuentasVencenHoy.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenHoy);
+            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenHoy, "HOY", hoy);
         }
 
-        // Enviar correo consolidado para cuentas que vencen mañana
         if (!cuentasVencenManana.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenManana);
+            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenManana, "MAÑANA", manana);
         }
     }
 
-    private void enviarCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas) {
+    private void enviarCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas, String cuandoVence, LocalDate fechaVencimiento) {
         try {
             List<Usuario> adminsYGestores = new ArrayList<>();
             adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
@@ -307,12 +318,12 @@ public class NotificacionService {
             adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
                     RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
 
-            String asunto = "Recordatorio: Cuentas por Cobrar";
-            String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas);
+            String asunto = "Recordatorio: Cuentas por Cobrar - Vencen " + cuandoVence;
+            String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas, cuandoVence);
 
             for (Usuario admin : adminsYGestores) {
-                // Verificar si ya se envió correo consolidado en las últimas 24 horas
-                if (!existeCorreoConsolidadoReciente(admin.getId(), "Cuentas por Cobrar")) {
+                // Verificar si ya se envió correo HOY para esta fecha específica
+                if (!existeCorreoConsolidadoHoy(admin.getId(), "Cuentas por Cobrar", fechaVencimiento)) {
                     emailService.enviarCorreo(
                             admin.getCorreoElectronico(),
                             asunto,
@@ -320,7 +331,11 @@ public class NotificacionService {
                             null,
                             null
                     );
-                    logger.info("Correo consolidado de cuentas por cobrar enviado a: {}", admin.getCorreoElectronico());
+                    logger.info("Correo consolidado de cuentas por cobrar (vencen {}, fecha {}) enviado a: {}",
+                            cuandoVence, fechaVencimiento, admin.getCorreoElectronico());
+                } else {
+                    logger.info("Correo consolidado de cuentas por cobrar ya enviado hoy para {} a: {}",
+                            fechaVencimiento, admin.getCorreoElectronico());
                 }
             }
         } catch (Exception e) {
@@ -328,7 +343,7 @@ public class NotificacionService {
         }
     }
 
-    private void enviarCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas) {
+    private void enviarCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas, String cuandoVence, LocalDate fechaVencimiento) {
         try {
             List<Usuario> adminsYGestores = new ArrayList<>();
             adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
@@ -336,20 +351,24 @@ public class NotificacionService {
             adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
                     RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
 
-            String asunto = "Recordatorio: Cuentas por Pagar";
-            String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas);
+            String asunto = "Recordatorio: Cuentas por Pagar - Vencen " + cuandoVence;
+            String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas, cuandoVence);
 
             for (Usuario admin : adminsYGestores) {
-                // Verificar si ya se envió correo consolidado en las últimas 24 horas
-                if (!existeCorreoConsolidadoReciente(admin.getId(), "Cuentas por Pagar")) {
+                // Verificar si ya se envió correo HOY para esta fecha específica
+                if (!existeCorreoConsolidadoHoy(admin.getId(), "Cuentas por Pagar", fechaVencimiento)) {
                     emailService.enviarCorreo(
                             admin.getCorreoElectronico(),
                             asunto,
                             cuerpo,
-                            null, // Sin adjuntos
-                            null  // Sin trato asociado
+                            null,
+                            null
                     );
-                    logger.info("Correo consolidado de cuentas por pagar enviado a: {}", admin.getCorreoElectronico());
+                    logger.info("Correo consolidado de cuentas por pagar (vencen {}, fecha {}) enviado a: {}",
+                            cuandoVence, fechaVencimiento, admin.getCorreoElectronico());
+                } else {
+                    logger.info("Correo consolidado de cuentas por pagar ya enviado hoy para {} a: {}",
+                            fechaVencimiento, admin.getCorreoElectronico());
                 }
             }
         } catch (Exception e) {
@@ -357,12 +376,49 @@ public class NotificacionService {
         }
     }
 
-    private String construirCuerpoCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas) {
+    private boolean existeCorreoConsolidadoHoy(Integer adminId, String tipoCuenta, LocalDate fechaVencimiento) {
+        try {
+            Usuario admin = usuarioRepository.findById(adminId).orElse(null);
+            if (admin == null || admin.getCorreoElectronico() == null) {
+                return false;
+            }
+
+            String correoAdmin = admin.getCorreoElectronico();
+
+            LocalDate hoy = LocalDate.now(ZONE_ID);
+            ZonedDateTime inicioDiaHoy = hoy.atStartOfDay(ZONE_ID);
+
+            String asuntoConsolidado = "Recordatorio: " + tipoCuenta;
+
+            List<EmailRecord> correosHoy = emailRecordRepository
+                    .findByDestinatarioContainingAndAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
+                            correoAdmin,
+                            asuntoConsolidado,
+                            inicioDiaHoy
+                    );
+
+            for (EmailRecord correo : correosHoy) {
+                if (correo.getCuerpo() != null && correo.getCuerpo().contains(fechaVencimiento.toString())) {
+                    logger.debug("Correo ya enviado hoy para fecha de vencimiento: {}", fechaVencimiento);
+                    return true;
+                }
+            }
+
+            return false;
+
+        } catch (Exception e) {
+            logger.error("Error al verificar correo consolidado de hoy: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private String construirCuerpoCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas, String cuandoVence) {
         BigDecimal montoTotal = cuentas.stream()
                 .map(CuentaPorCobrar::getCantidadCobrar)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         LocalDate fechaVencimiento = cuentas.get(0).getFechaPago();
+        String textoVencimiento = cuandoVence.equals("HOY") ? "vencen hoy" : "vencen mañana";
 
         StringBuilder listadoCuentas = new StringBuilder();
         for (CuentaPorCobrar cuenta : cuentas) {
@@ -374,7 +430,6 @@ public class NotificacionService {
             ));
         }
 
-        // Generar URL para Google Calendar
         String tituloEvento = String.format("Recordatorio: %d Cuentas por Cobrar - Total $%s",
                 cuentas.size(), montoTotal);
         String descripcionEvento = String.format(
@@ -409,14 +464,13 @@ public class NotificacionService {
     <body>
         <h2>Recordatorio: Cuentas por Cobrar</h2>
         <p>Estimado administrador,</p>
-        <p>Le recordamos que las siguientes cuentas por cobrar <strong>vencen mañana</strong>:</p>
+        <p>Le recordamos que las siguientes cuentas por cobrar <strong>%s</strong>:</p>
         <ul>
             <li><strong>Total de cuentas:</strong> %d</li>
             <li><strong>Monto total:</strong> $%s</li>
             <li><strong>Fecha de Vencimiento:</strong> %s</li>
         </ul>
         
-        <!-- Botón para agregar a Google Calendar -->
         <div style="text-align: center; margin: 20px 0;">
             <a href="%s" class="calendar-button" target="_blank">
                 📅 Agregar Recordatorio a Google Calendar
@@ -442,6 +496,7 @@ public class NotificacionService {
     </body>
     </html>
     """,
+                textoVencimiento,
                 cuentas.size(),
                 montoTotal,
                 fechaVencimiento,
@@ -450,12 +505,13 @@ public class NotificacionService {
         );
     }
 
-    private String construirCuerpoCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas) {
+    private String construirCuerpoCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas, String cuandoVence) {
         BigDecimal montoTotal = cuentas.stream()
                 .map(CuentaPorPagar::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         LocalDate fechaVencimiento = cuentas.get(0).getFechaPago();
+        String textoVencimiento = cuandoVence.equals("HOY") ? "vencen hoy" : "vencen mañana";
 
         StringBuilder listadoCuentas = new StringBuilder();
         for (CuentaPorPagar cuenta : cuentas) {
@@ -473,7 +529,6 @@ public class NotificacionService {
             ));
         }
 
-        // Generar URL para Google Calendar
         String tituloEvento = String.format("Recordatorio: %d Cuentas por Pagar - Total $%s",
                 cuentas.size(), montoTotal);
         String descripcionEvento = String.format(
@@ -487,93 +542,67 @@ public class NotificacionService {
         String urlCalendario = generarUrlGoogleCalendar(tituloEvento, descripcionEvento, fechaVencimiento);
 
         return String.format("""
-    <html>
-    <head>
-        <style>
-            .calendar-button {
-                display: inline-block;
-                padding: 12px 24px;
-                background-color: #4285F4;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-                font-weight: bold;
-                margin: 20px 0;
-            }
-            .calendar-button:hover {
-                background-color: #357AE8;
-            }
-        </style>
-    </head>
-    <body>
-        <h2>Recordatorio: Cuentas por Pagar</h2>
-        <p>Estimado administrador,</p>
-        <p>Le recordamos que las siguientes cuentas por pagar <strong>vencen mañana</strong>:</p>
-        <ul>
-            <li><strong>Total de cuentas:</strong> %d</li>
-            <li><strong>Monto total:</strong> $%s</li>
-            <li><strong>Fecha de Vencimiento:</strong> %s</li>
-        </ul>
-        
-        <!-- Botón para agregar a Google Calendar -->
-        <div style="text-align: center; margin: 20px 0;">
-            <a href="%s" class="calendar-button" target="_blank">
-                📅 Agregar Recordatorio a Google Calendar
-            </a>
-        </div>
-        
-        <p>A continuación se muestra el listado individual de las cuentas:</p>
-        <table border="1" style="border-collapse: collapse; width: 100%%;">
-            <thead>
-                <tr style="background-color: #f2f2f2;">
-                    <th style="padding: 8px;">Categoría</th>
-                    <th style="padding: 8px;">Cuenta</th>
-                    <th style="padding: 8px;">SIM</th>
-                    <th style="padding: 8px;">Monto</th>
-                </tr>
-            </thead>
-            <tbody>
-                %s
-            </tbody>
-        </table>
-        <p>Por favor, tome las acciones necesarias.</p>
-        <br>
-        <p>Saludos cordiales,<br>Sistema TSS Manager</p>
-    </body>
-    </html>
-    """,
+                        <html>
+                        <head>
+                            <style>
+                                .calendar-button {
+                                    display: inline-block;
+                                    padding: 12px 24px;
+                                    background-color: #4285F4;
+                                    color: white;
+                                    text-decoration: none;
+                                    border-radius: 5px;
+                                    font-weight: bold;
+                                    margin: 20px 0;
+                                }
+                                .calendar-button:hover {
+                                    background-color: #357AE8;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <h2>Recordatorio: Cuentas por Pagar</h2>
+                            <p>Estimado administrador,</p>
+                            <p>Le recordamos que las siguientes cuentas por pagar <strong>%s</strong>:</p>
+                            <ul>
+                                <li><strong>Total de cuentas:</strong> %d</li>
+                                <li><strong>Monto total:</strong> $%s</li>
+                                <li><strong>Fecha de Vencimiento:</strong> %s</li>
+                            </ul>
+                        
+                            <div style="text-align: center; margin: 20px 0;">
+                                <a href="%s" class="calendar-button" target="_blank">
+                                    📅 Agregar Recordatorio a Google Calendar
+                                </a>
+                            </div>
+                        
+                            <p>A continuación se muestra el listado individual de las cuentas:</p>
+                            <table border="1" style="border-collapse: collapse; width: 100%%;">
+                                <thead>
+                                    <tr style="background-color: #f2f2f2;">
+                                        <th style="padding: 8px;">Categoría</th>
+                                        <th style="padding: 8px;">Cuenta</th>
+                                        <th style="padding: 8px;">SIM</th>
+                                        <th style="padding: 8px;">Monto</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    %s
+                                </tbody>
+                            </table>
+                            <p>Por favor, tome las acciones necesarias.</p>
+                            <br>
+                            <p>Saludos cordiales,<br>Sistema TSS Manager</p>
+                        </body>
+                        </html>
+                        """,
+                textoVencimiento,
                 cuentas.size(),
                 montoTotal,
                 fechaVencimiento,
                 urlCalendario != null ? urlCalendario : "#",
                 listadoCuentas.toString()
         );
-    }
-
-    private boolean existeCorreoConsolidadoReciente(Integer adminId, String tipoCuenta) {
-        try {
-            Usuario admin = usuarioRepository.findById(adminId).orElse(null);
-            if (admin == null || admin.getCorreoElectronico() == null) {
-                return false;
-            }
-
-            String correoAdmin = admin.getCorreoElectronico();
-            Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
-            ZonedDateTime hace24HorasZoned = convertirAZonaLocal(hace24Horas);
-
-            // Buscar por asunto específico del correo consolidado
-            String asuntoConsolidado = "Recordatorio: " + tipoCuenta;
-
-            List<EmailRecord> correosRecientes = emailRecordRepository
-                    .findByDestinatarioContainingAndAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
-                            correoAdmin, asuntoConsolidado, hace24HorasZoned);
-
-            return !correosRecientes.isEmpty();
-
-        } catch (Exception e) {
-            logger.error("Error al verificar correo consolidado reciente: {}", e.getMessage());
-            return false;
-        }
     }
 
     private String generarUrlGoogleCalendar(String titulo, String descripcion, LocalDate fecha) {

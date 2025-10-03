@@ -6,7 +6,11 @@ import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "\"Cuentas_Transacciones\"")
+@Table(name = "\"Cuentas_Transacciones\"",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_nombre_categoria",
+                columnNames = {"nombre", "categoria_id"}
+        ))
 public class CuentasTransacciones {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,5 +25,4 @@ public class CuentasTransacciones {
 
     @Transient
     private Integer categoriaId;
-
 }

@@ -79,9 +79,9 @@ public class TransaccionService {
                 .orElseThrow(() -> new IllegalArgumentException("La categoría con ID " + categoriaId + " no existe."));
 
         // Verificar si la cuenta ya existe con ese nombre Y esa categoría específica
-        CuentasTransacciones cuentaExistente = cuentaRepository.findByNombreAndCategoria(nombreCuenta, categoria);
-        if (cuentaExistente != null) {
-            return cuentaExistente;
+        List<CuentasTransacciones> cuentasExistentes = cuentaRepository.findByNombreAndCategoria(nombreCuenta, categoria);
+        if (cuentasExistentes != null && !cuentasExistentes.isEmpty()) {
+            return cuentasExistentes.get(0); // Retornar la primera si hay duplicados
         }
 
         // Crear nueva cuenta

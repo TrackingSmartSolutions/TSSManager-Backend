@@ -9,6 +9,6 @@ import java.util.Optional;
 
 public interface CuentasTransaccionesRepository extends JpaRepository<CuentasTransacciones, Integer> {
     Optional<CuentasTransacciones> findByNombre(String nombre);
-    CuentasTransacciones findByNombreAndCategoria(String nombre, CategoriaTransacciones categoria);
+    List<CuentasTransacciones> findByNombreAndCategoria(String nombre, CategoriaTransacciones categoria);
     List<CuentasTransacciones> findByNombreAndCategoria_Id(String nombre, Integer categoriaId);
 }
