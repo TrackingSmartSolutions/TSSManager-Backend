@@ -35,6 +35,10 @@ public class CalendarioService {
     @Autowired
     private ActividadRepository actividadRepository;
     @Autowired
+    private EquipoRepository equipoRepository;
+    @Autowired
+    private EmpresaRepository empresaRepository;
+    @Autowired
     private CuentaPorCobrarRepository cuentaPorCobrarRepository;
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
@@ -75,6 +79,7 @@ public class CalendarioService {
         // Convertir actividades a eventos
         eventos.addAll(actividades.stream()
                 .map(actividad -> convertActividadToEventoOptimizada(actividad, usuariosMap, tratosMap))
+                .filter(evento -> evento != null)
                 .collect(Collectors.toList()));
 
         // Solo cargar cuentas para administradores o usuarios específicos
@@ -83,6 +88,7 @@ public class CalendarioService {
             // Cargar cuentas con consultas optimizadas
             eventos.addAll(obtenerCuentasPorCobrarOptimizada(start, end));
             eventos.addAll(obtenerCuentasPorPagarOptimizada(start, end));
+            eventos.addAll(obtenerEquiposProximosExpirar(start, end));
         }
 
         return eventos;
@@ -150,6 +156,7 @@ public class CalendarioService {
                 .allDay(allDay)
                 .color(getColorByType(actividad.getTipo().name()))
                 .tipo(actividad.getTipo().name())
+                .categoria("CRM")
                 .asignadoA(asignadoA.getNombre())
                 .trato(trato.getNombre())
                 .tratoId(trato.getId())
@@ -167,6 +174,7 @@ public class CalendarioService {
                         .allDay(true)
                         .color("#ef4444")
                         .tipo("Cuenta por Cobrar")
+                        .categoria("ADMON")
                         .numeroCuenta(cuenta.getFolio())
                         .cliente(cuenta.getCliente().getNombre())
                         .estado(cuenta.getEstatus().name())
@@ -186,6 +194,7 @@ public class CalendarioService {
                             .allDay(true)
                             .color("#8b5cf6")
                             .tipo("Cuenta por Pagar")
+                            .categoria("ADMON")
                             .numeroCuenta(cuenta.getFolio())
                             .cliente(cuenta.getCuenta().getNombre())
                             .estado(cuenta.getEstatus())
@@ -197,6 +206,46 @@ public class CalendarioService {
                         builder.numeroSim(cuenta.getSim().getNumero());
                     }
                     return builder.build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    private List<EventoCalendarioDTO> obtenerEquiposProximosExpirar(LocalDate start, LocalDate end) {
+        java.sql.Date sqlStart = java.sql.Date.valueOf(start);
+        java.sql.Date sqlEnd = java.sql.Date.valueOf(end);
+
+        List<Equipo> equiposExpirando = equipoRepository.findByFechaExpiracionBetween(sqlStart, sqlEnd);
+
+        return equiposExpirando.stream()
+                .map(equipo -> {
+                    String clienteNombre = "Sin Cliente";
+                    if (equipo.getClienteId() != null) {
+                        clienteNombre = empresaRepository.findById(equipo.getClienteId())
+                                .map(Empresa::getNombre)
+                                .orElse("Cliente ID: " + equipo.getClienteId());
+                    } else if (equipo.getClienteDefault() != null) {
+                        clienteNombre = equipo.getClienteDefault();
+                    }
+
+                    String plataformaNombre = equipo.getPlataforma() != null
+                            ? equipo.getPlataforma().getNombrePlataforma()
+                            : "Sin Plataforma";
+
+                    return EventoCalendarioDTO.builder()
+                            .titulo("Expiración - " + equipo.getNombre())
+                            .inicio(equipo.getFechaExpiracion().toLocalDate()
+                                    .atStartOfDay()
+                                    .atZone(MEXICO_ZONE)
+                                    .toInstant())
+                            .allDay(true)
+                            .color("#facc15")
+                            .tipo("Expiración de Equipo")
+                            .categoria("EQUIPOS")
+                            .imei(equipo.getImei())
+                            .plataformaNombre(plataformaNombre)
+                            .clienteEquipo(clienteNombre)
+                            .id(equipo.getId().toString())
+                            .build();
                 })
                 .collect(Collectors.toList());
     }

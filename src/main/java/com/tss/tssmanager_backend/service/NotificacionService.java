@@ -8,8 +8,9 @@ import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -17,20 +18,16 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class NotificacionService {
@@ -56,7 +53,11 @@ public class NotificacionService {
     @Autowired
     private EmailRecordRepository emailRecordRepository;
     @Autowired
+    private CreditoPlataformaRepository creditoPlataformaRepository;
+    @Autowired
     private EmailService emailService;
+    @Autowired
+    private EquipoService equipoService;
 
     @PostConstruct
     public void inicializarNotificaciones() {
@@ -64,6 +65,7 @@ public class NotificacionService {
         try {
             verificarNotificacionesProgramadas();
             limpiarNotificacionesLeidas();
+            verificarExpiracionEquipos();
         } catch (Exception e) {
             logger.error("Error durante la inicialización de notificaciones: {}", e.getMessage());
         }
@@ -767,7 +769,6 @@ public class NotificacionService {
             if (!notificacionesParaEliminar.isEmpty()) {
                 logger.info("Limpieza manual: Encontradas {} notificaciones para eliminar", notificacionesParaEliminar.size());
 
-                // Log detallado para debugging
                 notificacionesParaEliminar.forEach(notif ->
                         logger.debug("Eliminando notificación ID: {}, Usuario: {}, Fecha leída: {}, Hace 24h: {}",
                                 notif.getId(), notif.getUsuario().getId(), notif.getFechaLeida(), hace24Horas));
@@ -783,5 +784,249 @@ public class NotificacionService {
             logger.error("Error en limpieza manual de notificaciones: {}", e.getMessage(), e);
             throw e;
         }
+    }
+
+    @Scheduled(cron = "0 9 * * MON")
+    @Transactional
+    public void verificarExpiracionEquipos() {
+        logger.info("Iniciando verificación semanal de expiración de equipos (Lunes 9:00 AM)");
+        try {
+            List<Equipo> equiposProximosAExpirar = equipoService.obtenerEquiposProximosAExpirar();
+
+            if (!equiposProximosAExpirar.isEmpty()) {
+                enviarAlertaExpiracionEquipos(equiposProximosAExpirar);
+                logger.info("Alerta de expiración enviada. Total de equipos: {}", equiposProximosAExpirar.size());
+            } else {
+                logger.info("No hay equipos próximos a expirar en los próximos 30 días");
+            }
+        } catch (Exception e) {
+            logger.error("Error al verificar expiración de equipos: {}", e.getMessage(), e);
+        }
+    }
+
+    private void enviarAlertaExpiracionEquipos(List<Equipo> equipos) {
+        try {
+            List<Usuario> adminsYGestores = new ArrayList<>();
+            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
+            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
+                    RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
+
+            if (adminsYGestores.isEmpty()) {
+                logger.warn("No hay administradores o gestores activos para enviar alertas");
+                return;
+            }
+
+            String asunto = "Alerta: Equipos próximos a expirar";
+            String cuerpo = construirCuerpoAlertaExpiracion(equipos);
+
+            for (Usuario admin : adminsYGestores) {
+                emailService.enviarCorreo(
+                        admin.getCorreoElectronico(),
+                        asunto,
+                        cuerpo,
+                        null,
+                        null
+                );
+                logger.info("Alerta de expiración enviada a: {}", admin.getCorreoElectronico());
+            }
+        } catch (Exception e) {
+            logger.error("Error al enviar alerta de expiración de equipos: {}", e.getMessage(), e);
+        }
+    }
+
+    private String construirCuerpoAlertaExpiracion(List<Equipo> equipos) {
+        LocalDate hoy = LocalDate.now(ZONE_ID);
+
+        Map<String, List<Equipo>> equiposPorPlataforma = equipos.stream()
+                .collect(Collectors.groupingBy(
+                        e -> e.getPlataforma() != null ? e.getPlataforma().getNombrePlataforma() : "Sin Plataforma"
+                ));
+
+        StringBuilder resumenPlataformas = new StringBuilder();
+        for (Map.Entry<String, List<Equipo>> entry : equiposPorPlataforma.entrySet()) {
+            String plataforma = entry.getKey();
+            List<Equipo> equiposPlataforma = entry.getValue();
+
+            BigDecimal creditosRequeridos = equiposPlataforma.stream()
+                    .map(e -> new BigDecimal(e.getCreditosUsados() != null ? e.getCreditosUsados() : 0))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            // Obtener saldo actual de la plataforma
+            BigDecimal saldoActual = obtenerSaldoPlataforma(plataforma);
+            BigDecimal creditosFaltantes = saldoActual.subtract(creditosRequeridos);
+
+            String estadoCreditos = creditosFaltantes.compareTo(BigDecimal.ZERO) >= 0
+                    ? "✓ Suficientes"
+                    : "✗ Insuficientes";
+
+            resumenPlataformas.append(String.format(
+                    "<tr>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%d</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: right;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: right;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
+                            "</tr>",
+                    plataforma,
+                    equiposPlataforma.size(),
+                    creditosRequeridos,
+                    saldoActual,
+                    estadoCreditos
+            ));
+        }
+
+        // Construir tabla detallada de equipos
+        StringBuilder tablaEquipos = new StringBuilder();
+        for (Equipo equipo : equipos) {
+            long diasRestantes = ChronoUnit.DAYS.between(hoy, equipo.getFechaExpiracion().toLocalDate());
+            String plataforma = equipo.getPlataforma() != null ? equipo.getPlataforma().getNombrePlataforma() : "N/A";
+
+            tablaEquipos.append(String.format(
+                    "<tr>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%d</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\"><strong>%d días</strong></td>" +
+                            "</tr>",
+                    equipo.getNombre(),
+                    plataforma,
+                    equipo.getCreditosUsados() != null ? equipo.getCreditosUsados() : 0,
+                    equipo.getFechaExpiracion(),
+                    diasRestantes
+            ));
+        }
+
+        return String.format("""
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    color: #333;
+                    background-color: #f9f9f9;
+                }
+                .container {
+                    background-color: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin: 10px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
+                .section-title {
+                    background-color: #e74c3c;
+                    color: white;
+                    padding: 12px;
+                    border-radius: 4px;
+                    margin-top: 20px;
+                    margin-bottom: 10px;
+                    font-weight: bold;
+                }
+                table {
+                    width: 100%%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                    margin-bottom: 20px;
+                }
+                th {
+                    background-color: #34495e;
+                    color: white;
+                    padding: 12px;
+                    text-align: left;
+                    border: 1px solid #bdc3c7;
+                }
+                .alert-box {
+                    background-color: #fff3cd;
+                    border: 1px solid #ffc107;
+                    border-radius: 4px;
+                    padding: 15px;
+                    margin: 15px 0;
+                }
+                .footer {
+                    margin-top: 30px;
+                    font-size: 12px;
+                    color: #7f8c8d;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2 style="color: #e74c3c;">⚠️ Alerta de Expiración de Equipos</h2>
+                
+                <div class="alert-box">
+                    <strong>Atención:</strong> Existen %d equipos cuya licencia vencerá en los próximos 30 días.
+                    Por favor, revise la información a continuación y planifique las renovaciones necesarias.
+                </div>
+
+                <div class="section-title">📊 Resumen por Plataforma</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Plataforma</th>
+                            <th style="text-align: center;">Equipos</th>
+                            <th style="text-align: right;">Créditos Requeridos</th>
+                            <th style="text-align: right;">Saldo Actual</th>
+                            <th style="text-align: center;">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        %s
+                    </tbody>
+                </table>
+
+                <div class="section-title">📋 Detalle de Equipos</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nombre del Equipo</th>
+                            <th>Plataforma</th>
+                            <th style="text-align: center;">Créditos Requeridos</th>
+                            <th style="text-align: center;">Fecha de Expiración</th>
+                            <th style="text-align: center;">Días Restantes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        %s
+                    </tbody>
+                </table>
+
+                <div class="footer">
+                    <p><strong>Nota:</strong> Este es un mensaje automático generado por TSS Manager.</p>
+                    <p>Por favor, tome las acciones necesarias para renovar los equipos antes de su vencimiento.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """,
+                equipos.size(),
+                resumenPlataformas.toString(),
+                tablaEquipos.toString()
+        );
+    }
+
+    private BigDecimal obtenerSaldoPlataforma(String nombrePlataforma) {
+        try {
+            if ("WhatsGPS".equals(nombrePlataforma)) {
+                List<Object[]> saldosPorSubtipo = creditoPlataformaRepository.getSaldosPorPlataformaYSubtipo();
+                BigDecimal total = BigDecimal.ZERO;
+                for (Object[] row : saldosPorSubtipo) {
+                    if ("WhatsGPS".equals(row[0])) {
+                        total = total.add((BigDecimal) row[2]);
+                    }
+                }
+                return total;
+            } else {
+                List<Object[]> saldos = creditoPlataformaRepository.getSaldosPorPlataforma();
+                for (Object[] row : saldos) {
+                    if (nombrePlataforma.equals(row[0])) {
+                        return (BigDecimal) row[1];
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error al obtener saldo de plataforma: {}", e.getMessage());
+        }
+        return BigDecimal.ZERO;
     }
 }

@@ -63,4 +63,11 @@ public interface CreditoPlataformaRepository extends JpaRepository<CreditoPlataf
     List<Object[]> getSaldosPorPlataformaYSubtipo();
 
     List<CreditoPlataforma> findByFechaLessThanEqualOrderByFecha(LocalDateTime fecha);
+
+    @Query("SELECT c.plataforma.nombrePlataforma, " +
+            "SUM(CASE WHEN c.tipo = 'ABONO' THEN c.monto ELSE -c.monto END) " +
+            "FROM CreditoPlataforma c " +
+            "WHERE c.esLicencia = true " +
+            "GROUP BY c.plataforma.nombrePlataforma")
+    List<Object[]> getSaldosPorPlataformaLicencias();
 }

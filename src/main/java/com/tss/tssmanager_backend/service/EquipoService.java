@@ -3,6 +3,7 @@ package com.tss.tssmanager_backend.service;
 import com.tss.tssmanager_backend.dto.EquiposEstatusDTO;
 import com.tss.tssmanager_backend.entity.Equipo;
 import com.tss.tssmanager_backend.entity.EquiposEstatus;
+import com.tss.tssmanager_backend.entity.Plataforma;
 import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
 import com.tss.tssmanager_backend.repository.EquiposEstatusRepository;
@@ -121,6 +122,17 @@ public class EquipoService {
             );
         }
 
+        if (equipoGuardado.getPlataforma() != null &&
+                equipoGuardado.getEstatus() == EstatusEquipoEnum.ACTIVO &&
+                (equipoGuardado.getPlataforma().getId().equals(5) || equipoGuardado.getPlataforma().getId().equals(6))) {
+
+            creditoPlataformaService.registrarAsignacionLicencia(
+                    equipoGuardado.getPlataforma(),
+                    "Asignación de licencia - Equipo: " + equipoGuardado.getNombre(),
+                    equipoGuardado.getId()
+            );
+        }
+
         return equipoGuardado;
     }
 
@@ -192,7 +204,7 @@ public class EquipoService {
         // PRIMERO guardar el equipo actualizado
         Equipo equipoActualizado = repository.save(equipo);
 
-        // DESPUÉS registrar el cargo si es necesario
+        // DESPUÉS registrar el cargo de CRÉDITOS si es necesario
         if (debeRegistrarCargo) {
             String subtipo = null;
             if (equipoActualizado.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
@@ -209,6 +221,49 @@ public class EquipoService {
             );
         }
 
+        Plataforma plataformaAnterior = equipo.getPlataforma(); // Ya tenemos el equipo anterior guardado al inicio del método
+
+        boolean cambioPlataforma = plataformaAnterior != null &&
+                equipoActualizado.getPlataforma() != null &&
+                !plataformaAnterior.getId().equals(equipoActualizado.getPlataforma().getId());
+
+        boolean esPlataformaLicenciaAnterior = plataformaAnterior != null &&
+                (plataformaAnterior.getId().equals(5) || plataformaAnterior.getId().equals(6));
+
+        boolean esPlataformaLicenciaNueva = equipoActualizado.getPlataforma() != null &&
+                (equipoActualizado.getPlataforma().getId().equals(5) || equipoActualizado.getPlataforma().getId().equals(6));
+
+        // Si cambió DESDE una plataforma de licencias
+        if (cambioPlataforma && esPlataformaLicenciaAnterior && estatusAnterior == EstatusEquipoEnum.ACTIVO) {
+            creditoPlataformaService.registrarLiberacionLicencia(
+                    plataformaAnterior,
+                    "Liberación de licencia - Equipo movido: " + equipoActualizado.getNombre(),
+                    equipoActualizado.getId()
+            );
+        }
+
+        // Si cambió HACIA una plataforma de licencias y está activo
+        if (esPlataformaLicenciaNueva && equipoActualizado.getEstatus() == EstatusEquipoEnum.ACTIVO) {
+            if (cambioPlataforma || estatusAnterior != EstatusEquipoEnum.ACTIVO) {
+                creditoPlataformaService.registrarAsignacionLicencia(
+                        equipoActualizado.getPlataforma(),
+                        "Asignación de licencia - Equipo: " + equipoActualizado.getNombre(),
+                        equipoActualizado.getId()
+                );
+            }
+        }
+
+        // Si se desactivó un equipo con licencia
+        if (esPlataformaLicenciaNueva &&
+                estatusAnterior == EstatusEquipoEnum.ACTIVO &&
+                equipoActualizado.getEstatus() == EstatusEquipoEnum.INACTIVO) {
+            creditoPlataformaService.registrarLiberacionLicencia(
+                    equipoActualizado.getPlataforma(),
+                    "Liberación de licencia - Equipo desactivado: " + equipoActualizado.getNombre(),
+                    equipoActualizado.getId()
+            );
+        }
+
         return equipoActualizado;
     }
 
@@ -218,6 +273,18 @@ public class EquipoService {
         if (equipo.getSimReferenciada() != null) {
             throw new IllegalStateException("No se puede eliminar el equipo porque tiene una SIM vinculada. Desvincule la SIM primero.");
         }
+
+        if (equipo.getPlataforma() != null &&
+                (equipo.getPlataforma().getId().equals(5) || equipo.getPlataforma().getId().equals(6)) &&
+                equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
+
+            creditoPlataformaService.registrarLiberacionLicencia(
+                    equipo.getPlataforma(),
+                    "Liberación de licencia - Equipo eliminado: " + equipo.getNombre(),
+                    equipo.getId()
+            );
+        }
+
         repository.delete(equipo);
     }
 
@@ -534,4 +601,9 @@ public class EquipoService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public List<Equipo> obtenerEquiposProximosAExpirar() {
+        logger.info("Obteniendo equipos próximos a expirar dentro de 30 días");
+        return repository.findEquiposProximosAExpirar();
+    }
 }

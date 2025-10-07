@@ -6,6 +6,7 @@ import com.tss.tssmanager_backend.entity.CreditoPlataforma;
 import com.tss.tssmanager_backend.entity.Equipo;
 import com.tss.tssmanager_backend.entity.Plataforma;
 import com.tss.tssmanager_backend.enums.ConceptoCreditoEnum;
+import com.tss.tssmanager_backend.enums.EstatusEquipoEnum;
 import com.tss.tssmanager_backend.enums.TipoCreditoEnum;
 import com.tss.tssmanager_backend.repository.CreditoPlataformaRepository;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
@@ -132,6 +133,7 @@ public class CreditoPlataformaService {
     private Map<String, BigDecimal> calcularSaldos() {
         List<Object[]> saldosData = repository.getSaldosPorPlataforma();
         List<Object[]> saldosSubtipos = repository.getSaldosPorPlataformaYSubtipo();
+        List<Object[]> saldosLicencias = repository.getSaldosPorPlataformaLicencias();
 
         Map<String, BigDecimal> saldos = new HashMap<>();
 
@@ -158,6 +160,32 @@ public class CreditoPlataformaService {
 
             if ("WhatsGPS".equals(nombrePlataforma) && subtipo != null) {
                 saldos.put("WHATSGPS_" + subtipo, saldo);
+            }
+        }
+
+        // Calcular licencias para Fulltrack y F/Basic
+        for (Object[] row : saldosLicencias) {
+            String nombrePlataforma = (String) row[0];
+            BigDecimal saldoActual = (BigDecimal) row[1];
+
+            if ("Fulltrack".equals(nombrePlataforma)) {
+                long equiposActivos = equipoRepository.countByPlataformaIdAndEstatus(6, EstatusEquipoEnum.ACTIVO);
+                BigDecimal ocupadas = new BigDecimal(equiposActivos);
+                BigDecimal disponibles = saldoActual;
+                BigDecimal total = ocupadas.add(disponibles);
+
+                saldos.put("FULLTRACK_OCUPADAS", ocupadas);
+                saldos.put("FULLTRACK_DISPONIBLES", disponibles.max(BigDecimal.ZERO));
+                saldos.put("FULLTRACK_TOTAL", total);
+            } else if ("F/Basic".equals(nombrePlataforma)) {
+                long equiposActivos = equipoRepository.countByPlataformaIdAndEstatus(5, EstatusEquipoEnum.ACTIVO);
+                BigDecimal ocupadas = new BigDecimal(equiposActivos);
+                BigDecimal disponibles = saldoActual;
+                BigDecimal total = ocupadas.add(disponibles);
+
+                saldos.put("F_BASIC_OCUPADAS", ocupadas);
+                saldos.put("F_BASIC_DISPONIBLES", disponibles.max(BigDecimal.ZERO));
+                saldos.put("F_BASIC_TOTAL", total);
             }
         }
 
@@ -199,6 +227,8 @@ public class CreditoPlataformaService {
         saldosAcumulados.put("TRACK_SOLID", BigDecimal.ZERO);
         saldosAcumulados.put("WHATSGPS_ANUAL", BigDecimal.ZERO);
         saldosAcumulados.put("WHATSGPS_VITALICIA", BigDecimal.ZERO);
+        saldosAcumulados.put("FULLTRACK", BigDecimal.ZERO);
+        saldosAcumulados.put("F_BASIC", BigDecimal.ZERO);
 
         List<Map<String, Object>> resultado = new ArrayList<>();
 
@@ -224,7 +254,8 @@ public class CreditoPlataformaService {
             }
 
             // Crear entradas para cada plataforma en esta fecha con su saldo acumulado
-            for (String plataforma : Arrays.asList("TRACK_SOLID", "WHATSGPS_ANUAL", "WHATSGPS_VITALICIA")) {
+            // Crear entradas para cada plataforma en esta fecha con su saldo acumulado
+            for (String plataforma : Arrays.asList("TRACK_SOLID", "WHATSGPS_ANUAL", "WHATSGPS_VITALICIA", "FULLTRACK", "F_BASIC")) {
                 Map<String, Object> item = new HashMap<>();
                 item.put("fecha", fecha.toString());
                 item.put("plataforma", plataforma);
@@ -261,6 +292,10 @@ public class CreditoPlataformaService {
                 return "TRACKERKING";
             case "Joint Cloud":
                 return "JOINTCLOUD";
+            case "Fulltrack":
+                return "FULLTRACK";
+            case "F/Basic":
+                return "F_BASIC";
             default:
                 return nombreBD.toUpperCase().replace(" ", "_");
         }
@@ -293,6 +328,55 @@ public class CreditoPlataformaService {
         credito.setNota(nota);
         credito.setTransaccionId(transaccionId);
         credito.setCuentaPorPagarId(cuentaPorPagarId);
+
+        repository.save(credito);
+    }
+
+    @Transactional
+    public void registrarCompraLicencias(Plataforma plataforma, Integer cantidadLicencias,
+                                         String nota, Integer transaccionId,
+                                         Integer cuentaPorPagarId, LocalDateTime fechaCustom) {
+        CreditoPlataforma credito = new CreditoPlataforma();
+        credito.setFecha(fechaCustom != null ? fechaCustom : DateUtils.nowInMexico());
+        credito.setPlataforma(plataforma);
+        credito.setConcepto(ConceptoCreditoEnum.COMPRA_LICENCIAS);
+        credito.setTipo(TipoCreditoEnum.ABONO);
+        credito.setMonto(new BigDecimal(cantidadLicencias));
+        credito.setNota(nota);
+        credito.setTransaccionId(transaccionId);
+        credito.setCuentaPorPagarId(cuentaPorPagarId);
+        credito.setEsLicencia(true);
+        credito.setSubtipo(null);
+
+        repository.save(credito);
+    }
+
+    @Transactional
+    public void registrarAsignacionLicencia(Plataforma plataforma, String nota, Integer equipoId) {
+        CreditoPlataforma credito = new CreditoPlataforma();
+        credito.setFecha(DateUtils.nowInMexico());
+        credito.setPlataforma(plataforma);
+        credito.setConcepto(ConceptoCreditoEnum.ASIGNACION_LICENCIA);
+        credito.setTipo(TipoCreditoEnum.CARGO);
+        credito.setMonto(BigDecimal.ONE);
+        credito.setNota(nota);
+        credito.setEquipoId(equipoId);
+        credito.setEsLicencia(true);
+
+        repository.save(credito);
+    }
+
+    @Transactional
+    public void registrarLiberacionLicencia(Plataforma plataforma, String nota, Integer equipoId) {
+        CreditoPlataforma credito = new CreditoPlataforma();
+        credito.setFecha(DateUtils.nowInMexico());
+        credito.setPlataforma(plataforma);
+        credito.setConcepto(ConceptoCreditoEnum.LIBERACION_LICENCIA);
+        credito.setTipo(TipoCreditoEnum.ABONO);
+        credito.setMonto(BigDecimal.ONE);
+        credito.setNota(nota);
+        credito.setEquipoId(equipoId);
+        credito.setEsLicencia(true);
 
         repository.save(credito);
     }

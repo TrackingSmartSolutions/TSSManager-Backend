@@ -59,6 +59,9 @@ public class CreditoPlataforma {
     @Column(name = "subtipo")
     private String subtipo;
 
+    @Column(name = "es_licencia")
+    private Boolean esLicencia = false;
+
     @PrePersist
     protected void onCreate() {
         fechaCreacion = DateUtils.nowInMexico();

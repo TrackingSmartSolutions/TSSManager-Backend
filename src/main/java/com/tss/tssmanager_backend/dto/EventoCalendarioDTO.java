@@ -29,4 +29,7 @@ public class EventoCalendarioDTO {
     private Boolean allDay;
     private BigDecimal monto;
     private String nota;
+    private String plataformaNombre;
+    private String clienteEquipo;
+    private String categoria;
 }

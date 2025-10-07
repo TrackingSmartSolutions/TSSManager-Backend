@@ -111,27 +111,45 @@ public class CuentaPorPagarService {
 
     private void registrarAbonoCreditos(Transaccion transaccion, BigDecimal monto, CuentaPorPagar cuenta, Integer cantidadCreditos) {
         if (transaccion.getCategoria() != null &&
-                transaccion.getCategoria().getDescripcion().toLowerCase().contains("créditos plataforma")) {
+                (transaccion.getCategoria().getDescripcion().toLowerCase().contains("créditos plataforma") ||
+                        transaccion.getCategoria().getDescripcion().toLowerCase().contains("licencias"))) {
 
             Plataforma plataforma = determinarPlataformaPorCuenta(transaccion.getCuenta());
-            String subtipo = determinarSubtipoPorCuenta(transaccion.getCuenta());
 
             if (plataforma != null && cantidadCreditos != null && cantidadCreditos > 0) {
-                ConceptoCreditoEnum concepto = ConceptoCreditoEnum.COMPRA;
-                String nota = String.format("Compra de %d créditos", cantidadCreditos);
-
                 LocalDateTime fechaPagoDateTime = cuenta.getFechaPago().atStartOfDay();
 
-                creditoPlataformaService.registrarAbonoConSubtipo(
-                        plataforma,
-                        concepto,
-                        new BigDecimal(cantidadCreditos),
-                        nota,
-                        transaccion.getId(),
-                        cuenta.getId(),
-                        subtipo,
-                        fechaPagoDateTime
-                );
+                // Diferenciar entre licencias (Fulltrack/F/Basic) y créditos (Track Solid/WhatsGPS)
+                if (plataforma.getId().equals(5) || plataforma.getId().equals(6)) {
+                    // Es una plataforma de LICENCIAS
+                    String nota = String.format("Compra de %d licencias para %s",
+                            cantidadCreditos, plataforma.getNombrePlataforma());
+
+                    creditoPlataformaService.registrarCompraLicencias(
+                            plataforma,
+                            cantidadCreditos,
+                            nota,
+                            transaccion.getId(),
+                            cuenta.getId(),
+                            fechaPagoDateTime
+                    );
+                } else {
+                    // Es una plataforma de CRÉDITOS
+                    String subtipo = determinarSubtipoPorCuenta(transaccion.getCuenta());
+                    ConceptoCreditoEnum concepto = ConceptoCreditoEnum.COMPRA;
+                    String nota = String.format("Compra de %d créditos", cantidadCreditos);
+
+                    creditoPlataformaService.registrarAbonoConSubtipo(
+                            plataforma,
+                            concepto,
+                            new BigDecimal(cantidadCreditos),
+                            nota,
+                            transaccion.getId(),
+                            cuenta.getId(),
+                            subtipo,
+                            fechaPagoDateTime
+                    );
+                }
             }
         }
     }
@@ -156,18 +174,28 @@ public class CuentaPorPagarService {
 
         String nombreCuenta = cuenta.getNombre().toLowerCase();
 
-
         if (nombreCuenta.contains("whatsgps")) {
             return plataformaService.obtenerTodasLasPlataformas().stream()
                     .filter(p -> "WhatsGPS".equals(p.getNombrePlataforma()))
                     .findFirst()
                     .orElse(null);
-        } else if (nombreCuenta.contains("tracksolid")) {
+        } else if (nombreCuenta.contains("tracksolid") || nombreCuenta.contains("track solid")) {
             return plataformaService.obtenerTodasLasPlataformas().stream()
                     .filter(p -> "Track Solid".equals(p.getNombrePlataforma()))
                     .findFirst()
                     .orElse(null);
+        } else if (nombreCuenta.contains("fulltrack")) {
+            return plataformaService.obtenerTodasLasPlataformas().stream()
+                    .filter(p -> "Fulltrack".equals(p.getNombrePlataforma()))
+                    .findFirst()
+                    .orElse(null);
+        } else if (nombreCuenta.contains("f/basic") || nombreCuenta.contains("fbasic")) {
+            return plataformaService.obtenerTodasLasPlataformas().stream()
+                    .filter(p -> "F/Basic".equals(p.getNombrePlataforma()))
+                    .findFirst()
+                    .orElse(null);
         }
+
         return null;
     }
 

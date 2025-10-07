@@ -81,4 +81,26 @@ public interface EquipoRepository extends JpaRepository<Equipo, Integer> {
     @Query("SELECT e FROM Equipo e LEFT JOIN FETCH e.simReferenciada LEFT JOIN FETCH e.plataforma ORDER BY CASE WHEN e.fechaExpiracion IS NULL THEN 0 ELSE 1 END, e.fechaExpiracion ASC")
     List<Equipo> findAllWithSimsOrderedByExpiration();
 
+    long countByPlataformaIdAndEstatus(Integer plataformaId, EstatusEquipoEnum estatus);
+
+    @Query("SELECT e FROM Equipo e " +
+            "LEFT JOIN FETCH e.plataforma " +
+            "WHERE e.fechaExpiracion BETWEEN :start AND :end " +
+            "AND e.estatus = 'ACTIVO' " +
+            "ORDER BY e.fechaExpiracion ASC")
+    List<Equipo> findByFechaExpiracionBetween(
+            @Param("start") java.sql.Date start,
+            @Param("end") java.sql.Date end
+    );
+
+    @Query("""
+    SELECT e FROM Equipo e 
+    LEFT JOIN FETCH e.plataforma 
+    WHERE e.tipo IN ('VENDIDO', 'DEMO') 
+    AND e.estatus = 'ACTIVO'
+    AND e.fechaExpiracion IS NOT NULL
+    AND CAST(e.fechaExpiracion AS date) BETWEEN CURRENT_DATE AND CAST(CURRENT_DATE + 30 DAY AS date)
+    ORDER BY e.fechaExpiracion ASC
+""")
+    List<Equipo> findEquiposProximosAExpirar();
 }
