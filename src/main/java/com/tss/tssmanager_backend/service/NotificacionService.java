@@ -8,7 +8,10 @@ import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.time.*;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -21,10 +24,6 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -65,7 +64,7 @@ public class NotificacionService {
         try {
             verificarNotificacionesProgramadas();
             limpiarNotificacionesLeidas();
-            verificarExpiracionEquipos();
+            verificarYEnviarAlertaEquiposPendiente();
         } catch (Exception e) {
             logger.error("Error durante la inicialización de notificaciones: {}", e.getMessage());
         }
@@ -1019,7 +1018,7 @@ public class NotificacionService {
                 List<Object[]> saldosPorSubtipo = creditoPlataformaRepository.getSaldosPorPlataformaYSubtipo();
                 BigDecimal total = BigDecimal.ZERO;
                 for (Object[] row : saldosPorSubtipo) {
-                    if ("WhatsGPS".equals(row[0])) {
+                    if ("WhatsGPS".equals(row[0]) && "ANUAL".equals(row[1])) {
                         total = total.add((BigDecimal) row[2]);
                     }
                 }
@@ -1036,5 +1035,55 @@ public class NotificacionService {
             logger.error("Error al obtener saldo de plataforma: {}", e.getMessage());
         }
         return BigDecimal.ZERO;
+    }
+
+    @Transactional
+    public void verificarYEnviarAlertaEquiposPendiente() {
+        try {
+            LocalDate hoy = LocalDate.now(ZONE_ID);
+            ZonedDateTime ahora = ZonedDateTime.now(ZONE_ID);
+
+            LocalDate lunesEstaSemana = hoy.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            ZonedDateTime lunesA9AM = lunesEstaSemana.atTime(9, 0).atZone(ZONE_ID);
+
+            if (ahora.isAfter(lunesA9AM)) {
+                if (!seEnvioAlertaEquiposEstaSemana(lunesEstaSemana)) {
+                    logger.info("No se ha enviado la alerta de equipos esta semana. Enviando ahora...");
+                    verificarExpiracionEquipos();
+                } else {
+                    logger.info("La alerta de equipos ya fue enviada esta semana");
+                }
+            } else {
+                logger.info("Aún no es lunes a las 9 AM de esta semana. No se envía alerta.");
+            }
+        } catch (Exception e) {
+            logger.error("Error al verificar alerta de equipos pendiente: {}", e.getMessage(), e);
+        }
+    }
+
+    private boolean seEnvioAlertaEquiposEstaSemana(LocalDate lunesEstaSemana) {
+        try {
+            ZonedDateTime inicioSemana = lunesEstaSemana.atStartOfDay(ZONE_ID);
+            String asunto = "Alerta: Equipos próximos a expirar";
+
+            List<EmailRecord> correosEstaSemana = emailRecordRepository
+                    .findByAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
+                            asunto,
+                            inicioSemana
+                    );
+
+            boolean yaEnviado = !correosEstaSemana.isEmpty();
+
+            if (yaEnviado) {
+                logger.debug("Encontrados {} correos de alerta de equipos esta semana",
+                        correosEstaSemana.size());
+            }
+
+            return yaEnviado;
+
+        } catch (Exception e) {
+            logger.error("Error al verificar si se envió alerta de equipos: {}", e.getMessage());
+            return false;
+        }
     }
 }
