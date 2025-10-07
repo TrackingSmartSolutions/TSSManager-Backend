@@ -324,20 +324,22 @@ public class NotificacionService {
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas, cuandoVence);
 
             for (Usuario admin : adminsYGestores) {
-                // Verificar si ya se envió correo HOY para esta fecha específica
                 if (!existeCorreoConsolidadoHoy(admin.getId(), "Cuentas por Cobrar", fechaVencimiento)) {
-                    emailService.enviarCorreo(
-                            admin.getCorreoElectronico(),
-                            asunto,
-                            cuerpo,
-                            null,
-                            null
-                    );
+                    try {
+                        emailService.enviarCorreo(
+                                admin.getCorreoElectronico(),
+                                asunto,
+                                cuerpo,
+                                null,
+                                null
+                        );
+                        Thread.sleep(600);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        logger.error("Envío de correo interrumpido: {}", e.getMessage());
+                    }
                     logger.info("Correo consolidado de cuentas por cobrar (vencen {}, fecha {}) enviado a: {}",
                             cuandoVence, fechaVencimiento, admin.getCorreoElectronico());
-                } else {
-                    logger.info("Correo consolidado de cuentas por cobrar ya enviado hoy para {} a: {}",
-                            fechaVencimiento, admin.getCorreoElectronico());
                 }
             }
         } catch (Exception e) {
@@ -786,7 +788,7 @@ public class NotificacionService {
         }
     }
 
-    @Scheduled(cron = "0 9 * * MON")
+    @Scheduled(cron = "0 0 9 * * MON")
     @Transactional
     public void verificarExpiracionEquipos() {
         logger.info("Iniciando verificación semanal de expiración de equipos (Lunes 9:00 AM)");
@@ -821,14 +823,20 @@ public class NotificacionService {
             String cuerpo = construirCuerpoAlertaExpiracion(equipos);
 
             for (Usuario admin : adminsYGestores) {
-                emailService.enviarCorreo(
-                        admin.getCorreoElectronico(),
-                        asunto,
-                        cuerpo,
-                        null,
-                        null
-                );
-                logger.info("Alerta de expiración enviada a: {}", admin.getCorreoElectronico());
+                try {
+                    emailService.enviarCorreo(
+                            admin.getCorreoElectronico(),
+                            asunto,
+                            cuerpo,
+                            null,
+                            null
+                    );
+                    logger.info("Alerta de expiración enviada a: {}", admin.getCorreoElectronico());
+                    Thread.sleep(600);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.error("Envío de alerta de expiración interrumpido: {}", e.getMessage());
+                }
             }
         } catch (Exception e) {
             logger.error("Error al enviar alerta de expiración de equipos: {}", e.getMessage(), e);
