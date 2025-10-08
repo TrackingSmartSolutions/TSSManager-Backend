@@ -28,6 +28,6 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("Usuario o contraseña incorrectos");
         }
         System.out.println("Found user: " + usuario);
-        return new CustomUserDetails(usuario); // Devuelve CustomUserDetails en lugar de User
+        return new CustomUserDetails(usuario);
     }
 }
