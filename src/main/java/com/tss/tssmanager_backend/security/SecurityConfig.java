@@ -37,6 +37,7 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/api/geocoding/**").permitAll()
                         .requestMatchers("/api/copias-seguridad/google-drive/callback").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMINISTRADOR")
