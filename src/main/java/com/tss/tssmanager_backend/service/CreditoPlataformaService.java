@@ -166,13 +166,13 @@ public class CreditoPlataformaService {
         // Calcular licencias para Fulltrack y F/Basic
         for (Object[] row : saldosLicencias) {
             String nombrePlataforma = (String) row[0];
-            BigDecimal saldoActual = (BigDecimal) row[1];
+            BigDecimal totalComprado = (BigDecimal) row[1];
 
             if ("Fulltrack".equals(nombrePlataforma)) {
                 long equiposActivos = equipoRepository.countByPlataformaIdAndEstatus(6, EstatusEquipoEnum.ACTIVO);
                 BigDecimal ocupadas = new BigDecimal(equiposActivos);
-                BigDecimal disponibles = saldoActual;
-                BigDecimal total = ocupadas.add(disponibles);
+                BigDecimal total = totalComprado;
+                BigDecimal disponibles = total.subtract(ocupadas);
 
                 saldos.put("FULLTRACK_OCUPADAS", ocupadas);
                 saldos.put("FULLTRACK_DISPONIBLES", disponibles.max(BigDecimal.ZERO));
@@ -180,8 +180,8 @@ public class CreditoPlataformaService {
             } else if ("F/Basic".equals(nombrePlataforma)) {
                 long equiposActivos = equipoRepository.countByPlataformaIdAndEstatus(5, EstatusEquipoEnum.ACTIVO);
                 BigDecimal ocupadas = new BigDecimal(equiposActivos);
-                BigDecimal disponibles = saldoActual;
-                BigDecimal total = ocupadas.add(disponibles);
+                BigDecimal total = totalComprado;
+                BigDecimal disponibles = total.subtract(ocupadas);
 
                 saldos.put("F_BASIC_OCUPADAS", ocupadas);
                 saldos.put("F_BASIC_DISPONIBLES", disponibles.max(BigDecimal.ZERO));

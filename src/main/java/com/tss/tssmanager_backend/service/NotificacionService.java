@@ -62,9 +62,15 @@ public class NotificacionService {
     public void inicializarNotificaciones() {
         logger.info("Inicializando verificación de notificaciones al arrancar la aplicación");
         try {
+            Thread.sleep(2000);
             verificarNotificacionesProgramadas();
+            Thread.sleep(1000);
             limpiarNotificacionesLeidas();
+            Thread.sleep(1000);
             verificarYEnviarAlertaEquiposPendiente();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Inicialización interrumpida: {}", e.getMessage());
         } catch (Exception e) {
             logger.error("Error durante la inicialización de notificaciones: {}", e.getMessage());
         }
@@ -332,7 +338,7 @@ public class NotificacionService {
                                 null,
                                 null
                         );
-                        Thread.sleep(600);
+                        Thread.sleep(1000);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         logger.error("Envío de correo interrumpido: {}", e.getMessage());
@@ -367,6 +373,7 @@ public class NotificacionService {
                             null,
                             null
                     );
+                    Thread.sleep(1000);
                     logger.info("Correo consolidado de cuentas por pagar (vencen {}, fecha {}) enviado a: {}",
                             cuandoVence, fechaVencimiento, admin.getCorreoElectronico());
                 } else {
@@ -830,8 +837,8 @@ public class NotificacionService {
                             null,
                             null
                     );
+                    Thread.sleep(1000);
                     logger.info("Alerta de expiración enviada a: {}", admin.getCorreoElectronico());
-                    Thread.sleep(600);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     logger.error("Envío de alerta de expiración interrumpido: {}", e.getMessage());

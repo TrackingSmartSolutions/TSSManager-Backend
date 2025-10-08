@@ -65,7 +65,7 @@ public interface CreditoPlataformaRepository extends JpaRepository<CreditoPlataf
     List<CreditoPlataforma> findByFechaLessThanEqualOrderByFecha(LocalDateTime fecha);
 
     @Query("SELECT c.plataforma.nombrePlataforma, " +
-            "SUM(CASE WHEN c.tipo = 'ABONO' THEN c.monto ELSE -c.monto END) " +
+            "SUM(CASE WHEN c.tipo = 'ABONO' THEN c.monto ELSE 0 END) " +
             "FROM CreditoPlataforma c " +
             "WHERE c.esLicencia = true " +
             "GROUP BY c.plataforma.nombrePlataforma")
