@@ -187,7 +187,7 @@ public class NotificacionService {
 
     // Método programado para ejecutarse cada 6 horas
     @Scheduled(cron = "0 0 */6 * * *")
-    @Transactional
+    @Transactional(timeout = 300)
     public void verificarNotificacionesProgramadas() {
         logger.info("Verificación programada de respaldo ejecutada");
         generarNotificacionCuentasYSims();
@@ -195,7 +195,7 @@ public class NotificacionService {
     }
 
     @Scheduled(cron = "0 0 10 * * *") // A las 10:00 AM todos los días
-    @Transactional
+    @Transactional(timeout = 300)
     public void verificarNotificacionesMatutina() {
         logger.info("Verificación matutina de las 10 AM ejecutada");
         generarNotificacionCuentasYSims();
@@ -255,30 +255,34 @@ public class NotificacionService {
                 .filter(cuenta -> !"PAGADO".equals(cuenta.getEstatus()))
                 .collect(Collectors.toList());
 
-        // Procesar cuentas que vencen HOY (notificaciones internas)
-        cuentasVencenHoy.forEach(cuenta -> {
-            String mensaje = String.format("Cuenta por cobrar vence hoy: %s, Cliente: %s, Fecha: %s",
-                    cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
-            notificarAdministradores("CUENTA_COBRAR", mensaje);
-        });
-
-        // Procesar cuentas que vencen MAÑANA (notificaciones internas)
-        cuentasVencenManana.forEach(cuenta -> {
-            String mensaje = String.format("Cuenta por cobrar vence mañana: %s, Cliente: %s, Fecha: %s",
-                    cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
-            notificarAdministradores("CUENTA_COBRAR", mensaje);
-        });
-
-        // Enviar correos consolidados SOLO si no se han enviado hoy
         if (!cuentasVencenHoy.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenHoy, "HOY", hoy);
+            cuentasVencenHoy.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por cobrar vence hoy: %s, Cliente: %s, Fecha: %s",
+                        cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+                notificarAdministradores("CUENTA_COBRAR", mensaje);
+            });
+
+            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_COBRAR_HOY", hoy)) {
+                enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenHoy, "HOY", hoy);
+            } else {
+                logger.info("Saltando envío de correo de cuentas por cobrar (HOY) - Ya enviado");
+            }
         }
 
         if (!cuentasVencenManana.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenManana, "MAÑANA", manana);
+            cuentasVencenManana.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por cobrar vence mañana: %s, Cliente: %s, Fecha: %s",
+                        cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+                notificarAdministradores("CUENTA_COBRAR", mensaje);
+            });
+
+            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_COBRAR_MANANA", manana)) {
+                enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenManana, "MAÑANA", manana);
+            } else {
+                logger.info("Saltando envío de correo de cuentas por cobrar (MAÑANA) - Ya enviado");
+            }
         }
     }
-
 
     private void procesarCuentasPorPagar(LocalDate hoy, LocalDate manana) {
         List<CuentaPorPagar> cuentasVencenHoy = cuentaPorPagarRepository.findAll().stream()
@@ -293,27 +297,32 @@ public class NotificacionService {
                 .filter(cuenta -> !"Pagado".equals(cuenta.getEstatus()))
                 .collect(Collectors.toList());
 
-        // Procesar cuentas que vencen HOY (notificaciones internas)
-        cuentasVencenHoy.forEach(cuenta -> {
-            String mensaje = String.format("Cuenta por pagar vence hoy: %s, Cuenta: %s, Fecha: %s",
-                    cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
-            notificarAdministradores("CUENTA_PAGAR", mensaje);
-        });
-
-        // Procesar cuentas que vencen MAÑANA (notificaciones internas)
-        cuentasVencenManana.forEach(cuenta -> {
-            String mensaje = String.format("Cuenta por pagar vence mañana: %s, Cuenta: %s, Fecha: %s",
-                    cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
-            notificarAdministradores("CUENTA_PAGAR", mensaje);
-        });
-
-        // Enviar correos consolidados SOLO si no se han enviado hoy
         if (!cuentasVencenHoy.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenHoy, "HOY", hoy);
+            cuentasVencenHoy.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por pagar vence hoy: %s, Cuenta: %s, Fecha: %s",
+                        cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+                notificarAdministradores("CUENTA_PAGAR", mensaje);
+            });
+
+            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_PAGAR_HOY", hoy)) {
+                enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenHoy, "HOY", hoy);
+            } else {
+                logger.info("Saltando envío de correo de cuentas por pagar (HOY) - Ya enviado");
+            }
         }
 
         if (!cuentasVencenManana.isEmpty()) {
-            enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenManana, "MAÑANA", manana);
+            cuentasVencenManana.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por pagar vence mañana: %s, Cuenta: %s, Fecha: %s",
+                        cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+                notificarAdministradores("CUENTA_PAGAR", mensaje);
+            });
+
+            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_PAGAR_MANANA", manana)) {
+                enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenManana, "MAÑANA", manana);
+            } else {
+                logger.info("Saltando envío de correo de cuentas por pagar (MAÑANA) - Ya enviado");
+            }
         }
     }
 
@@ -327,24 +336,24 @@ public class NotificacionService {
 
             String asunto = "Recordatorio: Cuentas por Cobrar - Vencen " + cuandoVence;
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas, cuandoVence);
+            String tipoCorreo = "CUENTAS_COBRAR_" + cuandoVence;
 
             for (Usuario admin : adminsYGestores) {
-                if (!existeCorreoConsolidadoHoy(admin.getId(), "Cuentas por Cobrar", fechaVencimiento)) {
-                    try {
-                        emailService.enviarCorreo(
-                                admin.getCorreoElectronico(),
-                                asunto,
-                                cuerpo,
-                                null,
-                                null
-                        );
-                        Thread.sleep(1000);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        logger.error("Envío de correo interrumpido: {}", e.getMessage());
-                    }
+                try {
+                    emailService.enviarCorreo(
+                            admin.getCorreoElectronico(),
+                            asunto,
+                            cuerpo,
+                            null,
+                            null,
+                            tipoCorreo
+                    );
+                    Thread.sleep(1000);
                     logger.info("Correo consolidado de cuentas por cobrar (vencen {}, fecha {}) enviado a: {}",
                             cuandoVence, fechaVencimiento, admin.getCorreoElectronico());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.error("Envío de correo interrumpido: {}", e.getMessage());
                 }
             }
         } catch (Exception e) {
@@ -362,63 +371,28 @@ public class NotificacionService {
 
             String asunto = "Recordatorio: Cuentas por Pagar - Vencen " + cuandoVence;
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas, cuandoVence);
+            String tipoCorreo = "CUENTAS_PAGAR_" + cuandoVence;
 
             for (Usuario admin : adminsYGestores) {
-                // Verificar si ya se envió correo HOY para esta fecha específica
-                if (!existeCorreoConsolidadoHoy(admin.getId(), "Cuentas por Pagar", fechaVencimiento)) {
+                try {
                     emailService.enviarCorreo(
                             admin.getCorreoElectronico(),
                             asunto,
                             cuerpo,
                             null,
-                            null
+                            null,
+                            tipoCorreo
                     );
                     Thread.sleep(1000);
                     logger.info("Correo consolidado de cuentas por pagar (vencen {}, fecha {}) enviado a: {}",
                             cuandoVence, fechaVencimiento, admin.getCorreoElectronico());
-                } else {
-                    logger.info("Correo consolidado de cuentas por pagar ya enviado hoy para {} a: {}",
-                            fechaVencimiento, admin.getCorreoElectronico());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.error("Envío de correo interrumpido: {}", e.getMessage());
                 }
             }
         } catch (Exception e) {
             logger.error("Error al enviar correo consolidado de cuentas por pagar: {}", e.getMessage());
-        }
-    }
-
-    private boolean existeCorreoConsolidadoHoy(Integer adminId, String tipoCuenta, LocalDate fechaVencimiento) {
-        try {
-            Usuario admin = usuarioRepository.findById(adminId).orElse(null);
-            if (admin == null || admin.getCorreoElectronico() == null) {
-                return false;
-            }
-
-            String correoAdmin = admin.getCorreoElectronico();
-
-            LocalDate hoy = LocalDate.now(ZONE_ID);
-            ZonedDateTime inicioDiaHoy = hoy.atStartOfDay(ZONE_ID);
-
-            String asuntoConsolidado = "Recordatorio: " + tipoCuenta;
-
-            List<EmailRecord> correosHoy = emailRecordRepository
-                    .findByDestinatarioContainingAndAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
-                            correoAdmin,
-                            asuntoConsolidado,
-                            inicioDiaHoy
-                    );
-
-            for (EmailRecord correo : correosHoy) {
-                if (correo.getCuerpo() != null && correo.getCuerpo().contains(fechaVencimiento.toString())) {
-                    logger.debug("Correo ya enviado hoy para fecha de vencimiento: {}", fechaVencimiento);
-                    return true;
-                }
-            }
-
-            return false;
-
-        } catch (Exception e) {
-            logger.error("Error al verificar correo consolidado de hoy: {}", e.getMessage());
-            return false;
         }
     }
 
@@ -726,7 +700,7 @@ public class NotificacionService {
     }
 
     @Scheduled(cron = "0 0 */12 * * *")
-    @Transactional
+    @Transactional(timeout = 120)
     public void limpiarNotificacionesLeidas() {
         logger.info("Limpieza programada de notificaciones ejecutada");
         try {
@@ -795,10 +769,17 @@ public class NotificacionService {
     }
 
     @Scheduled(cron = "0 0 9 * * MON")
-    @Transactional
+    @Transactional(timeout = 300)
     public void verificarExpiracionEquipos() {
         logger.info("Iniciando verificación semanal de expiración de equipos (Lunes 9:00 AM)");
         try {
+            LocalDate lunesEstaSemana = LocalDate.now(ZONE_ID)
+                    .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+
+            if (seEnvioAlertaEquiposEstaSemana(lunesEstaSemana)) {
+                logger.info("Alerta de equipos ya enviada esta semana - SALTANDO");
+                return;
+            }
             List<Equipo> equiposProximosAExpirar = equipoService.obtenerEquiposProximosAExpirar();
 
             if (!equiposProximosAExpirar.isEmpty()) {
@@ -830,12 +811,14 @@ public class NotificacionService {
 
             for (Usuario admin : adminsYGestores) {
                 try {
+                    String tipoCorreo = "ALERTA_EQUIPOS_SEMANAL";
                     emailService.enviarCorreo(
                             admin.getCorreoElectronico(),
                             asunto,
                             cuerpo,
                             null,
-                            null
+                            null,
+                            tipoCorreo
                     );
                     Thread.sleep(1000);
                     logger.info("Alerta de expiración enviada a: {}", admin.getCorreoElectronico());
@@ -1090,6 +1073,33 @@ public class NotificacionService {
 
         } catch (Exception e) {
             logger.error("Error al verificar si se envió alerta de equipos: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean yaSeEnvioCorreoConsolidadoHoy(String tipoCorreo, LocalDate fechaVencimiento) {
+        try {
+            LocalDate hoy = LocalDate.now(ZONE_ID);
+            ZonedDateTime inicioDiaHoy = hoy.atStartOfDay(ZONE_ID);
+
+            List<EmailRecord> correosHoy = emailRecordRepository.findAll().stream()
+                    .filter(email -> email.getTipoCorreoConsolidado() != null)
+                    .filter(email -> email.getTipoCorreoConsolidado().equals(tipoCorreo))
+                    .filter(email -> email.isExito())
+                    .filter(email -> email.getFechaEnvio() != null && email.getFechaEnvio().isAfter(inicioDiaHoy))
+                    .filter(email -> email.getCuerpo() != null && email.getCuerpo().contains(fechaVencimiento.toString()))
+                    .collect(Collectors.toList());
+
+            boolean yaEnviado = !correosHoy.isEmpty();
+
+            if (yaEnviado) {
+                logger.info("Correo consolidado de {} para fecha {} ya fue enviado hoy", tipoCorreo, fechaVencimiento);
+            }
+
+            return yaEnviado;
+
+        } catch (Exception e) {
+            logger.error("Error al verificar correo consolidado: {}", e.getMessage());
             return false;
         }
     }

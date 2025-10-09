@@ -333,14 +333,18 @@ public class CotizacionService {
     }
 
     private Image cargarMembrete() throws Exception {
+        InputStream inputStream = null;
         try {
-            InputStream inputStream = getClass().getResourceAsStream("/static/images/membrete.png");
+            inputStream = getClass().getResourceAsStream("/static/images/membrete.png");
             if (inputStream == null) {
                 throw new Exception("No se pudo encontrar el archivo de membrete");
             }
 
             byte[] imageBytes = inputStream.readAllBytes();
+            inputStream.close();
+
             Image membrete = Image.getInstance(imageBytes);
+            imageBytes = null; // Liberar referencia
 
             membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
 
@@ -352,6 +356,12 @@ public class CotizacionService {
         } catch (Exception e) {
             logger.warn("No se pudo cargar el membrete: {}", e.getMessage());
             return null;
+        } finally {
+            if (inputStream != null) {
+                try {
+                    inputStream.close();
+                } catch (Exception ignored) {}
+            }
         }
     }
 
@@ -362,57 +372,94 @@ public class CotizacionService {
         Cotizacion cotizacion = cotizacionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + id));
 
-        // Generar el PDF de la cotización
-        ByteArrayResource cotizacionPDF = generarPDFCotizacion(id);
-
-        // Si tiene archivos adicionales y se solicita incluirlos, combinar PDFs
-        if (incluirArchivos && (cotizacion.getNotasComercialesContenido() != null || cotizacion.getFichaTecnicaContenido() != null)) {
-            return combinarPDFs(cotizacionPDF, cotizacion.getNotasComercialesContenido(), cotizacion.getFichaTecnicaContenido());
+        if (!incluirArchivos || (cotizacion.getNotasComercialesContenido() == null && cotizacion.getFichaTecnicaContenido() == null)) {
+            return generarPDFCotizacion(id);
         }
 
-        return cotizacionPDF;
+        return combinarPDFsOptimizado(id, cotizacion);
     }
 
-    private ByteArrayResource combinarPDFs(ByteArrayResource cotizacionPDF, byte[] notasComerciales, byte[] fichaTecnica) throws Exception {
+    private ByteArrayResource combinarPDFsOptimizado(Integer id, Cotizacion cotizacion) throws Exception {
+        ByteArrayOutputStream combined = new ByteArrayOutputStream();
+        PdfCopy copy = null;
+        com.lowagie.text.Document document = null;
+
         try {
-            ByteArrayOutputStream combined = new ByteArrayOutputStream();
+            java.util.ArrayList<PdfReader> readers = new java.util.ArrayList<>();
 
-            // Usar PdfCopy en lugar de Document para evitar márgenes
+            // 1. Generar y agregar el PDF principal
+            ByteArrayResource cotizacionPDF = generarPDFCotizacion(id);
             PdfReader mainReader = new PdfReader(cotizacionPDF.getByteArray());
-            com.lowagie.text.Document document = new com.lowagie.text.Document(mainReader.getPageSizeWithRotation(1));
-            PdfCopy copy = new PdfCopy(document, combined);
+            readers.add(mainReader);
 
+            document = new com.lowagie.text.Document(mainReader.getPageSizeWithRotation(1));
+            copy = new PdfCopy(document, combined);
             document.open();
 
-            // 1. Copiar páginas del PDF principal
+            // Copiar páginas del PDF principal
             for (int i = 1; i <= mainReader.getNumberOfPages(); i++) {
                 copy.addPage(copy.getImportedPage(mainReader, i));
-            }
-            mainReader.close();
 
-            // 2. Copiar páginas de Notas Comerciales
-            if (notasComerciales != null) {
-                PdfReader notasReader = new PdfReader(notasComerciales);
+                // Liberar memoria cada 5 páginas
+                if (i % 5 == 0) {
+                    copy.freeReader(mainReader);
+                    System.gc();
+                }
+            }
+
+            // 2. Agregar Notas Comerciales si existen
+            if (cotizacion.getNotasComercialesContenido() != null) {
+                PdfReader notasReader = new PdfReader(cotizacion.getNotasComercialesContenido());
+                readers.add(notasReader);
+
                 for (int i = 1; i <= notasReader.getNumberOfPages(); i++) {
                     copy.addPage(copy.getImportedPage(notasReader, i));
+
+                    if (i % 5 == 0) {
+                        copy.freeReader(notasReader);
+                        System.gc();
+                    }
                 }
-                notasReader.close();
             }
 
-            // 3. Copiar páginas de Ficha Técnica
-            if (fichaTecnica != null) {
-                PdfReader fichaReader = new PdfReader(fichaTecnica);
+            // 3. Agregar Ficha Técnica si existe
+            if (cotizacion.getFichaTecnicaContenido() != null) {
+                PdfReader fichaReader = new PdfReader(cotizacion.getFichaTecnicaContenido());
+                readers.add(fichaReader);
+
                 for (int i = 1; i <= fichaReader.getNumberOfPages(); i++) {
                     copy.addPage(copy.getImportedPage(fichaReader, i));
+
+                    if (i % 5 == 0) {
+                        copy.freeReader(fichaReader);
+                        System.gc();
+                    }
                 }
-                fichaReader.close();
             }
 
             document.close();
-            return new ByteArrayResource(combined.toByteArray());
+
+            // Cerrar todos los readers
+            for (PdfReader reader : readers) {
+                reader.close();
+            }
+
+            byte[] result = combined.toByteArray();
+            combined.close();
+
+            return new ByteArrayResource(result);
 
         } catch (Exception e) {
             logger.error("Error combinando PDFs: {}", e.getMessage());
+
+            // Cleanup en caso de error
+            if (document != null && document.isOpen()) {
+                document.close();
+            }
+            if (combined != null) {
+                combined.close();
+            }
+
             throw new Exception("Error al combinar los archivos PDF", e);
         }
     }
@@ -424,11 +471,14 @@ public class CotizacionService {
         Cotizacion cotizacion = cotizacionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + id));
 
-        Document document = new Document(PageSize.A4, 40, 40, 90, 50);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        PdfWriter writer = PdfWriter.getInstance(document, out);
+        Document document = null;
+        PdfWriter writer = null;
 
-        document.open();
+        try {
+            document = new Document(PageSize.A4, 40, 40, 90, 50);
+            writer = PdfWriter.getInstance(document, out);
+            document.open();
 
         try {
             Image membrete = cargarMembrete();
@@ -633,10 +683,30 @@ public class CotizacionService {
         importeLetraContentCell.setBorderColor(azulCorporativo);
         importeLetraTable.addCell(importeLetraContentCell);
 
-        document.add(importeLetraTable);
+            document.add(importeLetraTable);
 
-        document.close();
-        return new ByteArrayResource(out.toByteArray());
+            document.close();
+
+            byte[] pdfBytes = out.toByteArray();
+            out.close();
+
+            writer = null;
+            document = null;
+
+            return new ByteArrayResource(pdfBytes);
+
+        } catch (Exception e) {
+            logger.error("Error generando PDF: {}", e.getMessage());
+
+            if (document != null && document.isOpen()) {
+                document.close();
+            }
+            if (out != null) {
+                out.close();
+            }
+
+            throw e;
+        }
     }
 
     private PdfPCell createStyledTableCell(String text, int alignment, Font font, Color backgroundColor) {
@@ -745,33 +815,37 @@ public class CotizacionService {
         logger.info("Archivos adicionales guardados para cotización ID: {}", cotizacionId);
     }
 
-    // Actualizar el método convertImageToPdf en CotizacionService
     private byte[] convertImageToPdf(byte[] imageBytes, String originalFileName) throws Exception {
-        try {
-            BufferedImage image = ImageIO.read(new java.io.ByteArrayInputStream(imageBytes));
+        ByteArrayOutputStream pdfOut = null;
+        Document document = null;
 
-            ByteArrayOutputStream pdfOut = new ByteArrayOutputStream();
-            Document document = new Document(PageSize.A4, 0, 0, 0, 0);
+        try {
+            pdfOut = new ByteArrayOutputStream();
+            document = new Document(PageSize.A4, 0, 0, 0, 0);
             PdfWriter.getInstance(document, pdfOut);
             document.open();
 
             Image pdfImage = Image.getInstance(imageBytes);
-
-            float pageWidth = PageSize.A4.getWidth();
-            float pageHeight = PageSize.A4.getHeight();
-
             pdfImage.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
-
             pdfImage.setAbsolutePosition(0, 0);
-
 
             document.add(pdfImage);
             document.close();
 
-            return pdfOut.toByteArray();
+            byte[] result = pdfOut.toByteArray();
+            pdfOut.close();
+
+            return result;
         } catch (Exception e) {
             logger.error("Error convirtiendo imagen {} a PDF: {}", originalFileName, e.getMessage());
+
+            if (document != null && document.isOpen()) {
+                document.close();
+            }
+            if (pdfOut != null) {
+                pdfOut.close();
+            }
+
             throw new Exception("Error al convertir imagen a PDF", e);
         }
-    }
-}
+    }}

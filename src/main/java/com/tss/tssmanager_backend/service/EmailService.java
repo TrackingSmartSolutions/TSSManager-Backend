@@ -45,6 +45,10 @@ public class EmailService {
     }
 
     public EmailRecord enviarCorreo(String destinatario, String asunto, String cuerpo, List<String> rutasArchivosAdjuntos, Integer tratoId) {
+        return enviarCorreo(destinatario, asunto, cuerpo, rutasArchivosAdjuntos, tratoId, null);
+    }
+
+    public EmailRecord enviarCorreo(String destinatario, String asunto, String cuerpo, List<String> rutasArchivosAdjuntos, Integer tratoId, String tipoCorreoConsolidado) {
         boolean exito = false;
         String resendEmailId = null;
 
@@ -65,7 +69,6 @@ public class EmailService {
                     .subject(asunto)
                     .html(procesarImagenesEmbebidas(cuerpo));
 
-            // Manejo de adjuntos
             List<com.resend.services.emails.model.Attachment> attachments = new ArrayList<>();
             if (rutasArchivosAdjuntos != null && !rutasArchivosAdjuntos.isEmpty()) {
                 if (rutasArchivosAdjuntos.size() > 3) {
@@ -86,7 +89,6 @@ public class EmailService {
                             fileName = filePath.getFileName().toString();
                         }
 
-                        // Procesar inmediatamente y liberar memoria
                         base64Content = Base64.getEncoder().encodeToString(fileContent);
                         fileContent = null;
                         System.gc();
@@ -125,9 +127,11 @@ public class EmailService {
         emailRecord.setAsunto(asunto);
         emailRecord.setCuerpo(cuerpo);
         emailRecord.setArchivosAdjuntos(rutasArchivosAdjuntos != null ? String.join(",", rutasArchivosAdjuntos) : null);
-        emailRecord.setFechaEnvio(ZonedDateTime.now(ZoneId.of("America/Mexico_City"))); emailRecord.setTratoId(tratoId);
+        emailRecord.setFechaEnvio(ZonedDateTime.now(ZoneId.of("America/Mexico_City")));
+        emailRecord.setTratoId(tratoId);
         emailRecord.setExito(exito);
         emailRecord.setResendEmailId(resendEmailId);
+        emailRecord.setTipoCorreoConsolidado(tipoCorreoConsolidado);
 
         return emailRecordRepository.save(emailRecord);
     }

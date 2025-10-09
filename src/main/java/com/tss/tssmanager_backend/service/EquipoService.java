@@ -86,7 +86,7 @@ public class EquipoService {
 
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
-            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
 
             if (equipo.getCreditosUsados() != null &&
                     equipo.getCreditosUsados() > 0 &&
@@ -166,7 +166,7 @@ public class EquipoService {
         // Manejar cambio de estatus
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
-            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
 
             // Verificar si debe registrar cargo
             if (estatusAnterior != EstatusEquipoEnum.ACTIVO &&
@@ -288,11 +288,11 @@ public class EquipoService {
         repository.delete(equipo);
     }
 
-    private Date calculateExpirationDate(TipoActivacionEquipoEnum tipoActivacion) {
-        LocalDate today = LocalDate.now();
+    private Date calculateExpirationDate(TipoActivacionEquipoEnum tipoActivacion, Date fechaBase) {
+        LocalDate baseDate = fechaBase != null ? fechaBase.toLocalDate() : LocalDate.now();
         return tipoActivacion == TipoActivacionEquipoEnum.ANUAL
-                ? Date.valueOf(today.plusYears(1))
-                : Date.valueOf(today.plusYears(10));
+                ? Date.valueOf(baseDate.plusYears(1))
+                : Date.valueOf(baseDate.plusYears(10));
     }
 
     @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
@@ -301,7 +301,7 @@ public class EquipoService {
         if (equipo.getEstatus() == EstatusEquipoEnum.INACTIVO) {
             equipo.setEstatus(EstatusEquipoEnum.ACTIVO);
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
-            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
             repository.save(equipo);
         }
     }
@@ -312,7 +312,15 @@ public class EquipoService {
         if (needsRenewal(equipo)) {
             equipo.setEstatus(EstatusEquipoEnum.ACTIVO);
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
-            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+
+            Date fechaBase;
+            if (equipo.getFechaExpiracion() != null && !isExpired(equipo)) {
+                fechaBase = equipo.getFechaExpiracion();
+            } else {
+                fechaBase = null;
+            }
+
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), fechaBase));
             repository.save(equipo);
         }
     }
@@ -515,7 +523,7 @@ public class EquipoService {
         if (equipo.getEstatus() == EstatusEquipoEnum.INACTIVO) {
             equipo.setEstatus(EstatusEquipoEnum.ACTIVO);
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
-            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
             equipo.setCreditosUsados(creditosUsados != null ? creditosUsados : 0);
             repository.save(equipo);
 
@@ -547,23 +555,28 @@ public class EquipoService {
         if (needsRenewal(equipo)) {
             equipo.setEstatus(EstatusEquipoEnum.ACTIVO);
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
-            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion()));
+
+            Date fechaBase;
+            if (equipo.getFechaExpiracion() != null && !isExpired(equipo)) {
+                fechaBase = equipo.getFechaExpiracion();
+            } else {
+                fechaBase = null;
+            }
+
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), fechaBase));
             equipo.setCreditosUsados(creditosUsados != null ? creditosUsados : 0);
             repository.save(equipo);
 
-            // Registrar cargo en créditos plataforma solo para TRACK_SOLID y WHATSGPS
             if (creditosUsados != null && creditosUsados > 0 &&
                     (equipo.getPlataforma() != null &&
                             (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
 
                 ConceptoCreditoEnum concepto;
-                // Para WhatsGPS, distinguir entre anual y vitalicia
                 if (equipo.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
                     concepto = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL
                             ? ConceptoCreditoEnum.RENOVACION_ANUAL
                             : ConceptoCreditoEnum.RENOVACION_VITALICIA;
                 } else {
-                    // Para Track Solid
                     concepto = equipo.getTipoActivacion() == TipoActivacionEquipoEnum.ANUAL
                             ? ConceptoCreditoEnum.RENOVACION_ANUAL
                             : ConceptoCreditoEnum.RENOVACION_VITALICIA;

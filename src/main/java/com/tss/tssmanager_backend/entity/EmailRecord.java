@@ -3,7 +3,6 @@ package com.tss.tssmanager_backend.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
-import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 
 @Entity
@@ -38,4 +37,6 @@ public class EmailRecord {
     @Column(name = "resend_email_id")
     private String resendEmailId;
 
+    @Column(name = "tipo_correo_consolidado")
+    private String tipoCorreoConsolidado;
 }

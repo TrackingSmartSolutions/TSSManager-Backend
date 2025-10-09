@@ -76,25 +76,37 @@ public class CotizacionController {
     @GetMapping("/{id}/download-pdf")
     public ResponseEntity<ByteArrayResource> descargarCotizacionPDF(
             @PathVariable Integer id,
-            @RequestParam(value = "incluirArchivos", defaultValue = "false") boolean incluirArchivos) throws Exception {
+            @RequestParam(value = "incluirArchivos", defaultValue = "false") boolean incluirArchivos) {
 
-        logger.info("Solicitud para descargar PDF de cotización con ID: {}", id);
-        ByteArrayResource resource = cotizacionService.generateCotizacionPDF(id, incluirArchivos);
-        Cotizacion cotizacion = cotizacionService.findById(id);
+        try {
+            logger.info("Solicitud para descargar PDF de cotización con ID: {} (incluirArchivos: {})", id, incluirArchivos);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("Cache-Control", "no-cache, no-store, must-revalidate");
-        headers.add("Pragma", "no-cache");
-        headers.add("Expires", "0");
-        String fileName = "COTIZACION_" + cotizacion.getId() + "_" +
-                cotizacion.getFechaCreacion().toString().replace(":", "-") + ".pdf";
-        headers.setContentDispositionFormData("attachment", fileName);
-        headers.setContentType(MediaType.APPLICATION_PDF);
+            ByteArrayResource resource = cotizacionService.generateCotizacionPDF(id, incluirArchivos);
+            Cotizacion cotizacion = cotizacionService.findById(id);
 
-        return ResponseEntity.ok()
-                .headers(headers)
-                .contentLength(resource.contentLength())
-                .body(resource);
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Cache-Control", "no-cache, no-store, must-revalidate");
+            headers.add("Pragma", "no-cache");
+            headers.add("Expires", "0");
+
+            String fileName = "COTIZACION_" + cotizacion.getId() + "_" +
+                    cotizacion.getFechaCreacion().toString().replace(":", "-") + ".pdf";
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentType(MediaType.APPLICATION_PDF);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .contentLength(resource.contentLength())
+                    .body(resource);
+
+        } catch (OutOfMemoryError e) {
+            logger.error("Memoria insuficiente al generar PDF para cotización ID {}: {}", id, e.getMessage());
+            return ResponseEntity.status(507)
+                    .body(null);
+        } catch (Exception e) {
+            logger.error("Error al descargar PDF de cotización ID {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(500).body(null);
+        }
     }
 
     @PostMapping("/{id}/upload-archivos")
