@@ -63,7 +63,7 @@ public class NotificacionService {
         logger.info("Inicializando verificación de notificaciones al arrancar la aplicación");
         try {
             Thread.sleep(2000);
-            verificarNotificacionesProgramadas();
+            verificarActividadesProximas();
             Thread.sleep(1000);
             limpiarNotificacionesLeidas();
             Thread.sleep(1000);
@@ -190,7 +190,6 @@ public class NotificacionService {
     @Transactional(timeout = 300)
     public void verificarNotificacionesProgramadas() {
         logger.info("Verificación programada de respaldo ejecutada");
-        generarNotificacionCuentasYSims();
         verificarActividadesProximas();
     }
 
@@ -338,6 +337,11 @@ public class NotificacionService {
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas, cuandoVence);
             String tipoCorreo = "CUENTAS_COBRAR_" + cuandoVence;
 
+            if (yaSeEnvioCorreoConsolidadoHoy(tipoCorreo, fechaVencimiento)) {
+                logger.warn("ABORTANDO envío de {} - Ya enviado hoy", tipoCorreo);
+                return;
+            }
+
             for (Usuario admin : adminsYGestores) {
                 try {
                     emailService.enviarCorreo(
@@ -373,6 +377,10 @@ public class NotificacionService {
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas, cuandoVence);
             String tipoCorreo = "CUENTAS_PAGAR_" + cuandoVence;
 
+            if (yaSeEnvioCorreoConsolidadoHoy(tipoCorreo, fechaVencimiento)) {
+                logger.warn("ABORTANDO envío de {} - Ya enviado hoy", tipoCorreo);
+                return;
+            }
             for (Usuario admin : adminsYGestores) {
                 try {
                     emailService.enviarCorreo(
@@ -1079,21 +1087,22 @@ public class NotificacionService {
 
     private boolean yaSeEnvioCorreoConsolidadoHoy(String tipoCorreo, LocalDate fechaVencimiento) {
         try {
-            LocalDate hoy = LocalDate.now(ZONE_ID);
-            ZonedDateTime inicioDiaHoy = hoy.atStartOfDay(ZONE_ID);
+            ZonedDateTime inicioDelDia = LocalDate.now(ZONE_ID).atStartOfDay(ZONE_ID);
 
             List<EmailRecord> correosHoy = emailRecordRepository.findAll().stream()
-                    .filter(email -> email.getTipoCorreoConsolidado() != null)
-                    .filter(email -> email.getTipoCorreoConsolidado().equals(tipoCorreo))
+                    .filter(email -> tipoCorreo.equals(email.getTipoCorreoConsolidado()))
                     .filter(email -> email.isExito())
-                    .filter(email -> email.getFechaEnvio() != null && email.getFechaEnvio().isAfter(inicioDiaHoy))
-                    .filter(email -> email.getCuerpo() != null && email.getCuerpo().contains(fechaVencimiento.toString()))
+                    .filter(email -> email.getFechaEnvio() != null &&
+                            email.getFechaEnvio().isAfter(inicioDelDia))
                     .collect(Collectors.toList());
 
             boolean yaEnviado = !correosHoy.isEmpty();
 
             if (yaEnviado) {
-                logger.info("Correo consolidado de {} para fecha {} ya fue enviado hoy", tipoCorreo, fechaVencimiento);
+                logger.info("✓ Correo {} YA ENVIADO HOY. Total encontrados: {}",
+                        tipoCorreo, correosHoy.size());
+            } else {
+                logger.info("✗ Correo {} NO enviado hoy. Procederá a enviar.", tipoCorreo);
             }
 
             return yaEnviado;
