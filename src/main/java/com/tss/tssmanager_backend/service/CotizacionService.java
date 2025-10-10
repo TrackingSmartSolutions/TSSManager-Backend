@@ -5,9 +5,8 @@ import com.lowagie.text.Font;
 import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.*;
 import com.lowagie.text.Image;
-import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
 
+import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import com.tss.tssmanager_backend.dto.CotizacionDTO;
 import com.tss.tssmanager_backend.dto.UnidadCotizacionDTO;
@@ -28,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
 import java.awt.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -57,6 +57,9 @@ public class CotizacionService {
 
     @Autowired
     private CuentaPorCobrarRepository cuentaPorCobrarRepository;
+
+    private byte[] membreteCache = null;
+    private final Object membreteLock = new Object();
 
     private static final String[] unidades = {
             "", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
@@ -333,34 +336,90 @@ public class CotizacionService {
     }
 
     private Image cargarMembrete() throws Exception {
+        synchronized (membreteLock) {
+            if (membreteCache == null) {
+                membreteCache = procesarMembrete();
+            }
+        }
+
+        Image membrete = Image.getInstance(membreteCache);
+        membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+
+        float xPos = (PageSize.A4.getWidth() - membrete.getScaledWidth()) / 2;
+        float yPos = (PageSize.A4.getHeight() - membrete.getScaledHeight()) / 2;
+        membrete.setAbsolutePosition(xPos, yPos);
+
+        return membrete;
+    }
+
+    private byte[] procesarMembrete() throws Exception {
         InputStream inputStream = null;
+        BufferedImage bufferedImage = null;
+
         try {
             inputStream = getClass().getResourceAsStream("/static/images/membrete.png");
             if (inputStream == null) {
                 throw new Exception("No se pudo encontrar el archivo de membrete");
             }
 
-            byte[] imageBytes = inputStream.readAllBytes();
+            bufferedImage = ImageIO.read(inputStream);
             inputStream.close();
 
-            Image membrete = Image.getInstance(imageBytes);
-            imageBytes = null; // Liberar referencia
+            int targetWidth = (int) PageSize.A4.getWidth() * 3;
+            int targetHeight = (int) PageSize.A4.getHeight() * 3;
 
-            membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+            if (bufferedImage.getWidth() > targetWidth || bufferedImage.getHeight() > targetHeight) {
+                BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+                java.awt.Graphics2D g = resized.createGraphics();
 
-            float xPos = (PageSize.A4.getWidth() - membrete.getScaledWidth()) / 2;
-            float yPos = (PageSize.A4.getHeight() - membrete.getScaledHeight()) / 2;
-            membrete.setAbsolutePosition(xPos, yPos);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                        java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                        java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_COLOR_RENDERING,
+                        java.awt.RenderingHints.VALUE_COLOR_RENDER_QUALITY);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
 
-            return membrete;
+                g.drawImage(bufferedImage, 0, 0, targetWidth, targetHeight, null);
+                g.dispose();
+
+                bufferedImage = resized;
+            }
+
+            ByteArrayOutputStream compressedOut = new ByteArrayOutputStream();
+            javax.imageio.ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
+            javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
+
+            if (param.canWriteCompressed()) {
+                param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+                param.setCompressionQuality(0.95f);
+            }
+
+            writer.setOutput(ImageIO.createImageOutputStream(compressedOut));
+            writer.write(null, new javax.imageio.IIOImage(bufferedImage, null, null), param);
+            writer.dispose();
+
+            byte[] result = compressedOut.toByteArray();
+            compressedOut.close();
+
+            bufferedImage.flush();
+            bufferedImage = null;
+            System.gc();
+
+            logger.info("Membrete procesado y cacheado: {} bytes", result.length);
+            return result;
+
         } catch (Exception e) {
-            logger.warn("No se pudo cargar el membrete: {}", e.getMessage());
-            return null;
+            logger.error("Error procesando membrete: {}", e.getMessage());
+            throw e;
+
         } finally {
             if (inputStream != null) {
-                try {
-                    inputStream.close();
-                } catch (Exception ignored) {}
+                try { inputStream.close(); } catch (Exception ignored) {}
+            }
+            if (bufferedImage != null) {
+                bufferedImage.flush();
             }
         }
     }
@@ -384,83 +443,139 @@ public class CotizacionService {
         PdfCopy copy = null;
         com.lowagie.text.Document document = null;
 
-        try {
-            java.util.ArrayList<PdfReader> readers = new java.util.ArrayList<>();
+        java.util.ArrayList<PdfReader> readers = new java.util.ArrayList<>();
 
-            // 1. Generar y agregar el PDF principal
+        try {
+            // 1. Generar PDF principal
             ByteArrayResource cotizacionPDF = generarPDFCotizacion(id);
-            PdfReader mainReader = new PdfReader(cotizacionPDF.getByteArray());
+            byte[] mainPdfBytes = cotizacionPDF.getByteArray();
+
+            PdfReader mainReader = new PdfReader(mainPdfBytes);
             readers.add(mainReader);
 
             document = new com.lowagie.text.Document(mainReader.getPageSizeWithRotation(1));
             copy = new PdfCopy(document, combined);
             document.open();
 
-            // Copiar páginas del PDF principal
-            for (int i = 1; i <= mainReader.getNumberOfPages(); i++) {
-                copy.addPage(copy.getImportedPage(mainReader, i));
+            int mainPages = mainReader.getNumberOfPages();
+            for (int i = 1; i <= mainPages; i++) {
+                PdfImportedPage page = copy.getImportedPage(mainReader, i);
+                copy.addPage(page);
+                page = null;
 
-                // Liberar memoria cada 5 páginas
-                if (i % 5 == 0) {
+                if (i % 2 == 0) {
                     copy.freeReader(mainReader);
                     System.gc();
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException ignored) {}
                 }
             }
 
-            // 2. Agregar Notas Comerciales si existen
+            mainPdfBytes = null;
+            cotizacionPDF = null;
+            copy.freeReader(mainReader);
+            System.gc();
+
+            // 2. Procesar Notas Comerciales
             if (cotizacion.getNotasComercialesContenido() != null) {
-                PdfReader notasReader = new PdfReader(cotizacion.getNotasComercialesContenido());
+                byte[] notasBytes = cotizacion.getNotasComercialesContenido();
+                PdfReader notasReader = new PdfReader(notasBytes);
                 readers.add(notasReader);
 
-                for (int i = 1; i <= notasReader.getNumberOfPages(); i++) {
-                    copy.addPage(copy.getImportedPage(notasReader, i));
+                int notasPages = notasReader.getNumberOfPages();
+                for (int i = 1; i <= notasPages; i++) {
+                    PdfImportedPage page = copy.getImportedPage(notasReader, i);
+                    copy.addPage(page);
+                    page = null;
 
-                    if (i % 5 == 0) {
+                    if (i % 2 == 0) {
                         copy.freeReader(notasReader);
                         System.gc();
+                        try {
+                            Thread.sleep(10);
+                        } catch (InterruptedException ignored) {}
                     }
                 }
+
+                notasBytes = null;
+                copy.freeReader(notasReader);
+                System.gc();
             }
 
-            // 3. Agregar Ficha Técnica si existe
+            // 3. Procesar Ficha Técnica
             if (cotizacion.getFichaTecnicaContenido() != null) {
-                PdfReader fichaReader = new PdfReader(cotizacion.getFichaTecnicaContenido());
+                byte[] fichaBytes = cotizacion.getFichaTecnicaContenido();
+                PdfReader fichaReader = new PdfReader(fichaBytes);
                 readers.add(fichaReader);
 
-                for (int i = 1; i <= fichaReader.getNumberOfPages(); i++) {
-                    copy.addPage(copy.getImportedPage(fichaReader, i));
+                int fichaPages = fichaReader.getNumberOfPages();
+                for (int i = 1; i <= fichaPages; i++) {
+                    PdfImportedPage page = copy.getImportedPage(fichaReader, i);
+                    copy.addPage(page);
+                    page = null;
 
-                    if (i % 5 == 0) {
+                    if (i % 2 == 0) {
                         copy.freeReader(fichaReader);
                         System.gc();
+                        try {
+                            Thread.sleep(10);
+                        } catch (InterruptedException ignored) {}
                     }
                 }
+
+                fichaBytes = null;
+                copy.freeReader(fichaReader);
+                System.gc();
             }
 
             document.close();
+            copy.close();
 
-            // Cerrar todos los readers
             for (PdfReader reader : readers) {
-                reader.close();
+                if (reader != null) {
+                    reader.close();
+                }
             }
+            readers.clear();
+            readers = null;
 
             byte[] result = combined.toByteArray();
             combined.close();
 
+            document = null;
+            copy = null;
+            System.gc();
+
             return new ByteArrayResource(result);
+
+        } catch (OutOfMemoryError oom) {
+            logger.error("OutOfMemoryError en combinarPDFsOptimizado: {}", oom.getMessage());
+            throw new Exception("Memoria insuficiente para generar el PDF combinado", oom);
 
         } catch (Exception e) {
             logger.error("Error combinando PDFs: {}", e.getMessage());
-
-            // Cleanup en caso de error
-            if (document != null && document.isOpen()) {
-                document.close();
-            }
-            if (combined != null) {
-                combined.close();
-            }
-
             throw new Exception("Error al combinar los archivos PDF", e);
+
+        } finally {
+            try {
+                if (copy != null) {
+                    copy.close();
+                }
+                if (document != null && document.isOpen()) {
+                    document.close();
+                }
+                if (combined != null) {
+                    combined.close();
+                }
+                for (PdfReader reader : readers) {
+                    if (reader != null) {
+                        reader.close();
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            System.gc();
         }
     }
 
@@ -478,18 +593,26 @@ public class CotizacionService {
         try {
             document = new Document(PageSize.A4, 40, 40, 90, 50);
             writer = PdfWriter.getInstance(document, out);
+            writer.setCompressionLevel(9);
+            writer.setFullCompression();
             document.open();
 
-        try {
-            Image membrete = cargarMembrete();
-            if (membrete != null) {
-                PdfContentByte canvas = writer.getDirectContentUnder();
-                canvas.addImage(membrete);
-                logger.info("Membrete agregado exitosamente");
+            try {
+                Image membrete = cargarMembrete();
+                if (membrete != null) {
+                    PdfContentByte canvas = writer.getDirectContentUnder();
+
+                    canvas.saveState();
+                    canvas.addImage(membrete);
+                    canvas.restoreState();
+
+                    membrete = null;
+
+                    logger.info("Membrete agregado exitosamente");
+                }
+            } catch (Exception e) {
+                logger.warn("Error al agregar membrete: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            logger.warn("Error al agregar membrete: {}", e.getMessage());
-        }
 
         Color azulCorporativo = new Color(41, 84, 144);
         Color azulClaro = new Color(230, 240, 250);
@@ -775,7 +898,6 @@ public class CotizacionService {
             byte[] contenidoNotas;
 
             if ("image/png".equals(tipoNotas)) {
-                // Convertir PNG a PDF
                 contenidoNotas = convertImageToPdf(notasComerciales.getBytes(), notasComerciales.getOriginalFilename());
                 tipoNotas = "application/pdf";
                 cotizacion.setNotasComercialesNombre(notasComerciales.getOriginalFilename().replace(".png", ".pdf"));
@@ -818,34 +940,98 @@ public class CotizacionService {
     private byte[] convertImageToPdf(byte[] imageBytes, String originalFileName) throws Exception {
         ByteArrayOutputStream pdfOut = null;
         Document document = null;
+        BufferedImage bufferedImage = null;
 
         try {
+            bufferedImage = ImageIO.read(new java.io.ByteArrayInputStream(imageBytes));
+
+            int maxWidth = 2480;
+            int maxHeight = 3508;
+
+            if (bufferedImage.getWidth() > maxWidth || bufferedImage.getHeight() > maxHeight) {
+                double scale = Math.min(
+                        (double) maxWidth / bufferedImage.getWidth(),
+                        (double) maxHeight / bufferedImage.getHeight()
+                );
+
+                int newWidth = (int) (bufferedImage.getWidth() * scale);
+                int newHeight = (int) (bufferedImage.getHeight() * scale);
+
+                BufferedImage resized = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+                java.awt.Graphics2D g = resized.createGraphics();
+
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                        java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                        java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+
+                g.drawImage(bufferedImage, 0, 0, newWidth, newHeight, null);
+                g.dispose();
+
+                bufferedImage = resized;
+            }
+
+            ByteArrayOutputStream compressedImageOut = new ByteArrayOutputStream();
+            javax.imageio.ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
+            javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(0.90f);
+
+            writer.setOutput(ImageIO.createImageOutputStream(compressedImageOut));
+            writer.write(null, new javax.imageio.IIOImage(bufferedImage, null, null), param);
+            writer.dispose();
+
+            byte[] compressedImageBytes = compressedImageOut.toByteArray();
+            compressedImageOut.close();
+
             pdfOut = new ByteArrayOutputStream();
             document = new Document(PageSize.A4, 0, 0, 0, 0);
-            PdfWriter.getInstance(document, pdfOut);
+            PdfWriter pdfWriter = PdfWriter.getInstance(document, pdfOut);
+            pdfWriter.setCompressionLevel(9);
             document.open();
 
-            Image pdfImage = Image.getInstance(imageBytes);
-            pdfImage.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
-            pdfImage.setAbsolutePosition(0, 0);
+            Image pdfImage = Image.getInstance(compressedImageBytes);
+
+            float scaleWidth = PageSize.A4.getWidth() / pdfImage.getWidth();
+            float scaleHeight = PageSize.A4.getHeight() / pdfImage.getHeight();
+            float scale = Math.min(scaleWidth, scaleHeight);
+
+            pdfImage.scalePercent(scale * 100);
+
+            float x = (PageSize.A4.getWidth() - pdfImage.getScaledWidth()) / 2;
+            float y = (PageSize.A4.getHeight() - pdfImage.getScaledHeight()) / 2;
+            pdfImage.setAbsolutePosition(x, y);
 
             document.add(pdfImage);
             document.close();
 
             byte[] result = pdfOut.toByteArray();
+
             pdfOut.close();
+            compressedImageBytes = null;
+            bufferedImage = null;
+            System.gc();
 
             return result;
+
         } catch (Exception e) {
             logger.error("Error convirtiendo imagen {} a PDF: {}", originalFileName, e.getMessage());
+            throw new Exception("Error al convertir imagen a PDF", e);
 
+        } finally {
             if (document != null && document.isOpen()) {
                 document.close();
             }
             if (pdfOut != null) {
                 pdfOut.close();
             }
-
-            throw new Exception("Error al convertir imagen a PDF", e);
+            if (bufferedImage != null) {
+                bufferedImage.flush();
+                bufferedImage = null;
+            }
+            System.gc();
         }
-    }}
+    }
+    }

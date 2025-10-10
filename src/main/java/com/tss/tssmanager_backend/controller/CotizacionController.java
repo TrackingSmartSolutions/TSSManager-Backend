@@ -101,7 +101,9 @@ public class CotizacionController {
 
         } catch (OutOfMemoryError e) {
             logger.error("Memoria insuficiente al generar PDF para cotización ID {}: {}", id, e.getMessage());
+            System.gc();
             return ResponseEntity.status(507)
+                    .header("X-Error-Message", "Archivo demasiado grande. Intenta sin incluir archivos adicionales")
                     .body(null);
         } catch (Exception e) {
             logger.error("Error al descargar PDF de cotización ID {}: {}", id, e.getMessage(), e);

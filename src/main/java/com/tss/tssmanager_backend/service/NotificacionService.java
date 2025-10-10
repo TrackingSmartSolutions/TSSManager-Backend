@@ -193,7 +193,7 @@ public class NotificacionService {
         verificarActividadesProximas();
     }
 
-    @Scheduled(cron = "0 0 10 * * *") // A las 10:00 AM todos los días
+    @Scheduled(cron = "0 0 10 * * *")
     @Transactional(timeout = 300)
     public void verificarNotificacionesMatutina() {
         logger.info("Verificación matutina de las 10 AM ejecutada");
@@ -663,7 +663,6 @@ public class NotificacionService {
         return notificacionRepository.findByUsuarioIdOrderByFechaCreacionDesc(userId);
     }
 
-    // Crear un método separado para verificar y listar
     @Transactional
     public List<Notificacion> listarNotificacionesConVerificacion() {
         verificarNotificacionesProgramadas();
@@ -714,14 +713,12 @@ public class NotificacionService {
         try {
             Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
 
-            // Mejorar la consulta para mejor rendimiento
             List<Notificacion> notificacionesParaEliminar = notificacionRepository
                     .findByEstatusAndFechaLeidaBefore(EstatusNotificacionEnum.LEIDA, hace24Horas);
 
             if (!notificacionesParaEliminar.isEmpty()) {
                 logger.info("Encontradas {} notificaciones para eliminar", notificacionesParaEliminar.size());
 
-                // Log de algunas notificaciones para debugging
                 notificacionesParaEliminar.stream()
                         .limit(5)
                         .forEach(notif -> logger.debug("Eliminando notificación ID: {}, Fecha leída: {}",
@@ -734,16 +731,6 @@ public class NotificacionService {
             }
         } catch (Exception e) {
             logger.error("Error al limpiar notificaciones leídas: {}", e.getMessage(), e);
-        }
-    }
-
-    @Transactional
-    public void verificarNotificacionesSilenciosa() {
-        try {
-            generarNotificacionCuentasYSims();
-            verificarActividadesProximas();
-        } catch (Exception e) {
-            logger.error("Error en verificación silenciosa: {}", e.getMessage());
         }
     }
 
