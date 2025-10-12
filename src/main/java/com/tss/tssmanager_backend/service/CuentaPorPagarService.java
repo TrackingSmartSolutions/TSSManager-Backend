@@ -73,7 +73,7 @@ public class CuentaPorPagarService {
 
         if (cuentaCompletamentePagada) {
             cuenta.setEstatus("Pagado");
-            actualizarVigenciaSim(cuenta, fechaPago);
+            actualizarVigenciaSim(cuenta, cuenta.getFechaPago());
         } else {
             cuenta.setEstatus("En proceso");
         }
@@ -83,7 +83,7 @@ public class CuentaPorPagarService {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         ZonedDateTime fechaLocal = ZonedDateTime.now(ZoneId.of("America/Mexico_City"));
         String fechaFormateada = fechaLocal.format(formatter);
-        String nota = String.format("Pago de $%s el %s", montoPago, fechaFormateada);;
+        String nota = String.format("Pago de $%s el %s", montoPago, fechaFormateada);
         cuenta.setNota(cuenta.getNota() != null ? cuenta.getNota() + " - " + nota : nota);
 
         cuentasPorPagarRepository.save(cuenta);

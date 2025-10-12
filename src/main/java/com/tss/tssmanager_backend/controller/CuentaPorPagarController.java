@@ -42,7 +42,7 @@ public class CuentaPorPagarController {
         try {
             cuentasPorPagarService.marcarComoPagada(
                     request.getId(),
-                    LocalDate.now(),
+                    request.getFechaPago(),
                     request.getMontoPago(),
                     request.getFormaPago(),
                     request.getUsuarioId(),
