@@ -33,13 +33,12 @@ public class PlantillaCorreoService {
     }
 
     public Optional<PlantillaCorreo> obtenerPlantillaPorId(Integer id) {
-        return repositorio.findById(id);
+        return repositorio.findByIdWithAdjuntos(id);
     }
 
     private String limpiarContenidoHTML(String contenidoHTML) {
         if (contenidoHTML == null) return null;
 
-        // Limpiar y normalizar el contenido HTML
         return contenidoHTML
                 .replaceAll("\\s+", " ") // Normalizar espacios
                 .trim();
