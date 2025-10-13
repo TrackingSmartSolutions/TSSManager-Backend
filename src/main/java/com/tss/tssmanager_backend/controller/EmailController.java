@@ -81,7 +81,6 @@ public class EmailController {
     }
 
     @PostMapping("/plantilla")
-    @Transactional
     public ResponseEntity<EmailRecord> enviarCorreoConPlantilla(
             @RequestParam String destinatario,
             @RequestParam Integer plantillaId,

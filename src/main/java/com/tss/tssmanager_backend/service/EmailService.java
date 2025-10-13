@@ -11,6 +11,7 @@ import com.tss.tssmanager_backend.repository.EmailRecordRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -122,6 +123,15 @@ public class EmailService {
             e.printStackTrace();
         }
 
+        return guardarEmailRecord(destinatario, asunto, cuerpo, rutasArchivosAdjuntos,
+                tratoId, exito, resendEmailId, tipoCorreoConsolidado);
+    }
+
+    @Transactional
+    private EmailRecord guardarEmailRecord(String destinatario, String asunto, String cuerpo,
+                                           List<String> rutasArchivosAdjuntos, Integer tratoId,
+                                           boolean exito, String resendEmailId,
+                                           String tipoCorreoConsolidado) {
         EmailRecord emailRecord = new EmailRecord();
         emailRecord.setDestinatario(destinatario);
         emailRecord.setAsunto(asunto);

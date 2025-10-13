@@ -186,14 +186,14 @@ public class NotificacionService {
     }
 
     // Método programado para ejecutarse cada 6 horas
-    @Scheduled(cron = "0 0 */6 * * *")
+    @Scheduled(cron = "0 0 */6 * * *", zone = "America/Mexico_City")
     @Transactional(timeout = 300)
     public void verificarNotificacionesProgramadas() {
         logger.info("Verificación programada de respaldo ejecutada");
         verificarActividadesProximas();
     }
 
-    @Scheduled(cron = "0 0 10 * * *")
+    @Scheduled(cron = "0 0 10 * * *", zone = "America/Mexico_City")
     @Transactional(timeout = 300)
     public void verificarNotificacionesMatutina() {
         logger.info("Verificación matutina de las 10 AM ejecutada");
@@ -706,7 +706,7 @@ public class NotificacionService {
         logger.info("Todas las notificaciones del usuario {} marcadas como leídas", userId);
     }
 
-    @Scheduled(cron = "0 0 */12 * * *")
+    @Scheduled(cron = "0 0 */12 * * *", zone = "America/Mexico_City")
     @Transactional(timeout = 120)
     public void limpiarNotificacionesLeidas() {
         logger.info("Limpieza programada de notificaciones ejecutada");
@@ -763,7 +763,7 @@ public class NotificacionService {
         }
     }
 
-    @Scheduled(cron = "0 0 9 * * MON")
+    @Scheduled(cron = "0 0 9 * * MON", zone = "America/Mexico_City")
     @Transactional(timeout = 300)
     public void verificarExpiracionEquipos() {
         logger.info("Iniciando verificación semanal de expiración de equipos (Lunes 9:00 AM)");
