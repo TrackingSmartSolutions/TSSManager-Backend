@@ -41,6 +41,8 @@ import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.cloudinary.Cloudinary;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 
 @Service
 public class SolicitudFacturaNotaService {
@@ -73,6 +75,9 @@ public class SolicitudFacturaNotaService {
 
     @Autowired
     private CloudinaryConfig cloudinaryConfig;
+
+    private byte[] membreteCache = null;
+    private final Object membreteLock = new Object();
 
     // Mapeos estáticos para los campos clave
     private static final Map<String, String> METODOS_PAGO = new HashMap<>() {{
@@ -377,34 +382,91 @@ public class SolicitudFacturaNotaService {
     }
 
     private Image cargarMembrete() throws Exception {
+        synchronized (membreteLock) {
+            if (membreteCache == null) {
+                membreteCache = procesarMembrete();
+            }
+        }
+
+        Image membrete = Image.getInstance(membreteCache);
+        membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+
+        float xPos = (PageSize.A4.getWidth() - membrete.getScaledWidth()) / 2;
+        float yPos = (PageSize.A4.getHeight() - membrete.getScaledHeight()) / 2;
+        membrete.setAbsolutePosition(xPos, yPos);
+
+        return membrete;
+    }
+
+    private byte[] procesarMembrete() throws Exception {
+        InputStream inputStream = null;
+        BufferedImage bufferedImage = null;
+
         try {
-            InputStream inputStream = getClass().getResourceAsStream("/static/images/membrete.png");
+            inputStream = getClass().getResourceAsStream("/static/images/membrete.png");
             if (inputStream == null) {
                 throw new Exception("No se pudo encontrar el archivo de membrete");
             }
 
-            // Leer en chunks para reducir uso de memoria
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] data = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(data, 0, data.length)) != -1) {
-                buffer.write(data, 0, bytesRead);
-            }
+            bufferedImage = ImageIO.read(inputStream);
             inputStream.close();
 
-            Image membrete = Image.getInstance(buffer.toByteArray());
-            buffer = null;
+            int targetWidth = (int) PageSize.A4.getWidth() * 3;
+            int targetHeight = (int) PageSize.A4.getHeight() * 3;
 
-            membrete.scaleAbsolute(PageSize.A4.getWidth(), PageSize.A4.getHeight());
+            if (bufferedImage.getWidth() > targetWidth || bufferedImage.getHeight() > targetHeight) {
+                BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+                java.awt.Graphics2D g = resized.createGraphics();
 
-            float xPos = (PageSize.A4.getWidth() - membrete.getScaledWidth()) / 2;
-            float yPos = (PageSize.A4.getHeight() - membrete.getScaledHeight()) / 2;
-            membrete.setAbsolutePosition(xPos, yPos);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                        java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                        java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_COLOR_RENDERING,
+                        java.awt.RenderingHints.VALUE_COLOR_RENDER_QUALITY);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
 
-            return membrete;
+                g.drawImage(bufferedImage, 0, 0, targetWidth, targetHeight, null);
+                g.dispose();
+
+                bufferedImage = resized;
+            }
+
+            ByteArrayOutputStream compressedOut = new ByteArrayOutputStream();
+            javax.imageio.ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
+            javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
+
+            if (param.canWriteCompressed()) {
+                param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+                param.setCompressionQuality(0.95f);
+            }
+
+            writer.setOutput(ImageIO.createImageOutputStream(compressedOut));
+            writer.write(null, new javax.imageio.IIOImage(bufferedImage, null, null), param);
+            writer.dispose();
+
+            byte[] result = compressedOut.toByteArray();
+            compressedOut.close();
+
+            bufferedImage.flush();
+            bufferedImage = null;
+            System.gc();
+
+            logger.info("Membrete procesado y cacheado: {} bytes", result.length);
+            return result;
+
         } catch (Exception e) {
-            logger.warn("No se pudo cargar el membrete: {}", e.getMessage());
-            return null;
+            logger.error("Error procesando membrete: {}", e.getMessage());
+            throw e;
+
+        } finally {
+            if (inputStream != null) {
+                try { inputStream.close(); } catch (Exception ignored) {}
+            }
+            if (bufferedImage != null) {
+                bufferedImage.flush();
+            }
         }
     }
 
@@ -429,7 +491,13 @@ public class SolicitudFacturaNotaService {
             Image membrete = cargarMembrete();
             if (membrete != null) {
                 PdfContentByte canvas = writer.getDirectContentUnder();
+
+                canvas.saveState();
                 canvas.addImage(membrete);
+                canvas.restoreState();
+
+                membrete = null; // Liberar referencia
+
                 logger.info("Membrete agregado exitosamente");
             }
         } catch (Exception e) {

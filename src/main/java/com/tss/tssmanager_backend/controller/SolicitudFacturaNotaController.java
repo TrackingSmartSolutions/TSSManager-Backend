@@ -38,6 +38,7 @@ public class SolicitudFacturaNotaController {
     @Autowired
     private FacturaRepository facturaRepository;
 
+
     // Endpoints para Emisor
     @PostMapping("/emisores")
     public ResponseEntity<Emisor> crearEmisor(@RequestPart Emisor emisor, @RequestPart(required = false) MultipartFile constanciaRegimen) throws Exception {
