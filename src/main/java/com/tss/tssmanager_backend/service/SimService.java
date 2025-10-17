@@ -142,6 +142,19 @@ public class SimService {
             }
         }
 
+        Integer equipoAnteriorId = null;
+        BigDecimal recargaAnterior = null;
+        Date vigenciaAnterior = null;
+
+        if (!esSimNueva && sim.getId() != null) {
+            Sim simAnterior = simRepository.findById(sim.getId()).orElse(null);
+            if (simAnterior != null) {
+                equipoAnteriorId = simAnterior.getEquipo() != null ? simAnterior.getEquipo().getId() : null;
+                recargaAnterior = simAnterior.getRecarga();
+                vigenciaAnterior = simAnterior.getVigencia();
+            }
+        }
+
         Sim savedSim = simRepository.save(sim);
 
         if (savedSim.getEquipo() != null) {
@@ -150,7 +163,6 @@ public class SimService {
             System.out.println("Desvinculando equipo de SIM con ID: " + savedSim.getId());
         }
 
-        // Crear transacción automática para SIMs de TSS
         if (savedSim.getResponsable() == ResponsableSimEnum.TSS && esSimNueva) {
             try {
                 System.out.println("Iniciando proceso de creación de transacción automática para SIM nueva: " + savedSim.getNumero());
@@ -162,21 +174,23 @@ public class SimService {
                 throw new RuntimeException("Error crítico al crear transacción automática: " + e.getMessage(), e);
             }
         }
-
         else if (savedSim.getResponsable() == ResponsableSimEnum.TSS && !esSimNueva) {
             try {
+                // Obtener los valores NUEVOS ya guardados
+                Integer equipoNuevoId = savedSim.getEquipo() != null ? savedSim.getEquipo().getId() : null;
+                BigDecimal recargaNueva = savedSim.getRecarga();
+                Date vigenciaNueva = savedSim.getVigencia();
 
-                Sim simAnterior = simRepository.findById(savedSim.getId()).orElse(null);
+                // Comparar con los valores anteriores capturados ANTES de guardar
+                boolean cambioEquipo = !Objects.equals(equipoAnteriorId, equipoNuevoId);
+                boolean cambioRecarga = !Objects.equals(recargaAnterior, recargaNueva);
+                boolean cambioVigencia = !Objects.equals(vigenciaAnterior, vigenciaNueva);
 
-                if (simAnterior != null) {
-                    Integer equipoAnteriorId = simAnterior.getEquipo() != null ? simAnterior.getEquipo().getId() : null;
-                    Integer equipoNuevoId = savedSim.getEquipo() != null ? savedSim.getEquipo().getId() : null;
-
-                    boolean cambioEquipo = !Objects.equals(equipoAnteriorId, equipoNuevoId);
-
-                    if (cambioEquipo) {
-                        actualizarCuentasPorPagarExistentes(savedSim);
-                    }
+                if (cambioEquipo || cambioRecarga || cambioVigencia) {
+                    System.out.println("Detectados cambios - Equipo: " + cambioEquipo + ", Recarga: " + cambioRecarga + ", Vigencia: " + cambioVigencia);
+                    actualizarCuentasPorPagarExistentes(savedSim);
+                } else {
+                    System.out.println("No se detectaron cambios relevantes para actualizar cuentas por pagar");
                 }
             } catch (Exception e) {
                 System.err.println("Error al actualizar cuentas por pagar para SIM " + savedSim.getNumero() + ": " + e.getMessage());
@@ -332,38 +346,73 @@ public class SimService {
         List<CuentaPorPagar> cuentasExistentes = cuentaPorPagarRepository.findBySimId(sim.getId());
 
         for (CuentaPorPagar cuenta : cuentasExistentes) {
+            // Solo actualizar cuentas Pendientes o En proceso
             if ("Pagado".equals(cuenta.getEstatus())) {
+                System.out.println("Cuenta " + cuenta.getId() + " ya está pagada, se omite");
                 continue;
             }
 
+            System.out.println("Actualizando cuenta " + cuenta.getId() + " con estatus: " + cuenta.getEstatus());
+
             // Actualizar el monto si cambió la recarga
             if (sim.getRecarga() != null) {
-                cuenta.setMonto(sim.getRecarga());
+                BigDecimal montoAnterior = cuenta.getMonto();
+                if (!sim.getRecarga().equals(montoAnterior)) {
+                    System.out.println("Cambiando monto de " + montoAnterior + " a " + sim.getRecarga());
+
+                    // Recalcular saldo pendiente
+                    BigDecimal montoPagado = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+                    BigDecimal nuevoSaldo = sim.getRecarga().subtract(montoPagado);
+
+                    cuenta.setMonto(sim.getRecarga());
+                    cuenta.setSaldoPendiente(nuevoSaldo);
+
+                    // Actualizar estatus basado en el nuevo saldo
+                    if (nuevoSaldo.compareTo(BigDecimal.ZERO) <= 0) {
+                        cuenta.setEstatus("Pagado");
+                    } else if (montoPagado.compareTo(BigDecimal.ZERO) > 0) {
+                        cuenta.setEstatus("En proceso");
+                    }
+                }
             }
+
             // Actualizar fecha de vencimiento si cambió la vigencia
             if (sim.getVigencia() != null) {
-                cuenta.setFechaPago(sim.getVigencia().toLocalDate());
+                LocalDate fechaAnterior = cuenta.getFechaPago();
+                LocalDate nuevaFecha = sim.getVigencia().toLocalDate();
+                if (!nuevaFecha.equals(fechaAnterior)) {
+                    System.out.println("Cambiando fecha de pago de " + fechaAnterior + " a " + nuevaFecha);
+                    cuenta.setFechaPago(nuevaFecha);
+                }
             }
 
-
+            // Actualizar cuenta y folio si cambió el equipo
             if (sim.getEquipo() != null) {
                 String nuevoNombreCuenta = determinarNombreCuenta(sim.getEquipo());
+                String nombreCuentaActual = cuenta.getCuenta() != null ? cuenta.getCuenta().getNombre() : "";
 
-                CuentasTransacciones nuevaCuenta = buscarOCrearCuentaConCategoria(
-                        nuevoNombreCuenta,
-                        cuenta.getTransaccion().getCategoria()
-                );
+                if (!nuevoNombreCuenta.equals(nombreCuentaActual)) {
+                    System.out.println("Cambiando cuenta de " + nombreCuentaActual + " a " + nuevoNombreCuenta);
 
-                cuenta.getTransaccion().setCuenta(nuevaCuenta);
-                cuenta.setCuenta(nuevaCuenta);
+                    CuentasTransacciones nuevaCuenta = buscarOCrearCuentaConCategoria(
+                            nuevoNombreCuenta,
+                            cuenta.getTransaccion().getCategoria()
+                    );
 
-                String nuevoFolio = nuevoNombreCuenta + "-" + String.format("%02d", cuenta.getNumeroPago());
-                cuenta.setFolio(nuevoFolio);
+                    cuenta.getTransaccion().setCuenta(nuevaCuenta);
+                    transaccionRepository.save(cuenta.getTransaccion());
 
-                transaccionRepository.save(cuenta.getTransaccion());
+                    cuenta.setCuenta(nuevaCuenta);
+
+                    String nuevoFolio = nuevoNombreCuenta + "-" + String.format("%02d", cuenta.getNumeroPago());
+                    cuenta.setFolio(nuevoFolio);
+
+                    System.out.println("Nuevo folio: " + nuevoFolio);
+                }
             }
 
             cuentaPorPagarRepository.save(cuenta);
+            System.out.println("Cuenta " + cuenta.getId() + " guardada exitosamente");
         }
     }
 

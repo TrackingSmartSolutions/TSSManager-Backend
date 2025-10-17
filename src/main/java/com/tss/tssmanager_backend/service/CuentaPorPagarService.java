@@ -266,7 +266,8 @@ public class CuentaPorPagarService {
                 Sim sim = cuenta.getSim();
                 Transaccion transaccion = cuenta.getTransaccion();
 
-                LocalDate nuevaVigencia = calcularProximaFechaPago(fechaPago, transaccion.getEsquema());
+                // Calcular la próxima fecha sumando exactamente 30 días
+                LocalDate nuevaVigencia = fechaPago.plusDays(30);
 
                 sim.setVigencia(Date.valueOf(nuevaVigencia));
                 simRepository.save(sim);
