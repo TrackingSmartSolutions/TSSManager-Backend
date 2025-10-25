@@ -146,7 +146,19 @@ public class CalendarioService {
             inicio = actividad.getFechaLimite().atStartOfDay().atZone(MEXICO_ZONE).toInstant();
         } else {
             inicio = actividad.getFechaLimite().atTime(actividad.getHoraInicio().toLocalTime()).atZone(MEXICO_ZONE).toInstant();
-            fin = inicio.plus(10, ChronoUnit.MINUTES);
+
+            if (actividad.getDuracion() != null && !actividad.getDuracion().isEmpty()) {
+                try {
+                    String[] partes = actividad.getDuracion().split(":");
+                    int horas = Integer.parseInt(partes[0]);
+                    int minutos = Integer.parseInt(partes[1]);
+                    fin = inicio.plus(horas, ChronoUnit.HOURS).plus(minutos, ChronoUnit.MINUTES);
+                } catch (Exception e) {
+                    fin = inicio.plus(30, ChronoUnit.MINUTES);
+                }
+            } else {
+                fin = inicio.plus(30, ChronoUnit.MINUTES);
+            }
         }
 
         return EventoCalendarioDTO.builder()
@@ -265,8 +277,19 @@ public class CalendarioService {
             allDay = true;
         } else {
             inicio = actividad.getFechaLimite().atTime(actividad.getHoraInicio().toLocalTime()).atZone(MEXICO_ZONE).toInstant();
-            // Agregar 10 minutos a la hora de inicio para crear la hora de fin
-            fin = actividad.getFechaLimite().atTime(actividad.getHoraInicio().toLocalTime().plusMinutes(10)).atZone(MEXICO_ZONE).toInstant();
+
+            if (actividad.getDuracion() != null && !actividad.getDuracion().isEmpty()) {
+                try {
+                    String[] partes = actividad.getDuracion().split(":");
+                    int horas = Integer.parseInt(partes[0]);
+                    int minutos = Integer.parseInt(partes[1]);
+                    fin = inicio.plus(horas, ChronoUnit.HOURS).plus(minutos, ChronoUnit.MINUTES);
+                } catch (Exception e) {
+                    fin = inicio.plus(30, ChronoUnit.MINUTES);
+                }
+            } else {
+                fin = inicio.plus(30, ChronoUnit.MINUTES);
+            }
             allDay = false;
         }
 
