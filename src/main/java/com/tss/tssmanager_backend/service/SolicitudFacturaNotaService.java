@@ -216,7 +216,22 @@ public class SolicitudFacturaNotaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Emisor no encontrado"));
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(solicitud.getCuentaPorCobrar().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada"));
-        solicitud.setConceptosSeleccionados(cuenta.getConceptos());
+        // Obtener los conceptos desde la cotización vinculada, no desde la cuenta
+        if (cuenta.getCotizacion() != null) {
+            Hibernate.initialize(cuenta.getCotizacion().getUnidades());
+            List<UnidadCotizacion> unidadesCotizacion = cuenta.getCotizacion().getUnidades();
+
+            // Filtrar las unidades que coincidan con los conceptos de la cuenta
+            String[] conceptosCuenta = cuenta.getConceptos().split(", ");
+            List<String> conceptosCoincidentes = unidadesCotizacion.stream()
+                    .filter(u -> Arrays.asList(conceptosCuenta).contains(u.getConcepto()))
+                    .map(UnidadCotizacion::getConcepto)
+                    .collect(Collectors.toList());
+
+            solicitud.setConceptosSeleccionados(String.join(", ", conceptosCoincidentes));
+        } else {
+            solicitud.setConceptosSeleccionados(cuenta.getConceptos());
+        }
 
         if (solicitud.getCliente() == null) {
             solicitud.setCliente(cuenta.getCliente());
@@ -621,40 +636,46 @@ public class SolicitudFacturaNotaService {
 
         Cotizacion cotizacion = solicitud.getCotizacion();
 
-        // Priorizar conceptos personalizados sobre los seleccionados y luego sobre los de cotización
-        String conceptosAUsar = null;
+        // Verificar si hay conceptos personalizados
         if (solicitud.getConceptosPersonalizados() != null && !solicitud.getConceptosPersonalizados().trim().isEmpty()) {
-            conceptosAUsar = solicitud.getConceptosPersonalizados();
-        } else if (solicitud.getConceptosSeleccionados() != null && !solicitud.getConceptosSeleccionados().trim().isEmpty()) {
-            conceptosAUsar = solicitud.getConceptosSeleccionados();
-        }
-
-        if (conceptosAUsar != null) {
-            // Mostrar conceptos personalizados/seleccionados
-            addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio, conceptosAUsar);
+            // Mostrar conceptos personalizados
+            addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio,
+                    solicitud.getConceptosPersonalizados());
         } else if (cotizacion != null && cotizacion.getUnidades() != null) {
-            // Fallback: mostrar todas las unidades de la cotización
-            List<UnidadCotizacion> todasLasUnidades = cotizacion.getUnidades();
-            int maxUnidades = Math.min(todasLasUnidades.size(), 50);
-            boolean isEvenRow = false;
+            // Filtrar unidades de cotización según conceptos seleccionados
+            List<UnidadCotizacion> unidadesAMostrar;
 
-            for (int i = 0; i < maxUnidades; i++) {
-                UnidadCotizacion unidad = todasLasUnidades.get(i);
+            if (solicitud.getConceptosSeleccionados() != null && !solicitud.getConceptosSeleccionados().trim().isEmpty()) {
+                // Filtrar según conceptos seleccionados
+                String[] conceptosSeleccionados = solicitud.getConceptosSeleccionados().split(", ");
+                unidadesAMostrar = cotizacion.getUnidades().stream()
+                        .filter(unidad -> Arrays.stream(conceptosSeleccionados)
+                                .anyMatch(concepto -> unidad.getConcepto().trim().equalsIgnoreCase(concepto.trim())))
+                        .collect(Collectors.toList());
+            } else {
+                // Mostrar todas las unidades
+                unidadesAMostrar = cotizacion.getUnidades();
+            }
+
+            // Agregar las unidades a la tabla manteniendo sus valores originales
+            boolean isEvenRow = false;
+            for (UnidadCotizacion unidad : unidadesAMostrar) {
                 Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
-                // Código existente para mostrar las unidades de cotización
                 conceptosTable.addCell(createStyledTableCell(
                         String.valueOf(unidad.getCantidad()),
                         Element.ALIGN_CENTER,
                         normalFont,
                         rowColor
                 ));
+
                 conceptosTable.addCell(createStyledTableCell(
                         unidad.getUnidad(),
                         Element.ALIGN_CENTER,
                         normalFont,
                         rowColor
                 ));
+
                 PdfPCell conceptoCell = new PdfPCell(new Phrase(unidad.getConcepto(), normalFont));
                 conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
                 conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
@@ -664,28 +685,33 @@ public class SolicitudFacturaNotaService {
                 conceptoCell.setBorderColor(grisMedio);
                 conceptoCell.setBorderWidth(0.5f);
                 conceptosTable.addCell(conceptoCell);
+
                 conceptosTable.addCell(createStyledTableCell(
                         formatCurrency(unidad.getPrecioUnitario()),
                         Element.ALIGN_RIGHT,
                         normalFont,
                         rowColor
                 ));
+
                 BigDecimal descuento = unidad.getDescuento() != null ? unidad.getDescuento() : BigDecimal.ZERO;
                 BigDecimal descuentoEnDinero = unidad.getPrecioUnitario()
                         .multiply(BigDecimal.valueOf(unidad.getCantidad()))
                         .multiply(descuento.divide(BigDecimal.valueOf(100)));
+
                 conceptosTable.addCell(createStyledTableCell(
                         formatCurrency(descuentoEnDinero),
                         Element.ALIGN_RIGHT,
                         normalFont,
                         rowColor
                 ));
+
                 conceptosTable.addCell(createStyledTableCell(
                         formatCurrency(unidad.getImporteTotal()),
                         Element.ALIGN_RIGHT,
                         boldFont,
                         rowColor
                 ));
+
                 isEvenRow = !isEvenRow;
             }
         }
