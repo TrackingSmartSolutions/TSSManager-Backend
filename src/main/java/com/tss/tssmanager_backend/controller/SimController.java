@@ -301,4 +301,44 @@ public class SimController {
             return ResponseEntity.notFound().build();
         }
     }
+
+    @GetMapping("/{id}/verificar-caida-saldo")
+    public ResponseEntity<Map<String, Object>> verificarCaidaSaldo(@PathVariable Integer id) {
+        try {
+            Sim sim = simService.obtenerSim(id);
+
+            // Solo verificar para tarifas POR_SEGUNDO
+            if (sim.getTarifa() != TarifaSimEnum.POR_SEGUNDO) {
+                return ResponseEntity.ok(Map.of("tieneCaida", false));
+            }
+
+            List<HistorialSaldosSim> historial = simService.obtenerHistorialSaldos(id);
+
+            // Necesitamos al menos 2 registros para comparar
+            if (historial.size() < 2) {
+                return ResponseEntity.ok(Map.of("tieneCaida", false));
+            }
+
+            HistorialSaldosSim ultimo = historial.get(0);
+            HistorialSaldosSim penultimo = historial.get(1);
+
+            if (ultimo.getSaldoActual() == null || penultimo.getSaldoActual() == null) {
+                return ResponseEntity.ok(Map.of("tieneCaida", false));
+            }
+
+            BigDecimal diferencia = penultimo.getSaldoActual().subtract(ultimo.getSaldoActual());
+            boolean tieneCaida = diferencia.compareTo(new BigDecimal("10")) > 0;
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("tieneCaida", tieneCaida);
+            response.put("diferencia", diferencia);
+            response.put("saldoActual", ultimo.getSaldoActual());
+            response.put("saldoAnterior", penultimo.getSaldoActual());
+
+            return ResponseEntity.ok(response);
+
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
 }

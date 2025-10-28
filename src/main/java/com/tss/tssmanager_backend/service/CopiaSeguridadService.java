@@ -32,6 +32,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.awt.Color;
@@ -286,13 +287,20 @@ public class CopiaSeguridadService {
         }
     }
 
+    @Transactional(timeout = 300)
     private void ejecutarCopiasProgramadas(ConfiguracionCopias config) {
         try {
             for (TipoCopiaSeguridadEnum tipo : config.getDatosRespaldar()) {
-                generarCopia(config, tipo, config.getFrecuencia());
+                try {
+                    generarCopia(config, tipo, config.getFrecuencia());
+                } catch (Exception e) {
+                    log.error("Error al generar copia de tipo {} para usuario: {}",
+                            tipo, config.getUsuarioId(), e);
+                }
             }
         } catch (Exception e) {
-            log.error("Error al ejecutar copias programadas para usuario: " + config.getUsuarioId(), e);
+            log.error("Error crítico al ejecutar copias programadas para usuario: " +
+                    config.getUsuarioId(), e);
         }
     }
 
@@ -327,7 +335,7 @@ public class CopiaSeguridadService {
                 .fechaCreacion(LocalDateTime.now())
                 .fechaEliminacion(LocalDateTime.now().plusMonths(3))
                 .frecuencia(frecuencia)
-                .estado("EN_PROCESO")
+                .estado("COMPLETADA") // Cambiar a completada inmediatamente
                 .tamanoArchivo(tamañoTotal)
                 .archivoPdfUrl(pdfPath.toString())
                 .archivoCsvUrl(csvPath.toString())
@@ -335,13 +343,68 @@ public class CopiaSeguridadService {
 
         copia = copiaSeguridadRepository.save(copia);
 
-        // Subir a Google Drive si está vinculado
+        // Subir a Google Drive de forma ASÍNCRONA y SIN BLOQUEAR
+        final Integer copiaId = copia.getId();
         if (config.getGoogleDriveVinculada()) {
-            subirAGoogleDrive(config, pdfPath, csvPath, copia);
+            subirAGoogleDriveAsync(config, pdfPath, csvPath, copiaId);
+        }
+    }
+
+    @Async
+    public void subirAGoogleDriveAsync(ConfiguracionCopias config, Path pdfPath, Path csvPath, Integer copiaId) {
+        int intentos = 0;
+        int maxIntentos = 3;
+        long delayBase = 5000;
+
+        while (intentos < maxIntentos) {
+            try {
+                Drive driveService = crearDriveService(config);
+                String folderId = config.getGoogleDriveFolderId();
+
+                // Subir PDF
+                File pdfMetadata = new File();
+                pdfMetadata.setName(pdfPath.getFileName().toString());
+                pdfMetadata.setParents(Collections.singletonList(folderId));
+                FileContent pdfContent = new FileContent("application/pdf", pdfPath.toFile());
+                driveService.files().create(pdfMetadata, pdfContent)
+                        .setFields("id")
+                        .execute();
+
+                // Subir CSV
+                File csvMetadata = new File();
+                csvMetadata.setName(csvPath.getFileName().toString());
+                csvMetadata.setParents(Collections.singletonList(folderId));
+                FileContent csvContent = new FileContent("text/csv", csvPath.toFile());
+                driveService.files().create(csvMetadata, csvContent)
+                        .setFields("id")
+                        .execute();
+
+                log.info("Archivos subidos exitosamente a Google Drive para copia: {}", copiaId);
+                return; // Éxito, salir del método
+
+            } catch (javax.net.ssl.SSLHandshakeException | java.io.EOFException e) {
+                intentos++;
+                log.warn("Error SSL al subir a Google Drive (intento {}/{}): {}",
+                        intentos, maxIntentos, e.getMessage());
+
+                if (intentos < maxIntentos) {
+                    try {
+                        long delay = delayBase * intentos; // Backoff exponencial
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error no recuperable al subir archivos a Google Drive para copia {}",
+                        copiaId, e);
+                break; // No reintentar en otros tipos de error
+            }
         }
 
-        copia.setEstado("COMPLETADA");
-        copiaSeguridadRepository.save(copia);
+        log.error("No se pudo subir la copia {} a Google Drive después de {} intentos",
+                copiaId, maxIntentos);
     }
 
     // Obtención de datos por tipo
@@ -637,7 +700,7 @@ public class CopiaSeguridadService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional
+    @Transactional(timeout = 600)
     public void restaurarCopia(Integer copiaId) {
         CopiasSeguridad copia = copiaSeguridadRepository.findById(copiaId)
                 .orElseThrow(() -> new RuntimeException("Copia no encontrada"));
@@ -647,7 +710,6 @@ public class CopiaSeguridadService {
         }
 
         try {
-            // Leer datos del archivo CSV
             Path csvPath = Paths.get(copia.getArchivoCsvUrl());
             if (!Files.exists(csvPath)) {
                 throw new RuntimeException("Archivo de copia no encontrado");
@@ -816,8 +878,12 @@ public class CopiaSeguridadService {
         return datos;
     }
 
-    @Transactional
+    // Método principal que distribuye la restauración
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarDatos(Integer usuarioId, TipoCopiaSeguridadEnum tipo, List<String[]> datos) {
+        log.info("Iniciando restauración de {} registros de tipo {} para usuario {}",
+                datos.size(), tipo, usuarioId);
+
         switch (tipo) {
             case TRATOS:
                 restaurarTratos(usuarioId, datos);
@@ -837,194 +903,308 @@ public class CopiaSeguridadService {
             default:
                 throw new IllegalArgumentException("Tipo de datos no soportado: " + tipo);
         }
+
+        log.info("Restauración completada para tipo {} usuario {}", tipo, usuarioId);
     }
 
+    // 1. RESTAURAR TRATOS
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarTratos(Integer usuarioId, List<String[]> datos) {
         try {
-            // Limpiar datos existentes del usuario
+            log.info("Eliminando tratos existentes para usuario {}", usuarioId);
             tratosRepository.deleteByPropietarioId(usuarioId);
+            tratosRepository.flush();
 
-            // Restaurar datos
-            for (String[] fila : datos) {
-                if (fila.length < 13) continue; // Validar que tenga al menos las columnas mínimas
+            int batchSize = 50;
+            List<Trato> batch = new ArrayList<>();
+            int procesados = 0;
 
-                Trato trato = new Trato();
-                trato.setNombre(validarString(fila[1]));
-                trato.setEmpresaId(validarInteger(fila[2]));
-
-                if (!validarString(fila[3]).isEmpty()) {
-                    Contacto contacto = contactosRepository.findByNombreAndPropietario_Id(fila[3], usuarioId)
-                            .orElse(null);
-                    trato.setContacto(contacto);
+            for (int i = 0; i < datos.size(); i++) {
+                String[] fila = datos.get(i);
+                if (fila.length < 13) {
+                    log.warn("Fila {} tiene menos columnas de las esperadas, saltando", i);
+                    continue;
                 }
 
-                trato.setNumeroUnidades(validarInteger(fila[4]));
-                trato.setIngresosEsperados(validarBigDecimal(fila[5]));
-                trato.setDescripcion(validarString(fila[6]));
-                trato.setPropietarioId(usuarioId); // Usar el usuarioId actual
-                trato.setFechaCierre(validarLocalDateTime(fila[8]));
-                trato.setNoTrato(validarString(fila[9]));
-                trato.setProbabilidad(validarInteger(fila[10]));
-                trato.setFase(validarString(fila[11]));
+                try {
+                    Trato trato = new Trato();
+                    trato.setNombre(validarString(fila[1]));
+                    trato.setEmpresaId(validarInteger(fila[2]));
 
-                // Campos de auditoría
-                Instant ahora = Instant.now();
-                trato.setFechaCreacion(ahora);
-                trato.setFechaModificacion(ahora);
-                trato.setFechaUltimaActividad(ahora);
+                    if (!validarString(fila[3]).isEmpty()) {
+                        Contacto contacto = contactosRepository
+                                .findByNombreAndPropietario_Id(fila[3], usuarioId)
+                                .orElse(null);
+                        trato.setContacto(contacto);
+                    }
 
-                // Valores por defecto
-                trato.setCorreosAutomaticosActivos(false);
-                trato.setCorreosSeguimientoActivo(false);
-                trato.setCorreosSeguimientoEnviados(0);
+                    trato.setNumeroUnidades(validarInteger(fila[4]));
+                    trato.setIngresosEsperados(validarBigDecimal(fila[5]));
+                    trato.setDescripcion(validarString(fila[6]));
+                    trato.setPropietarioId(usuarioId);
+                    trato.setFechaCierre(validarLocalDateTime(fila[8]));
+                    trato.setNoTrato(validarString(fila[9]));
+                    trato.setProbabilidad(validarInteger(fila[10]));
+                    trato.setFase(validarString(fila[11]));
 
-                tratosRepository.save(trato);
+                    Instant ahora = Instant.now();
+                    trato.setFechaCreacion(ahora);
+                    trato.setFechaModificacion(ahora);
+                    trato.setFechaUltimaActividad(ahora);
+                    trato.setCorreosAutomaticosActivos(false);
+                    trato.setCorreosSeguimientoActivo(false);
+                    trato.setCorreosSeguimientoEnviados(0);
+
+                    batch.add(trato);
+
+                    if (batch.size() >= batchSize || i == datos.size() - 1) {
+                        tratosRepository.saveAll(batch);
+                        tratosRepository.flush();
+                        procesados += batch.size();
+                        log.info("Procesados {}/{} tratos", procesados, datos.size());
+                        batch.clear();
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando fila {} de tratos: {}", i, e.getMessage());
+                }
             }
 
-            log.info("Restaurados {} tratos para usuario {}", datos.size(), usuarioId);
+            log.info("Restaurados {} tratos exitosamente para usuario {}", procesados, usuarioId);
         } catch (Exception e) {
-            log.error("Error al restaurar tratos", e);
+            log.error("Error crítico al restaurar tratos", e);
             throw new RuntimeException("Error al restaurar tratos: " + e.getMessage());
         }
     }
 
+    // 2. RESTAURAR EMPRESAS
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarEmpresas(Integer usuarioId, List<String[]> datos) {
         try {
+            log.info("Eliminando empresas existentes para usuario {}", usuarioId);
             empresasRepository.deleteByPropietario_Id(usuarioId);
-
-
-            Usuario usuario = usuarioRepository.findById(usuarioId).orElseThrow();
-
-            for (String[] fila : datos) {
-                if (fila.length < 12) continue;
-
-                Empresa empresa = new Empresa();
-                empresa.setNombre(validarString(fila[1]));
-                empresa.setPropietario(usuario);
-                empresa.setEstatus(validarEstatusEmpresa(fila[3]));
-                empresa.setSitioWeb(validarString(fila[4]));
-                empresa.setSector(validarSectorEmpresa(fila[5]));
-                empresa.setDomicilioFisico(validarString(fila[6]));
-                empresa.setDomicilioFiscal(validarString(fila[7]));
-                empresa.setRfc(validarString(fila[8]));
-                empresa.setRazonSocial(validarString(fila[9]));
-                empresa.setRegimenFiscal(validarString(fila[10]));
-
-                // Campos de auditoría
-                Instant ahora = Instant.now();
-                empresa.setFechaCreacion(ahora);
-                empresa.setFechaModificacion(ahora);
-                empresa.setFechaUltimaActividad(ahora);
-
-                empresasRepository.save(empresa);
-            }
-
-            log.info("Restauradas {} empresas para usuario {}", datos.size(), usuarioId);
-        } catch (Exception e) {
-            log.error("Error al restaurar empresas", e);
-            throw new RuntimeException("Error al restaurar empresas: " + e.getMessage());
-        }
-    }
-
-    private void restaurarContactos(Integer usuarioId, List<String[]> datos) {
-        try {
-            // Limpiar datos existentes del usuario
-            contactosRepository.deleteByPropietario_Id(usuarioId);
+            empresasRepository.flush();
 
             Usuario usuario = usuarioRepository.findById(usuarioId)
                     .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-            for (String[] fila : datos) {
-                if (fila.length < 8) continue;
+            int batchSize = 50;
+            List<Empresa> batch = new ArrayList<>();
+            int procesados = 0;
 
-                Contacto contacto = new Contacto();
-                contacto.setNombre(validarString(fila[1]));
-
-                // Buscar empresa por nombre
-                if (!validarString(fila[2]).isEmpty()) {
-                    Empresa empresa = empresasRepository.findByNombreAndPropietario_Id(fila[2], usuarioId)
-                            .orElse(null);
-                    contacto.setEmpresa(empresa);
+            for (int i = 0; i < datos.size(); i++) {
+                String[] fila = datos.get(i);
+                if (fila.length < 12) {
+                    log.warn("Fila {} tiene menos columnas de las esperadas, saltando", i);
+                    continue;
                 }
 
-                contacto.setRol(validarRolContacto(fila[3]));
-                contacto.setCelular(validarString(fila[4]));
-                contacto.setPropietario(usuario); // Descomentar cuando tengas acceso al Usuario
+                try {
+                    Empresa empresa = new Empresa();
+                    empresa.setNombre(validarString(fila[1]));
+                    empresa.setPropietario(usuario);
+                    empresa.setEstatus(validarEstatusEmpresa(fila[3]));
+                    empresa.setSitioWeb(validarString(fila[4]));
+                    empresa.setSector(validarSectorEmpresa(fila[5]));
+                    empresa.setDomicilioFisico(validarString(fila[6]));
+                    empresa.setDomicilioFiscal(validarString(fila[7]));
+                    empresa.setRfc(validarString(fila[8]));
+                    empresa.setRazonSocial(validarString(fila[9]));
+                    empresa.setRegimenFiscal(validarString(fila[10]));
 
-                // Campos de auditoría
-                Instant ahora = Instant.now();
-                contacto.setFechaCreacion(ahora);
-                contacto.setFechaModificacion(ahora);
-                contacto.setFechaUltimaActividad(ahora);
-                contacto.setCreadoPor("SISTEMA_RESTAURACION");
-                contacto.setModificadoPor("SISTEMA_RESTAURACION");
+                    Instant ahora = Instant.now();
+                    empresa.setFechaCreacion(ahora);
+                    empresa.setFechaModificacion(ahora);
+                    empresa.setFechaUltimaActividad(ahora);
 
-                contactosRepository.save(contacto);
+                    batch.add(empresa);
+
+                    if (batch.size() >= batchSize || i == datos.size() - 1) {
+                        empresasRepository.saveAll(batch);
+                        empresasRepository.flush();
+                        procesados += batch.size();
+                        log.info("Procesadas {}/{} empresas", procesados, datos.size());
+                        batch.clear();
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando fila {} de empresas: {}", i, e.getMessage());
+                }
             }
 
-            log.info("Restaurados {} contactos para usuario {}", datos.size(), usuarioId);
+            log.info("Restauradas {} empresas exitosamente para usuario {}", procesados, usuarioId);
         } catch (Exception e) {
-            log.error("Error al restaurar contactos", e);
+            log.error("Error crítico al restaurar empresas", e);
+            throw new RuntimeException("Error al restaurar empresas: " + e.getMessage());
+        }
+    }
+
+    // 3. RESTAURAR CONTACTOS
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
+    private void restaurarContactos(Integer usuarioId, List<String[]> datos) {
+        try {
+            log.info("Eliminando contactos existentes para usuario {}", usuarioId);
+            contactosRepository.deleteByPropietario_Id(usuarioId);
+            contactosRepository.flush();
+
+            Usuario usuario = usuarioRepository.findById(usuarioId)
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+            int batchSize = 50;
+            List<Contacto> batch = new ArrayList<>();
+            int procesados = 0;
+
+            for (int i = 0; i < datos.size(); i++) {
+                String[] fila = datos.get(i);
+                if (fila.length < 8) {
+                    log.warn("Fila {} tiene menos columnas de las esperadas, saltando", i);
+                    continue;
+                }
+
+                try {
+                    Contacto contacto = new Contacto();
+                    contacto.setNombre(validarString(fila[1]));
+
+                    if (!validarString(fila[2]).isEmpty()) {
+                        Empresa empresa = empresasRepository
+                                .findByNombreAndPropietario_Id(fila[2], usuarioId)
+                                .orElse(null);
+                        contacto.setEmpresa(empresa);
+                    }
+
+                    contacto.setRol(validarRolContacto(fila[3]));
+                    contacto.setCelular(validarString(fila[4]));
+                    contacto.setPropietario(usuario);
+
+                    Instant ahora = Instant.now();
+                    contacto.setFechaCreacion(ahora);
+                    contacto.setFechaModificacion(ahora);
+                    contacto.setFechaUltimaActividad(ahora);
+                    contacto.setCreadoPor("SISTEMA_RESTAURACION");
+                    contacto.setModificadoPor("SISTEMA_RESTAURACION");
+
+                    batch.add(contacto);
+
+                    if (batch.size() >= batchSize || i == datos.size() - 1) {
+                        contactosRepository.saveAll(batch);
+                        contactosRepository.flush();
+                        procesados += batch.size();
+                        log.info("Procesados {}/{} contactos", procesados, datos.size());
+                        batch.clear();
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando fila {} de contactos: {}", i, e.getMessage());
+                }
+            }
+
+            log.info("Restaurados {} contactos exitosamente para usuario {}", procesados, usuarioId);
+        } catch (Exception e) {
+            log.error("Error crítico al restaurar contactos", e);
             throw new RuntimeException("Error al restaurar contactos: " + e.getMessage());
         }
     }
 
+    // 4. RESTAURAR EQUIPOS
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarEquipos(Integer usuarioId, List<String[]> datos) {
         try {
-            for (String[] fila : datos) {
-                if (fila.length < 12) continue;
+            log.info("Iniciando restauración de {} equipos", datos.size());
 
-                Equipo equipo = new Equipo();
-                equipo.setImei(validarString(fila[1]));
-                equipo.setNombre(validarString(fila[2]));
-                equipo.setModeloId(validarInteger(fila[3]));
-                equipo.setClienteId(validarInteger(fila[4]));
-                equipo.setProveedorId(validarInteger(fila[5]));
-                equipo.setTipo(validarTipoEquipo(fila[6]));
-                equipo.setEstatus(validarEstatusEquipo(fila[7]));
-                equipo.setTipoActivacion(validarTipoActivacion(fila[8]));
-                equipo.setPlataforma(validarPlataforma(fila[9]));
-                equipo.setFechaActivacion(validarSqlDate(fila[10]));
-                equipo.setFechaExpiracion(validarSqlDate(fila[11]));
+            int batchSize = 50;
+            List<Equipo> batch = new ArrayList<>();
+            int procesados = 0;
 
-                equiposRepository.save(equipo);
+            for (int i = 0; i < datos.size(); i++) {
+                String[] fila = datos.get(i);
+                if (fila.length < 12) {
+                    log.warn("Fila {} tiene menos columnas de las esperadas, saltando", i);
+                    continue;
+                }
+
+                try {
+                    Equipo equipo = new Equipo();
+                    equipo.setImei(validarString(fila[1]));
+                    equipo.setNombre(validarString(fila[2]));
+                    equipo.setModeloId(validarInteger(fila[3]));
+                    equipo.setClienteId(validarInteger(fila[4]));
+                    equipo.setProveedorId(validarInteger(fila[5]));
+                    equipo.setTipo(validarTipoEquipo(fila[6]));
+                    equipo.setEstatus(validarEstatusEquipo(fila[7]));
+                    equipo.setTipoActivacion(validarTipoActivacion(fila[8]));
+                    equipo.setPlataforma(validarPlataforma(fila[9]));
+                    equipo.setFechaActivacion(validarSqlDate(fila[10]));
+                    equipo.setFechaExpiracion(validarSqlDate(fila[11]));
+
+                    batch.add(equipo);
+
+                    if (batch.size() >= batchSize || i == datos.size() - 1) {
+                        equiposRepository.saveAll(batch);
+                        equiposRepository.flush();
+                        procesados += batch.size();
+                        log.info("Procesados {}/{} equipos", procesados, datos.size());
+                        batch.clear();
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando fila {} de equipos: {}", i, e.getMessage());
+                }
             }
 
-            log.info("Restaurados {} equipos", datos.size());
+            log.info("Restaurados {} equipos exitosamente", procesados);
         } catch (Exception e) {
-            log.error("Error al restaurar equipos", e);
+            log.error("Error crítico al restaurar equipos", e);
             throw new RuntimeException("Error al restaurar equipos: " + e.getMessage());
         }
     }
 
+    // 5. RESTAURAR SIMS
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarSims(Integer usuarioId, List<String[]> datos) {
         try {
-            for (String[] fila : datos) {
-                if (fila.length < 10) continue;
+            log.info("Iniciando restauración de {} SIMs", datos.size());
 
-                Sim sim = new Sim();
-                sim.setNumero(validarString(fila[1]));
-                sim.setTarifa(validarTarifaSim(fila[2]));
-                sim.setVigencia(validarSqlDate(fila[3]));
-                sim.setRecarga(validarBigDecimal(fila[4]));
-                sim.setResponsable(validarResponsableSim(fila[5]));
-                sim.setPrincipal(validarPrincipalSim(fila[6]));
-                sim.setGrupo(validarInteger(fila[7]));
-                sim.setContrasena(validarString(fila[9]));
+            int batchSize = 50;
+            List<Sim> batch = new ArrayList<>();
+            int procesados = 0;
 
-                // Asociar equipo si existe
-                String equipoImei = validarString(fila[8]);
-                if (!equipoImei.isEmpty()) {
-                    Equipo equipo = equiposRepository.findByImei(equipoImei).orElse(null);
-                    sim.setEquipo(equipo);
+            for (int i = 0; i < datos.size(); i++) {
+                String[] fila = datos.get(i);
+                if (fila.length < 10) {
+                    log.warn("Fila {} tiene menos columnas de las esperadas, saltando", i);
+                    continue;
                 }
 
-                simsRepository.save(sim);
+                try {
+                    Sim sim = new Sim();
+                    sim.setNumero(validarString(fila[1]));
+                    sim.setTarifa(validarTarifaSim(fila[2]));
+                    sim.setVigencia(validarSqlDate(fila[3]));
+                    sim.setRecarga(validarBigDecimal(fila[4]));
+                    sim.setResponsable(validarResponsableSim(fila[5]));
+                    sim.setPrincipal(validarPrincipalSim(fila[6]));
+                    sim.setGrupo(validarInteger(fila[7]));
+                    sim.setContrasena(validarString(fila[9]));
+
+                    String equipoImei = validarString(fila[8]);
+                    if (!equipoImei.isEmpty()) {
+                        Equipo equipo = equiposRepository.findByImei(equipoImei).orElse(null);
+                        sim.setEquipo(equipo);
+                    }
+
+                    batch.add(sim);
+
+                    if (batch.size() >= batchSize || i == datos.size() - 1) {
+                        simsRepository.saveAll(batch);
+                        simsRepository.flush();
+                        procesados += batch.size();
+                        log.info("Procesados {}/{} SIMs", procesados, datos.size());
+                        batch.clear();
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando fila {} de SIMs: {}", i, e.getMessage());
+                }
             }
 
-            log.info("Restaurados {} SIMs", datos.size());
+            log.info("Restaurados {} SIMs exitosamente", procesados);
         } catch (Exception e) {
-            log.error("Error al restaurar SIMs", e);
+            log.error("Error crítico al restaurar SIMs", e);
             throw new RuntimeException("Error al restaurar SIMs: " + e.getMessage());
         }
     }
