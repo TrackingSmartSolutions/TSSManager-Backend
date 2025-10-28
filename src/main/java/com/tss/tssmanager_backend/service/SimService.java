@@ -174,9 +174,8 @@ public class SimService {
                 throw new RuntimeException("Error crítico al crear transacción automática: " + e.getMessage(), e);
             }
         }
-        else if (savedSim.getResponsable() == ResponsableSimEnum.TSS && !esSimNueva) {
+        if (savedSim.getResponsable() == ResponsableSimEnum.TSS && !esSimNueva) {
             try {
-                // Obtener los valores NUEVOS ya guardados
                 Integer equipoNuevoId = savedSim.getEquipo() != null ? savedSim.getEquipo().getId() : null;
                 BigDecimal recargaNueva = savedSim.getRecarga();
                 Date vigenciaNueva = savedSim.getVigencia();
@@ -187,7 +186,15 @@ public class SimService {
                 boolean cambioVigencia = !Objects.equals(vigenciaAnterior, vigenciaNueva);
 
                 if (cambioEquipo || cambioRecarga || cambioVigencia) {
-                    System.out.println("Detectados cambios - Equipo: " + cambioEquipo + ", Recarga: " + cambioRecarga + ", Vigencia: " + cambioVigencia);
+                    System.out.println("Detectados cambios - Equipo: " + cambioEquipo +
+                            " (anterior ID: " + equipoAnteriorId + ", nuevo ID: " + equipoNuevoId +
+                            "), Recarga: " + cambioRecarga + ", Vigencia: " + cambioVigencia);
+
+                    // Verificar si se desvinculó el equipo
+                    if (cambioEquipo && equipoAnteriorId != null && equipoNuevoId == null) {
+                        System.out.println("SIM desvinculada de equipo - Se actualizarán cuentas por pagar a cuenta BN");
+                    }
+
                     actualizarCuentasPorPagarExistentes(savedSim);
                 } else {
                     System.out.println("No se detectaron cambios relevantes para actualizar cuentas por pagar");
@@ -386,29 +393,36 @@ public class SimService {
                 }
             }
 
-            // Actualizar cuenta y folio si cambió el equipo
+            // Actualizar cuenta y folio si cambió el equipo o se desvinculó
+            String nuevoNombreCuenta;
             if (sim.getEquipo() != null) {
-                String nuevoNombreCuenta = determinarNombreCuenta(sim.getEquipo());
-                String nombreCuentaActual = cuenta.getCuenta() != null ? cuenta.getCuenta().getNombre() : "";
+                nuevoNombreCuenta = determinarNombreCuenta(sim.getEquipo());
+                System.out.println("SIM vinculada a equipo, cuenta determinada: " + nuevoNombreCuenta);
+            } else {
+                // Si la SIM ya no tiene equipo asignado, usar cuenta BN
+                nuevoNombreCuenta = "BN";
+                System.out.println("SIM desvinculada de equipo, asignando a cuenta BN");
+            }
 
-                if (!nuevoNombreCuenta.equals(nombreCuentaActual)) {
-                    System.out.println("Cambiando cuenta de " + nombreCuentaActual + " a " + nuevoNombreCuenta);
+            String nombreCuentaActual = cuenta.getCuenta() != null ? cuenta.getCuenta().getNombre() : "";
 
-                    CuentasTransacciones nuevaCuenta = buscarOCrearCuentaConCategoria(
-                            nuevoNombreCuenta,
-                            cuenta.getTransaccion().getCategoria()
-                    );
+            if (!nuevoNombreCuenta.equals(nombreCuentaActual)) {
+                System.out.println("Cambiando cuenta de " + nombreCuentaActual + " a " + nuevoNombreCuenta);
 
-                    cuenta.getTransaccion().setCuenta(nuevaCuenta);
-                    transaccionRepository.save(cuenta.getTransaccion());
+                CuentasTransacciones nuevaCuenta = buscarOCrearCuentaConCategoria(
+                        nuevoNombreCuenta,
+                        cuenta.getTransaccion().getCategoria()
+                );
 
-                    cuenta.setCuenta(nuevaCuenta);
+                cuenta.getTransaccion().setCuenta(nuevaCuenta);
+                transaccionRepository.save(cuenta.getTransaccion());
 
-                    String nuevoFolio = nuevoNombreCuenta + "-" + String.format("%02d", cuenta.getNumeroPago());
-                    cuenta.setFolio(nuevoFolio);
+                cuenta.setCuenta(nuevaCuenta);
 
-                    System.out.println("Nuevo folio: " + nuevoFolio);
-                }
+                String nuevoFolio = nuevoNombreCuenta + "-" + String.format("%02d", cuenta.getNumeroPago());
+                cuenta.setFolio(nuevoFolio);
+
+                System.out.println("Nuevo folio: " + nuevoFolio);
             }
 
             cuentaPorPagarRepository.save(cuenta);
