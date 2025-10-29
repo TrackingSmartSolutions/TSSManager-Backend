@@ -154,10 +154,12 @@ public class CalendarioService {
                     int minutos = Integer.parseInt(partes[1]);
                     fin = inicio.plus(horas, ChronoUnit.HOURS).plus(minutos, ChronoUnit.MINUTES);
                 } catch (Exception e) {
-                    fin = inicio.plus(30, ChronoUnit.MINUTES);
+                    // Si hay error al parsear, usar duración por defecto según tipo
+                    fin = inicio.plus(actividad.getTipo().name().equals("LLAMADA") ? 10 : 30, ChronoUnit.MINUTES);
                 }
             } else {
-                fin = inicio.plus(30, ChronoUnit.MINUTES);
+                // Si no hay duración especificada, usar duración por defecto según tipo
+                fin = inicio.plus(actividad.getTipo().name().equals("LLAMADA") ? 10 : 30, ChronoUnit.MINUTES);
             }
         }
 
@@ -285,10 +287,10 @@ public class CalendarioService {
                     int minutos = Integer.parseInt(partes[1]);
                     fin = inicio.plus(horas, ChronoUnit.HOURS).plus(minutos, ChronoUnit.MINUTES);
                 } catch (Exception e) {
-                    fin = inicio.plus(30, ChronoUnit.MINUTES);
+                    fin = inicio.plus(actividad.getTipo().name().equals("LLAMADA") ? 10 : 30, ChronoUnit.MINUTES);
                 }
             } else {
-                fin = inicio.plus(30, ChronoUnit.MINUTES);
+                fin = inicio.plus(actividad.getTipo().name().equals("LLAMADA") ? 10 : 30, ChronoUnit.MINUTES);
             }
             allDay = false;
         }
