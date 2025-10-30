@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.EstatusNotificacionEnum;
+import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
 import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
 import com.tss.tssmanager_backend.enums.RolUsuarioEnum;
 import com.tss.tssmanager_backend.repository.*;
@@ -245,13 +246,13 @@ public class NotificacionService {
         List<CuentaPorCobrar> cuentasVencenHoy = cuentaPorCobrarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
                 .filter(cuenta -> cuenta.getFechaPago().equals(hoy))
-                .filter(cuenta -> !"PAGADO".equals(cuenta.getEstatus()))
+                .filter(cuenta -> cuenta.getEstatus() != EstatusPagoEnum.PAGADO)
                 .collect(Collectors.toList());
 
         List<CuentaPorCobrar> cuentasVencenManana = cuentaPorCobrarRepository.findAll().stream()
                 .filter(cuenta -> cuenta.getFechaPago() != null)
                 .filter(cuenta -> cuenta.getFechaPago().equals(manana))
-                .filter(cuenta -> !"PAGADO".equals(cuenta.getEstatus()))
+                .filter(cuenta -> cuenta.getEstatus() != EstatusPagoEnum.PAGADO)
                 .collect(Collectors.toList());
 
         if (!cuentasVencenHoy.isEmpty()) {
