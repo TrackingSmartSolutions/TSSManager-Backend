@@ -1753,10 +1753,21 @@ public class TratoService {
 
                 if (actividad.getHoraInicio() != null) {
                     LocalTime horaInicioExistente = actividad.getHoraInicio().toLocalTime();
-                    LocalTime horaFinExistente = calcularHoraFin(horaInicioExistente, actividad.getDuracion());
+                    // Asegurar que cada actividad use su propia duración (o default si no tiene)
+                    String duracionExistente = actividad.getDuracion();
+                    // Si la actividad no tiene duración especificada (ej: llamadas antiguas), usar 10 min por defecto
+                    if (duracionExistente == null || duracionExistente.isEmpty()) {
+                        duracionExistente = null; // Esto hará que calcularHoraFin use el default de 10 min
+                    }
+                    LocalTime horaFinExistente = calcularHoraFin(horaInicioExistente, duracionExistente);
 
-                    // Verificar solapamiento
+                    // Verificar solapamiento con debug
+                    System.out.println("Verificando conflicto:");
+                    System.out.println("  Nueva: " + horaInicioNueva + " - " + horaFinNueva + " (duración: " + duracion + ")");
+                    System.out.println("  Existente: " + horaInicioExistente + " - " + horaFinExistente + " (duración: " + duracionExistente + ")");
+
                     if (hayConflicto(horaInicioNueva, horaFinNueva, horaInicioExistente, horaFinExistente)) {
+                        System.out.println("  ¡CONFLICTO DETECTADO!");
                         return true;
                     }
                 }
@@ -1764,13 +1775,14 @@ public class TratoService {
             return false;
         } catch (Exception e) {
             System.err.println("Error verificando conflicto de horario: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }
 
     private LocalTime calcularHoraFin(LocalTime horaInicio, String duracion) {
         if (duracion == null || duracion.isEmpty()) {
-            return horaInicio.plusMinutes(30); // Duración por defecto
+            return horaInicio.plusMinutes(10);
         }
 
         try {
@@ -1779,18 +1791,20 @@ public class TratoService {
             int minutos = partes.length > 1 ? Integer.parseInt(partes[1]) : 0;
             return horaInicio.plusHours(horas).plusMinutes(minutos);
         } catch (Exception e) {
-            return horaInicio.plusMinutes(30);
+            return horaInicio.plusMinutes(10);
         }
     }
 
 
     private boolean hayConflicto(LocalTime inicio1, LocalTime fin1, LocalTime inicio2, LocalTime fin2) {
-        long diferenciaMinutos = Math.abs(Duration.between(inicio1, inicio2).toMinutes());
+        // Agregar margen de 10 minutos antes y después de cada actividad
+        LocalTime inicio1ConMargen = inicio1.minusMinutes(MARGEN_CONFLICTO_MINUTOS);
+        LocalTime fin1ConMargen = fin1.plusMinutes(MARGEN_CONFLICTO_MINUTOS);
 
-        if (diferenciaMinutos >= MARGEN_CONFLICTO_MINUTOS) {
-            return false;
-        }
-        return inicio1.isBefore(fin2) && inicio2.isBefore(fin1);
+        // Verificar si hay solapamiento considerando el margen
+        // Actividad 1 termina después de que inicia actividad 2 (con margen)
+        // Y actividad 2 termina después de que inicia actividad 1 (con margen)
+        return fin1ConMargen.isAfter(inicio2) && fin2.isAfter(inicio1ConMargen);
     }
 
     @Transactional
