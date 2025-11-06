@@ -1,5 +1,6 @@
-# Usamos una imagen con JDK y Maven para COMPILAR
-FROM eclipse-temurin:21-jdk AS builder
+# --- FASE 1: Construcción (Builder) ---
+# Usamos una imagen que INCLUYE Maven y el JDK
+FROM maven:3-eclipse-temurin-21 AS builder
 
 # Establece el directorio de trabajo
 WORKDIR /app
@@ -8,10 +9,11 @@ WORKDIR /app
 COPY pom.xml .
 COPY src ./src
 
-# (Usamos mvnw si está disponible, si no, mvn)
+# Compila la aplicación (mvn ya existe en esta imagen)
 RUN mvn clean install -DskipTests
 
-# Usamos una imagen JRE (Java Runtime Environment)
+# --- FASE 2: Ejecución (Final) ---
+# Usamos una imagen JRE (Java Runtime Environment), mucho más LIGERA
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
@@ -20,6 +22,7 @@ WORKDIR /app
 EXPOSE 8080
 
 # Copia SÓLO el .jar compilado desde la fase 'builder'
+# IMPORTANTE: Asegúrate de que el nombre del .jar sea correcto
 COPY --from=builder /app/target/tssmanager-backend-0.0.1-SNAPSHOT.jar app.jar
 
 # Comando para arrancar la aplicación
