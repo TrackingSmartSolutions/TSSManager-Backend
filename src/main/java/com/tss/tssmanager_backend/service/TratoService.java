@@ -47,8 +47,6 @@ public class TratoService {
     private EmailService emailService;
 
 
-    private static final int MARGEN_CONFLICTO_MINUTOS = 9;
-
     @Cacheable(value = "tratos", key = "#id")
     public Trato findById(Integer id) {
         return tratoRepository.findById(id).orElse(null);
@@ -1797,14 +1795,8 @@ public class TratoService {
 
 
     private boolean hayConflicto(LocalTime inicio1, LocalTime fin1, LocalTime inicio2, LocalTime fin2) {
-        // Agregar margen de 10 minutos antes y después de cada actividad
-        LocalTime inicio1ConMargen = inicio1.minusMinutes(MARGEN_CONFLICTO_MINUTOS);
-        LocalTime fin1ConMargen = fin1.plusMinutes(MARGEN_CONFLICTO_MINUTOS);
-
-        // Verificar si hay solapamiento considerando el margen
-        // Actividad 1 termina después de que inicia actividad 2 (con margen)
-        // Y actividad 2 termina después de que inicia actividad 1 (con margen)
-        return fin1ConMargen.isAfter(inicio2) && fin2.isAfter(inicio1ConMargen);
+        // Permitir que una actividad empiece exactamente cuando termina otra
+        return fin1.isAfter(inicio2) && fin2.isAfter(inicio1);
     }
 
     @Transactional
