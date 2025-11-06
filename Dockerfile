@@ -1,22 +1,26 @@
-# Usa una imagen base con JDK
-FROM openjdk:21-jdk-slim
+# Usamos una imagen con JDK y Maven para COMPILAR
+FROM eclipse-temurin:21-jdk AS builder
 
-# Instala Maven
-RUN apt-get update && \
-    apt-get install -y maven && \
-    rm -rf /var/lib/apt/lists/*
-
-# Establece el directorio de trabajo dentro del contenedor
+# Establece el directorio de trabajo
 WORKDIR /app
 
+# Copia el pom y el código fuente
 COPY pom.xml .
 COPY src ./src
 
-# Usa 'mvn clean install -DskipTests' para saltar los tests durante el build del Dockerfile
+# (Usamos mvnw si está disponible, si no, mvn)
 RUN mvn clean install -DskipTests
 
-# Expone el puerto
+# Usamos una imagen JRE (Java Runtime Environment)
+FROM eclipse-temurin:21-jre
+
+WORKDIR /app
+
+# Expone el puerto de tu aplicación
 EXPOSE 8080
 
-# Comando para ejecutar la aplicación JAR
-ENTRYPOINT ["java", "-jar", "target/tssmanager-backend-0.0.1-SNAPSHOT.jar"]
+# Copia SÓLO el .jar compilado desde la fase 'builder'
+COPY --from=builder /app/target/tssmanager-backend-0.0.1-SNAPSHOT.jar app.jar
+
+# Comando para arrancar la aplicación
+ENTRYPOINT ["java", "-jar", "app.jar"]
