@@ -170,7 +170,11 @@ public class SolicitudFacturaNotaService {
         logger.info("Creando nuevo emisor: {}", emisor.getNombre());
         if (constanciaRegimen != null && !constanciaRegimen.isEmpty()) {
             Cloudinary cloudinary = cloudinaryConfig.cloudinary();
-            Map uploadResult = cloudinary.uploader().upload(constanciaRegimen.getBytes(), Map.of("resource_type", "raw"));
+
+            Map<String, Object> uploadParams = new HashMap<>();
+            uploadParams.put("resource_type", "raw");
+
+            Map uploadResult = cloudinary.uploader().upload(constanciaRegimen.getBytes(), uploadParams);
             emisor.setConstanciaRegimenFiscalUrl(uploadResult.get("url").toString());
         }
         return emisorRepository.save(emisor);
@@ -944,12 +948,13 @@ public class SolicitudFacturaNotaService {
         String nombreArchivo = "factura_" + factura.getNoSolicitud() + "_" + System.currentTimeMillis() + extension;
 
         Cloudinary cloudinary = cloudinaryConfig.cloudinary();
-        Map uploadResult = cloudinary.uploader().upload(archivo.getBytes(),
-                Map.of(
-                        "resource_type", "raw",
-                        "public_id", "facturas/" + nombreArchivo.replace(extension, ""),
-                        "original_filename", nombreOriginal
-                ));
+
+        Map<String, Object> uploadParams = new HashMap<>();
+        uploadParams.put("resource_type", "raw");
+        uploadParams.put("public_id", "facturas/" + nombreArchivo.replace(extension, ""));
+        uploadParams.put("overwrite", false);
+
+        Map uploadResult = cloudinary.uploader().upload(archivo.getBytes(), uploadParams);
 
         factura.setArchivoUrl(uploadResult.get("url").toString());
         factura.setNombreArchivoOriginal(nombreOriginal != null ? nombreOriginal : "factura.pdf");

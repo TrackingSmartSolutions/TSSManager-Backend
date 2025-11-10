@@ -21,7 +21,6 @@ WORKDIR /app
 # Expone el puerto de tu aplicación
 EXPOSE 8080
 
-# Copia SÓLO el .jar compilado desde la fase 'builder'
 # IMPORTANTE: Asegúrate de que el nombre del .jar sea correcto
 COPY --from=builder /app/target/tssmanager-backend-0.0.1-SNAPSHOT.jar app.jar
 
