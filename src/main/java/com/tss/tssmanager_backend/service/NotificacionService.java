@@ -60,6 +60,7 @@ public class NotificacionService {
     private EquipoService equipoService;
 
     @PostConstruct
+    @Transactional
     public void inicializarNotificaciones() {
         logger.info("Inicializando verificación de notificaciones al arrancar la aplicación");
         try {
