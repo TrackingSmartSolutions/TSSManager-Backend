@@ -9,6 +9,8 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +29,8 @@ public class CuentasVencidasSchedulerService {
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
 
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
     public void ejecutarAlIniciar() {
         logger.info("Ejecutando verificación de cuentas vencidas al iniciar la aplicación...");
         actualizarCuentasVencidas();
