@@ -15,6 +15,9 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -58,7 +61,7 @@ public class NotificacionService {
     private EmailService emailService;
     @Autowired
     private EquipoService equipoService;
-
+/*
     @PostConstruct
     @Transactional
     public void inicializarNotificaciones() {
@@ -75,6 +78,23 @@ public class NotificacionService {
             logger.error("Inicialización interrumpida: {}", e.getMessage());
         } catch (Exception e) {
             logger.error("Error durante la inicialización de notificaciones: {}", e.getMessage());
+        }
+    }
+*/
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void inicializarNotificacionesAlArranque() {
+        logger.info("Ejecutando tareas de inicialización (ApplicationReadyEvent)...");
+        try {
+            logger.info("Verificando actividades próximas al arranque...");
+            verificarActividadesProximas();
+            logger.info("Limpiando notificaciones leídas al arranque...");
+            limpiarNotificacionesLeidas();
+            logger.info("Verificando alertas de equipos pendientes al arranque...");
+            verificarYEnviarAlertaEquiposPendiente();
+            logger.info("Inicialización de notificaciones completada.");
+        } catch (Exception e) {
+            logger.error("Error durante la inicialización de notificaciones al arranque: {}", e.getMessage());
         }
     }
 
