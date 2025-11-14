@@ -3,6 +3,7 @@ package com.tss.tssmanager_backend.repository;
 import com.tss.tssmanager_backend.entity.Notificacion;
 import com.tss.tssmanager_backend.enums.EstatusNotificacionEnum;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -36,6 +37,8 @@ public interface NotificacionRepository extends JpaRepository<Notificacion, Inte
     );
 
     List<Notificacion> findByEstatusAndFechaLeidaBefore(EstatusNotificacionEnum estatus, Instant fecha);
-
+    @Modifying
+    @Query("DELETE FROM Notificacion n WHERE n.estatus = :estatus AND n.fechaLeida < :fecha")
+    int deleteByEstatusAndFechaLeidaBefore(@Param("estatus") EstatusNotificacionEnum estatus, @Param("fecha") Instant fecha);
 
 }

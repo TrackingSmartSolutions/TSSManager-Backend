@@ -188,14 +188,12 @@ public class NotificacionService {
 
     // Método programado para ejecutarse cada 6 horas
     @Scheduled(cron = "0 0 */6 * * *", zone = "America/Mexico_City")
-    @Transactional(timeout = 300)
     public void verificarNotificacionesProgramadas() {
         logger.info("Verificación programada de respaldo ejecutada");
         verificarActividadesProximas();
     }
 
     @Scheduled(cron = "0 0 10 * * *", zone = "America/Mexico_City")
-    @Transactional(timeout = 300)
     public void verificarNotificacionesMatutina() {
         logger.info("Verificación matutina de las 10 AM ejecutada");
         generarNotificacionCuentasYSims();
@@ -219,17 +217,18 @@ public class NotificacionService {
         actividadesManana.forEach(this::generarNotificacionActividad);
     }
 
-    @Transactional
     public void generarNotificacionCuentasYSims() {
         LocalDate hoy = LocalDate.now(ZONE_ID);
         LocalDate manana = hoy.plusDays(1);
 
         try {
-            // Cuentas por cobrar
-            procesarCuentasPorCobrar(hoy, manana);
+            List<CuentaPorCobrar> cuentasVencenHoy = obtenerCuentasPorCobrarVencen(hoy);
+            List<CuentaPorCobrar> cuentasVencenManana = obtenerCuentasPorCobrarVencen(manana);
+            List<CuentaPorPagar> cuentasPagarHoy = obtenerCuentasPorPagarVencen(hoy);
+            List<CuentaPorPagar> cuentasPagarManana = obtenerCuentasPorPagarVencen(manana);
 
-            // Cuentas por pagar
-            procesarCuentasPorPagar(hoy, manana);
+            procesarCuentasPorCobrar(hoy, manana, cuentasVencenHoy, cuentasVencenManana);
+            procesarCuentasPorPagar(hoy, manana, cuentasPagarHoy, cuentasPagarManana);
 
         } catch (Exception e) {
             logger.error("Error al generar notificaciones de cuentas y SIMs: {}", e.getMessage());
@@ -242,23 +241,15 @@ public class NotificacionService {
         generarNotificacionCuentasYSims();
     }
 
-    private void procesarCuentasPorCobrar(LocalDate hoy, LocalDate manana) {
-        List<CuentaPorCobrar> cuentasVencenHoy = cuentaPorCobrarRepository.findAll().stream()
-                .filter(cuenta -> cuenta.getFechaPago() != null)
-                .filter(cuenta -> cuenta.getFechaPago().equals(hoy))
-                .filter(cuenta -> cuenta.getEstatus() != EstatusPagoEnum.PAGADO)
-                .collect(Collectors.toList());
-
-        List<CuentaPorCobrar> cuentasVencenManana = cuentaPorCobrarRepository.findAll().stream()
-                .filter(cuenta -> cuenta.getFechaPago() != null)
-                .filter(cuenta -> cuenta.getFechaPago().equals(manana))
-                .filter(cuenta -> cuenta.getEstatus() != EstatusPagoEnum.PAGADO)
-                .collect(Collectors.toList());
+    private void procesarCuentasPorCobrar(LocalDate hoy, LocalDate manana,
+                                          List<CuentaPorCobrar> cuentasVencenHoy,
+                                          List<CuentaPorCobrar> cuentasVencenManana) {
 
         if (!cuentasVencenHoy.isEmpty()) {
             cuentasVencenHoy.forEach(cuenta -> {
                 String mensaje = String.format("Cuenta por cobrar vence hoy: %s, Cliente: %s, Fecha: %s",
                         cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+
                 notificarAdministradores("CUENTA_COBRAR", mensaje);
             });
 
@@ -273,6 +264,7 @@ public class NotificacionService {
             cuentasVencenManana.forEach(cuenta -> {
                 String mensaje = String.format("Cuenta por cobrar vence mañana: %s, Cliente: %s, Fecha: %s",
                         cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+
                 notificarAdministradores("CUENTA_COBRAR", mensaje);
             });
 
@@ -284,23 +276,15 @@ public class NotificacionService {
         }
     }
 
-    private void procesarCuentasPorPagar(LocalDate hoy, LocalDate manana) {
-        List<CuentaPorPagar> cuentasVencenHoy = cuentaPorPagarRepository.findAll().stream()
-                .filter(cuenta -> cuenta.getFechaPago() != null)
-                .filter(cuenta -> cuenta.getFechaPago().equals(hoy))
-                .filter(cuenta -> !"Pagado".equals(cuenta.getEstatus()))
-                .collect(Collectors.toList());
-
-        List<CuentaPorPagar> cuentasVencenManana = cuentaPorPagarRepository.findAll().stream()
-                .filter(cuenta -> cuenta.getFechaPago() != null)
-                .filter(cuenta -> cuenta.getFechaPago().equals(manana))
-                .filter(cuenta -> !"Pagado".equals(cuenta.getEstatus()))
-                .collect(Collectors.toList());
+    private void procesarCuentasPorPagar(LocalDate hoy, LocalDate manana,
+                                         List<CuentaPorPagar> cuentasVencenHoy,
+                                         List<CuentaPorPagar> cuentasVencenManana) {
 
         if (!cuentasVencenHoy.isEmpty()) {
             cuentasVencenHoy.forEach(cuenta -> {
                 String mensaje = String.format("Cuenta por pagar vence hoy: %s, Cuenta: %s, Fecha: %s",
                         cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+
                 notificarAdministradores("CUENTA_PAGAR", mensaje);
             });
 
@@ -315,6 +299,7 @@ public class NotificacionService {
             cuentasVencenManana.forEach(cuenta -> {
                 String mensaje = String.format("Cuenta por pagar vence mañana: %s, Cuenta: %s, Fecha: %s",
                         cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+
                 notificarAdministradores("CUENTA_PAGAR", mensaje);
             });
 
@@ -328,20 +313,15 @@ public class NotificacionService {
 
     private void enviarCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas, String cuandoVence, LocalDate fechaVencimiento) {
         try {
-            List<Usuario> adminsYGestores = new ArrayList<>();
-            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
-            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
+            List<Usuario> adminsYGestores = obtenerAdminsYGestoresActivos();
 
+            if (adminsYGestores.isEmpty()) {
+                logger.warn("No hay administradores o gestores activos para enviar correos de Cuentas por Cobrar.");
+                return;
+            }
             String asunto = "Recordatorio: Cuentas por Cobrar - Vencen " + cuandoVence;
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas, cuandoVence);
             String tipoCorreo = "CUENTAS_COBRAR_" + cuandoVence;
-
-            if (yaSeEnvioCorreoConsolidadoHoy(tipoCorreo, fechaVencimiento)) {
-                logger.warn("ABORTANDO envío de {} - Ya enviado hoy", tipoCorreo);
-                return;
-            }
 
             for (Usuario admin : adminsYGestores) {
                 try {
@@ -368,20 +348,17 @@ public class NotificacionService {
 
     private void enviarCorreoConsolidadoCuentasPorPagar(List<CuentaPorPagar> cuentas, String cuandoVence, LocalDate fechaVencimiento) {
         try {
-            List<Usuario> adminsYGestores = new ArrayList<>();
-            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
-            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
+            List<Usuario> adminsYGestores = obtenerAdminsYGestoresActivos();
+
+            if (adminsYGestores.isEmpty()) {
+                logger.warn("No hay administradores o gestores activos para enviar correos de Cuentas por Pagar.");
+                return;
+            }
 
             String asunto = "Recordatorio: Cuentas por Pagar - Vencen " + cuandoVence;
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas, cuandoVence);
             String tipoCorreo = "CUENTAS_PAGAR_" + cuandoVence;
 
-            if (yaSeEnvioCorreoConsolidadoHoy(tipoCorreo, fechaVencimiento)) {
-                logger.warn("ABORTANDO envío de {} - Ya enviado hoy", tipoCorreo);
-                return;
-            }
             for (Usuario admin : adminsYGestores) {
                 try {
                     emailService.enviarCorreo(
@@ -627,10 +604,9 @@ public class NotificacionService {
         });
     }
 
-    private void notificarAdministradores(String tipo, String mensaje) {
-        List<Usuario> adminsYGestores = new ArrayList<>();
-        adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
-        adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
+    @Transactional
+    public void notificarAdministradores(String tipo, String mensaje) {
+        List<Usuario> adminsYGestores = obtenerAdminsYGestoresActivos();
 
         adminsYGestores.forEach(admin -> {
             if (!existeNotificacionReciente(admin.getId(), tipo, mensaje)) {
@@ -708,25 +684,17 @@ public class NotificacionService {
     }
 
     @Scheduled(cron = "0 0 */12 * * *", zone = "America/Mexico_City")
-    @Transactional(timeout = 120)
+    @Transactional
     public void limpiarNotificacionesLeidas() {
         logger.info("Limpieza programada de notificaciones ejecutada");
         try {
             Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
 
-            List<Notificacion> notificacionesParaEliminar = notificacionRepository
-                    .findByEstatusAndFechaLeidaBefore(EstatusNotificacionEnum.LEIDA, hace24Horas);
+            int eliminadas = notificacionRepository.deleteByEstatusAndFechaLeidaBefore(
+                    EstatusNotificacionEnum.LEIDA, hace24Horas);
 
-            if (!notificacionesParaEliminar.isEmpty()) {
-                logger.info("Encontradas {} notificaciones para eliminar", notificacionesParaEliminar.size());
-
-                notificacionesParaEliminar.stream()
-                        .limit(5)
-                        .forEach(notif -> logger.debug("Eliminando notificación ID: {}, Fecha leída: {}",
-                                notif.getId(), notif.getFechaLeida()));
-
-                notificacionRepository.deleteAll(notificacionesParaEliminar);
-                logger.info("Eliminadas {} notificaciones leídas con más de 24 horas", notificacionesParaEliminar.size());
+            if (eliminadas > 0) {
+                logger.info("Eliminadas {} notificaciones leídas con más de 24 horas (vía @Modifying)", eliminadas);
             } else {
                 logger.info("No se encontraron notificaciones para eliminar");
             }
@@ -741,23 +709,16 @@ public class NotificacionService {
         try {
             Instant hace24Horas = obtenerInstantLocal().minusSeconds(24 * 60 * 60);
 
-            List<Notificacion> notificacionesParaEliminar = notificacionRepository
-                    .findByEstatusAndFechaLeidaBefore(EstatusNotificacionEnum.LEIDA, hace24Horas);
+            int eliminadas = notificacionRepository.deleteByEstatusAndFechaLeidaBefore(
+                    EstatusNotificacionEnum.LEIDA, hace24Horas);
 
-            if (!notificacionesParaEliminar.isEmpty()) {
-                logger.info("Limpieza manual: Encontradas {} notificaciones para eliminar", notificacionesParaEliminar.size());
-
-                notificacionesParaEliminar.forEach(notif ->
-                        logger.debug("Eliminando notificación ID: {}, Usuario: {}, Fecha leída: {}, Hace 24h: {}",
-                                notif.getId(), notif.getUsuario().getId(), notif.getFechaLeida(), hace24Horas));
-
-                notificacionRepository.deleteAll(notificacionesParaEliminar);
-                logger.info("Limpieza manual: Eliminadas {} notificaciones leídas", notificacionesParaEliminar.size());
-                return notificacionesParaEliminar.size();
+            if (eliminadas > 0) {
+                logger.info("Limpieza manual: Eliminadas {} notificaciones leídas (vía @Modifying)", eliminadas);
             } else {
                 logger.info("Limpieza manual: No se encontraron notificaciones para eliminar");
-                return 0;
             }
+            return eliminadas;
+
         } catch (Exception e) {
             logger.error("Error en limpieza manual de notificaciones: {}", e.getMessage(), e);
             throw e;
@@ -765,7 +726,6 @@ public class NotificacionService {
     }
 
     @Scheduled(cron = "0 0 9 * * MON", zone = "America/Mexico_City")
-    @Transactional(timeout = 300)
     public void verificarExpiracionEquipos() {
         logger.info("Iniciando verificación semanal de expiración de equipos (Lunes 9:00 AM)");
         try {
@@ -779,7 +739,10 @@ public class NotificacionService {
             List<Equipo> equiposProximosAExpirar = equipoService.obtenerEquiposProximosAExpirar();
 
             if (!equiposProximosAExpirar.isEmpty()) {
-                enviarAlertaExpiracionEquipos(equiposProximosAExpirar);
+                List<Usuario> adminsYGestores = obtenerAdminsYGestoresActivos();
+
+                enviarAlertaExpiracionEquipos(equiposProximosAExpirar, adminsYGestores);
+
                 logger.info("Alerta de expiración enviada. Total de equipos: {}", equiposProximosAExpirar.size());
             } else {
                 logger.info("No hay equipos próximos a expirar en los próximos 30 días");
@@ -789,13 +752,8 @@ public class NotificacionService {
         }
     }
 
-    private void enviarAlertaExpiracionEquipos(List<Equipo> equipos) {
+    private void enviarAlertaExpiracionEquipos(List<Equipo> equipos, List<Usuario> adminsYGestores) {
         try {
-            List<Usuario> adminsYGestores = new ArrayList<>();
-            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
-            adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(
-                    RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
 
             if (adminsYGestores.isEmpty()) {
                 logger.warn("No hay administradores o gestores activos para enviar alertas");
@@ -803,6 +761,7 @@ public class NotificacionService {
             }
 
             String asunto = "Alerta: Equipos próximos a expirar";
+
             String cuerpo = construirCuerpoAlertaExpiracion(equipos);
 
             for (Usuario admin : adminsYGestores) {
@@ -1047,24 +1006,20 @@ public class NotificacionService {
         }
     }
 
-    private boolean seEnvioAlertaEquiposEstaSemana(LocalDate lunesEstaSemana) {
+    @Transactional(readOnly = true)
+    public boolean seEnvioAlertaEquiposEstaSemana(LocalDate lunesEstaSemana) {
         try {
             ZonedDateTime inicioSemana = lunesEstaSemana.atStartOfDay(ZONE_ID);
             String asunto = "Alerta: Equipos próximos a expirar";
 
-            List<EmailRecord> correosEstaSemana = emailRecordRepository
-                    .findByAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
-                            asunto,
-                            inicioSemana
-                    );
-
-            boolean yaEnviado = !correosEstaSemana.isEmpty();
+            boolean yaEnviado = emailRecordRepository.existsByAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
+                    asunto,
+                    inicioSemana
+            );
 
             if (yaEnviado) {
-                logger.debug("Encontrados {} correos de alerta de equipos esta semana",
-                        correosEstaSemana.size());
+                logger.debug("Verificación en BD: Alerta de equipos ya enviada esta semana");
             }
-
             return yaEnviado;
 
         } catch (Exception e) {
@@ -1073,31 +1028,42 @@ public class NotificacionService {
         }
     }
 
-    private boolean yaSeEnvioCorreoConsolidadoHoy(String tipoCorreo, LocalDate fechaVencimiento) {
+    @Transactional(readOnly = true)
+    public boolean yaSeEnvioCorreoConsolidadoHoy(String tipoCorreo, LocalDate fechaVencimiento) {
         try {
             ZonedDateTime inicioDelDia = LocalDate.now(ZONE_ID).atStartOfDay(ZONE_ID);
 
-            List<EmailRecord> correosHoy = emailRecordRepository.findAll().stream()
-                    .filter(email -> tipoCorreo.equals(email.getTipoCorreoConsolidado()))
-                    .filter(email -> email.isExito())
-                    .filter(email -> email.getFechaEnvio() != null &&
-                            email.getFechaEnvio().isAfter(inicioDelDia))
-                    .collect(Collectors.toList());
-
-            boolean yaEnviado = !correosHoy.isEmpty();
+            boolean yaEnviado = emailRecordRepository.existsByTipoCorreoConsolidadoAndExitoTrueAndFechaEnvioAfter(
+                    tipoCorreo, inicioDelDia);
 
             if (yaEnviado) {
-                logger.info("✓ Correo {} YA ENVIADO HOY. Total encontrados: {}",
-                        tipoCorreo, correosHoy.size());
+                logger.info("✓ Correo {} YA ENVIADO HOY. (Verificado en BD)", tipoCorreo);
             } else {
                 logger.info("✗ Correo {} NO enviado hoy. Procederá a enviar.", tipoCorreo);
             }
-
             return yaEnviado;
 
         } catch (Exception e) {
             logger.error("Error al verificar correo consolidado: {}", e.getMessage());
             return false;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencen(LocalDate fecha) {
+        return cuentaPorCobrarRepository.findByFechaPagoAndEstatusNot(fecha, EstatusPagoEnum.PAGADO);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CuentaPorPagar> obtenerCuentasPorPagarVencen(LocalDate fecha) {
+        return cuentaPorPagarRepository.findByFechaPagoAndEstatusNot(fecha, "Pagado");
+    }
+
+    @Transactional(readOnly = true)
+    public List<Usuario> obtenerAdminsYGestoresActivos() {
+        List<Usuario> adminsYGestores = new ArrayList<>();
+        adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
+        adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
+        return adminsYGestores;
     }
 }

@@ -31,4 +31,5 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
 
     @Query("SELECT c.id FROM CuentaPorCobrar c WHERE c.comprobantePagoUrl IS NOT NULL OR SIZE(c.solicitudesFacturasNotas) > 0")
     List<Integer> findAllVinculatedIds();
+    List<CuentaPorCobrar> findByFechaPagoAndEstatusNot(LocalDate fechaPago, EstatusPagoEnum estatus);
 }

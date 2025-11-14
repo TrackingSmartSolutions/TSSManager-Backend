@@ -15,4 +15,9 @@ public interface EmailRecordRepository extends JpaRepository<EmailRecord, Intege
             String destinatario, String cuerpo, ZonedDateTime fechaEnvio);
     List<EmailRecord> findByAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
             String asunto, ZonedDateTime fechaEnvio);
+
+    boolean existsByAsuntoContainingAndFechaEnvioAfterAndExitoTrue(
+            String asunto, ZonedDateTime fechaEnvio);
+    boolean existsByTipoCorreoConsolidadoAndExitoTrueAndFechaEnvioAfter(
+            String tipoCorreoConsolidado, ZonedDateTime fechaEnvio);
 }
