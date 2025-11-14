@@ -27,4 +27,6 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
             @Param("hoy") LocalDate hoy,
             @Param("estatus") String estatus
     );
+    List<CuentaPorPagar> findByFechaPagoAndEstatusNot(LocalDate fechaPago, String estatus);
+
 }
