@@ -247,9 +247,11 @@ public class NotificacionService {
             List<CuentaPorCobrar> cuentasVencenManana = obtenerCuentasPorCobrarVencen(manana);
             List<CuentaPorPagar> cuentasPagarHoy = obtenerCuentasPorPagarVencen(hoy);
             List<CuentaPorPagar> cuentasPagarManana = obtenerCuentasPorPagarVencen(manana);
+            List<CuentaPorCobrar> cuentasCobrarVencidas = obtenerCuentasPorCobrarVencidas();
+            List<CuentaPorPagar> cuentasPagarVencidas = obtenerCuentasPorPagarVencidas();
 
-            procesarCuentasPorCobrar(hoy, manana, cuentasVencenHoy, cuentasVencenManana);
-            procesarCuentasPorPagar(hoy, manana, cuentasPagarHoy, cuentasPagarManana);
+            procesarCuentasPorCobrar(hoy, manana, cuentasVencenHoy, cuentasVencenManana, cuentasCobrarVencidas);
+            procesarCuentasPorPagar(hoy, manana, cuentasPagarHoy, cuentasPagarManana, cuentasPagarVencidas);
 
         } catch (Exception e) {
             logger.error("Error al generar notificaciones de cuentas y SIMs: {}", e.getMessage());
@@ -264,7 +266,8 @@ public class NotificacionService {
 
     private void procesarCuentasPorCobrar(LocalDate hoy, LocalDate manana,
                                           List<CuentaPorCobrar> cuentasVencenHoy,
-                                          List<CuentaPorCobrar> cuentasVencenManana) {
+                                          List<CuentaPorCobrar> cuentasVencenManana,
+                                          List<CuentaPorCobrar> cuentasVencidas) {
 
         if (!cuentasVencenHoy.isEmpty()) {
             cuentasVencenHoy.forEach(cuenta -> {
@@ -295,11 +298,28 @@ public class NotificacionService {
                 logger.info("Saltando envío de correo de cuentas por cobrar (MAÑANA) - Ya enviado");
             }
         }
+
+        if (!cuentasVencidas.isEmpty()) {
+            cuentasVencidas.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por cobrar VENCIDA: %s, Cliente: %s, Fecha: %s",
+                        cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
+
+                notificarAdministradores("CUENTA_COBRAR_VENCIDA", mensaje);
+            });
+
+            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_COBRAR_VENCIDAS", hoy)) {
+                enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencidas, "VENCIDAS", hoy);
+            } else {
+                logger.info("Saltando envío de correo de cuentas por cobrar (VENCIDAS) - Ya enviado");
+            }
+        }
     }
+
 
     private void procesarCuentasPorPagar(LocalDate hoy, LocalDate manana,
                                          List<CuentaPorPagar> cuentasVencenHoy,
-                                         List<CuentaPorPagar> cuentasVencenManana) {
+                                         List<CuentaPorPagar> cuentasVencenManana,
+                                         List<CuentaPorPagar> cuentasVencidas) {
 
         if (!cuentasVencenHoy.isEmpty()) {
             cuentasVencenHoy.forEach(cuenta -> {
@@ -328,6 +348,21 @@ public class NotificacionService {
                 enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenManana, "MAÑANA", manana);
             } else {
                 logger.info("Saltando envío de correo de cuentas por pagar (MAÑANA) - Ya enviado");
+            }
+        }
+
+        if (!cuentasVencidas.isEmpty()) {
+            cuentasVencidas.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por pagar VENCIDA: %s, Cuenta: %s, Fecha: %s",
+                        cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
+
+                notificarAdministradores("CUENTA_PAGAR_VENCIDA", mensaje);
+            });
+
+            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_PAGAR_VENCIDAS", hoy)) {
+                enviarCorreoConsolidadoCuentasPorPagar(cuentasVencidas, "VENCIDAS", hoy);
+            } else {
+                logger.info("Saltando envío de correo de cuentas por pagar (VENCIDAS) - Ya enviado");
             }
         }
     }
@@ -409,7 +444,9 @@ public class NotificacionService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         LocalDate fechaVencimiento = cuentas.get(0).getFechaPago();
-        String textoVencimiento = cuandoVence.equals("HOY") ? "vencen hoy" : "vencen mañana";
+        String textoVencimiento = cuandoVence.equals("HOY") ? "vencen hoy" :
+                cuandoVence.equals("MAÑANA") ? "vencen mañana" :
+                        "están VENCIDAS";
 
         StringBuilder listadoCuentas = new StringBuilder();
         for (CuentaPorCobrar cuenta : cuentas) {
@@ -421,9 +458,18 @@ public class NotificacionService {
             ));
         }
 
-        String tituloEvento = String.format("Recordatorio: %d Cuentas por Cobrar - Total $%s",
-                cuentas.size(), montoTotal);
-        String descripcionEvento = String.format(
+        String tituloEvento = cuandoVence.equals("VENCIDAS")
+                ? String.format("⚠️ URGENTE: %d Cuentas por Cobrar VENCIDAS - Total $%s", cuentas.size(), montoTotal)
+                : String.format("Recordatorio: %d Cuentas por Cobrar - Total $%s", cuentas.size(), montoTotal);
+        String descripcionEvento = cuandoVence.equals("VENCIDAS")
+                ? String.format(
+                "⚠️ ALERTA: Cuentas por cobrar VENCIDAS:%n" +
+                        "Total de cuentas: %d%n" +
+                        "Monto total: $%s%n" +
+                        "Requiere atención inmediata",
+                cuentas.size(), montoTotal
+        )
+                : String.format(
                 "Recordatorio de cuentas por cobrar:%n" +
                         "Total de cuentas: %d%n" +
                         "Monto total: $%s%n" +
@@ -502,8 +548,9 @@ public class NotificacionService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         LocalDate fechaVencimiento = cuentas.get(0).getFechaPago();
-        String textoVencimiento = cuandoVence.equals("HOY") ? "vencen hoy" : "vencen mañana";
-
+        String textoVencimiento = cuandoVence.equals("HOY") ? "vencen hoy" :
+                cuandoVence.equals("MAÑANA") ? "vencen mañana" :
+                        "están VENCIDAS";
         StringBuilder listadoCuentas = new StringBuilder();
         for (CuentaPorPagar cuenta : cuentas) {
             String categoria = cuenta.getTransaccion() != null && cuenta.getTransaccion().getCategoria() != null
@@ -520,9 +567,18 @@ public class NotificacionService {
             ));
         }
 
-        String tituloEvento = String.format("Recordatorio: %d Cuentas por Pagar - Total $%s",
-                cuentas.size(), montoTotal);
-        String descripcionEvento = String.format(
+        String tituloEvento = cuandoVence.equals("VENCIDAS")
+                ? String.format("⚠️ URGENTE: %d Cuentas por Pagar VENCIDAS - Total $%s", cuentas.size(), montoTotal)
+                : String.format("Recordatorio: %d Cuentas por Pagar - Total $%s", cuentas.size(), montoTotal);
+        String descripcionEvento = cuandoVence.equals("VENCIDAS")
+                ? String.format(
+                "⚠️ ALERTA: Cuentas por pagar VENCIDAS:%n" +
+                        "Total de cuentas: %d%n" +
+                        "Monto total: $%s%n" +
+                        "Requiere atención inmediata",
+                cuentas.size(), montoTotal
+        )
+                : String.format(
                 "Recordatorio de cuentas por pagar:%n" +
                         "Total de cuentas: %d%n" +
                         "Monto total: $%s%n" +
@@ -1078,6 +1134,16 @@ public class NotificacionService {
     @Transactional(readOnly = true)
     public List<CuentaPorPagar> obtenerCuentasPorPagarVencen(LocalDate fecha) {
         return cuentaPorPagarRepository.findByFechaPagoAndEstatusNot(fecha, "Pagado");
+    }
+
+    @Transactional(readOnly = true)
+    public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencidas() {
+        return cuentaPorCobrarRepository.findByEstatus(EstatusPagoEnum.VENCIDA);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CuentaPorPagar> obtenerCuentasPorPagarVencidas() {
+        return cuentaPorPagarRepository.findByEstatus("Vencida");
     }
 
     @Transactional(readOnly = true)
