@@ -94,19 +94,28 @@ public class CuentaPorCobrarService {
                 cuenta.setCotizacion(cotizacion);
                 cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
                 cuenta.setEsquema(esquema);
-                cuenta.setNoEquipos(cotizacion.getUnidades().size());
-                cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
+                cuenta.setNoEquipos(cotizacion.getUnidades().stream()
+                        .filter(u -> "Equipos".equals(u.getUnidad()))
+                        .mapToInt(UnidadCotizacion::getCantidad)
+                        .sum());
 
                 if (i == 0) {
-                    // Primera cuenta: fecha de hoy, monto = subtotal
+                    // Primera cuenta: fecha de hoy, monto = subtotal, TODOS los conceptos
                     cuenta.setFechaPago(fechaBase);
                     cuenta.setCantidadCobrar(cotizacion.getSubtotal());
-                    logger.info("Cuenta {} - Fecha: {}, Monto: {} (subtotal)", i+1, fechaBase, cotizacion.getSubtotal());
+                    // Para la primera cuenta, incluir TODOS los conceptos de la cotización
+                    String todosLosConceptos = cotizacion.getUnidades().stream()
+                            .map(UnidadCotizacion::getConcepto)
+                            .distinct()
+                            .collect(Collectors.joining(", "));
+                    cuenta.setConceptos(todosLosConceptos);
+                    logger.info("Cuenta {} - Fecha: {}, Monto: {} (subtotal completo con todos los conceptos)", i+1, fechaBase, cotizacion.getSubtotal());
                 } else {
-                    // Siguientes cuentas: 365 días más, monto = total unidades seleccionadas
+                    // Siguientes cuentas: 365 días más, monto = total unidades seleccionadas, solo conceptos seleccionados
                     cuenta.setFechaPago(fechaBase.plusYears(i));
                     cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
-                    logger.info("Cuenta {} - Fecha: {}, Monto: {} (unidades seleccionadas)", i+1, fechaBase.plusDays(i * 365), totalUnidadesSeleccionadas);
+                    cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
+                    logger.info("Cuenta {} - Fecha: {}, Monto: {} (unidades seleccionadas)", i+1, fechaBase.plusYears(i), totalUnidadesSeleccionadas);
                 }
 
                 cuenta.setFolio(generateFolio(cliente.getNombre(), i + 1));
