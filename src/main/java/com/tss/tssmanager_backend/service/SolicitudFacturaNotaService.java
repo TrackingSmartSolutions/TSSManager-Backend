@@ -220,22 +220,8 @@ public class SolicitudFacturaNotaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Emisor no encontrado"));
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(solicitud.getCuentaPorCobrar().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada"));
-        // Obtener los conceptos desde la cotización vinculada, no desde la cuenta
-        if (cuenta.getCotizacion() != null) {
-            Hibernate.initialize(cuenta.getCotizacion().getUnidades());
-            List<UnidadCotizacion> unidadesCotizacion = cuenta.getCotizacion().getUnidades();
 
-            // Filtrar las unidades que coincidan con los conceptos de la cuenta
-            String[] conceptosCuenta = cuenta.getConceptos().split(", ");
-            List<String> conceptosCoincidentes = unidadesCotizacion.stream()
-                    .filter(u -> Arrays.asList(conceptosCuenta).contains(u.getConcepto()))
-                    .map(UnidadCotizacion::getConcepto)
-                    .collect(Collectors.toList());
-
-            solicitud.setConceptosSeleccionados(String.join(", ", conceptosCoincidentes));
-        } else {
-            solicitud.setConceptosSeleccionados(cuenta.getConceptos());
-        }
+        solicitud.setConceptosSeleccionados(cuenta.getConceptos());
 
         if (solicitud.getCliente() == null) {
             solicitud.setCliente(cuenta.getCliente());
