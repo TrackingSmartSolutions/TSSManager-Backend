@@ -61,6 +61,7 @@ public class NotificacionService {
     private EmailService emailService;
     @Autowired
     private EquipoService equipoService;
+
 /*
     @PostConstruct
     @Transactional
@@ -1151,6 +1152,15 @@ public class NotificacionService {
         List<Usuario> adminsYGestores = new ArrayList<>();
         adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO));
         adminsYGestores.addAll(usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.GESTOR, EstatusUsuarioEnum.ACTIVO));
-        return adminsYGestores;
+
+        return filtrarUsuariosActivos(adminsYGestores);
+    }
+
+    private List<Usuario> filtrarUsuariosActivos(List<Usuario> usuarios) {
+        return usuarios.stream()
+                .filter(usuario -> usuarioRepository.existsByCorreoElectronicoAndEstatus(
+                        usuario.getCorreoElectronico(),
+                        EstatusUsuarioEnum.ACTIVO))
+                .collect(Collectors.toList());
     }
 }

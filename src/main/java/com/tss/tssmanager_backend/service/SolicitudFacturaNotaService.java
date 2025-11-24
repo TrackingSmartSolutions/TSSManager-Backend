@@ -242,10 +242,10 @@ public class SolicitudFacturaNotaService {
 
         BigDecimal subtotal = cuenta.getCantidadCobrar();
 
-// Calcular IVA
+        // Calcular IVA
         BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
 
-// Calcular retenciones si aplica
+        // Calcular retenciones si aplica
         BigDecimal isrEstatal = BigDecimal.ZERO;
         BigDecimal isrFederal = BigDecimal.ZERO;
 

@@ -25,4 +25,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Integer> {
 
     @Query("SELECT u FROM Usuario u WHERE u.estatus = :estatus ORDER BY u.id ASC")
     List<Usuario> findByEstatusOrderById(EstatusUsuarioEnum estatus);
+
+    boolean existsByCorreoElectronicoAndEstatus(String correoElectronico, EstatusUsuarioEnum estatus);
+
 }
