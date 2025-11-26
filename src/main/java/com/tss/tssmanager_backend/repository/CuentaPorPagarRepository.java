@@ -29,4 +29,6 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
     );
     List<CuentaPorPagar> findByFechaPagoAndEstatusNot(LocalDate fechaPago, String estatus);
     List<CuentaPorPagar> findByEstatus(String estatus);
+    List<CuentaPorPagar> findByFechaPagoAndEstatusIn(LocalDate fechaPago, List<String> estatus);
+    List<CuentaPorPagar> findByEstatusIn(List<String> estatus);
 }

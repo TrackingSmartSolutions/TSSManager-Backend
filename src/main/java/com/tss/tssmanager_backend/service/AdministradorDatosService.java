@@ -650,6 +650,15 @@ public class AdministradorDatosService {
         ResultadoExportacionDTO resultado = new ResultadoExportacionDTO();
 
         try {
+            long conteoRegistros = contarRegistros(solicitud.getTipoDatos());
+            final int LIMITE_MAXIMO = 1000;
+
+            if (conteoRegistros > LIMITE_MAXIMO) {
+                resultado.setExito(false);
+                resultado.setMensaje("Hay " + conteoRegistros + " registros. El límite es " +
+                        LIMITE_MAXIMO + ". Por favor usa filtros de fecha.");
+                return resultado;
+            }
             // Crear directorio si no existe
             Path directorioExportaciones = Paths.get(rutaExportaciones);
             if (!Files.exists(directorioExportaciones)) {
@@ -715,27 +724,93 @@ public class AdministradorDatosService {
     }
 
     private List<Object> obtenerDatosParaExportacion(String tipoDatos, String fechaInicio, String fechaFin) {
+        final int LIMITE_REGISTROS = 500;
+
+        List<Object> datos;
         switch (tipoDatos) {
             case "tratos":
-                return tratosRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = tratosRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "empresas":
-                return empresasRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = empresasRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "contactos":
-                return contactosRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = contactosRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "correoContactos":
-                return correoContactoRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = correoContactoRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "modelos":
-                return modeloRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = modeloRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "proveedores":
-                return proveedorRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = proveedorRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "equipos":
-                return equipoRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = equipoRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "sims":
-                return simRepository.findAllWithEquipo().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = simRepository.findAllWithEquipo().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             case "historialSaldos":
-                return historialSaldoRepository.findAll().stream().map(Object.class::cast).collect(Collectors.toList());
+                datos = historialSaldoRepository.findAll().stream()
+                        .limit(LIMITE_REGISTROS)
+                        .map(Object.class::cast)
+                        .collect(Collectors.toList());
+                break;
             default:
-                return new ArrayList<>();
+                datos = new ArrayList<>();
+        }
+
+        return datos;
+    }
+
+    private long contarRegistros(String tipoDatos) {
+        switch (tipoDatos) {
+            case "tratos":
+                return tratosRepository.count();
+            case "empresas":
+                return empresasRepository.count();
+            case "contactos":
+                return contactosRepository.count();
+            case "correoContactos":
+                return correoContactoRepository.count();
+            case "modelos":
+                return modeloRepository.count();
+            case "proveedores":
+                return proveedorRepository.count();
+            case "equipos":
+                return equipoRepository.count();
+            case "sims":
+                return simRepository.count();
+            case "historialSaldos":
+                return historialSaldoRepository.count();
+            default:
+                return 0;
         }
     }
 

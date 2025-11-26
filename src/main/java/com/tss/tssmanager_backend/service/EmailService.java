@@ -45,6 +45,21 @@ public class EmailService {
         this.emailRecordRepository = emailRecordRepository;
     }
 
+    private String normalizarEmail(String email) {
+        if (email == null) return null;
+
+        // Eliminar espacios en blanco al inicio y final
+        email = email.trim();
+
+        // Convertir a minúsculas
+        email = email.toLowerCase();
+
+        // Solo permitir: letras (a-z), números (0-9), y caracteres válidos en emails (@ . - _ +)
+        email = email.replaceAll("[^a-z0-9@.\\-_+]", "");
+
+        return email;
+    }
+
     public EmailRecord enviarCorreo(String destinatario, String asunto, String cuerpo, List<String> rutasArchivosAdjuntos, Integer tratoId) {
         return enviarCorreo(destinatario, asunto, cuerpo, rutasArchivosAdjuntos, tratoId, null);
     }
@@ -58,10 +73,16 @@ public class EmailService {
             if (destinatario.contains(",")) {
                 emailArray = destinatario.split(",");
                 for (int i = 0; i < emailArray.length; i++) {
-                    emailArray[i] = emailArray[i].trim();
+                    emailArray[i] = normalizarEmail(emailArray[i]);
                 }
             } else {
-                emailArray = new String[]{destinatario.trim()};
+                emailArray = new String[]{normalizarEmail(destinatario)};
+            }
+
+            for (String email : emailArray) {
+                if (email == null || email.isEmpty() || !email.contains("@")) {
+                    throw new RuntimeException("Email inválido después de normalización: " + email);
+                }
             }
 
             CreateEmailOptions.Builder emailBuilder = CreateEmailOptions.builder()

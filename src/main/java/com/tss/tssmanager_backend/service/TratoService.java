@@ -1611,34 +1611,36 @@ public class TratoService {
             try {
                 TratoBasicoDTO dto = new TratoBasicoDTO();
 
-                dto.setId((Integer) row[0]);
-                dto.setNombre((String) row[1]);
-                dto.setPropietarioId((Integer) row[2]);
-                dto.setFechaCierre(((Timestamp) row[3]).toLocalDateTime());
-                dto.setNoTrato((String) row[4]);
-                dto.setIngresoEsperado((BigDecimal) row[5]);
-                dto.setFase((String) row[6]);
+                dto.setId((Integer) row[0]);                                    // 0: t.id
+                dto.setNombre((String) row[1]);                                // 1: t.nombre
+                dto.setPropietarioId((Integer) row[2]);                        // 2: t.propietario_id
+                dto.setFechaCierre(((Timestamp) row[3]).toLocalDateTime());   // 3: t.fecha_cierre
+                dto.setNoTrato((String) row[4]);                              // 4: t.no_trato
+                dto.setIngresoEsperado((BigDecimal) row[5]);                  // 5: t.ingresos_esperados
+                dto.setFase((String) row[6]);                                 // 6: t.fase
 
-                dto.setFechaUltimaActividad(convertToInstant(row[7]));
-                dto.setFechaCreacion(convertToInstant(row[8]));
-                dto.setFechaModificacion(convertToInstant(row[9]));
+                // Fechas con conversión segura
+                dto.setFechaUltimaActividad(convertToInstant(row[7]));        // 7: t.fecha_ultima_actividad
+                dto.setFechaCreacion(convertToInstant(row[8]));               // 8: t.fecha_creacion
+                dto.setFechaModificacion(convertToInstant(row[9]));           // 9: t.fecha_modificacion
 
-                dto.setPropietarioNombre((String) row[10]);
-                dto.setEmpresaNombre((String) row[11]);
-                dto.setContactoId((Integer) row[12]);
+                // Datos relacionados
+                dto.setPropietarioNombre((String) row[10]);                    // 10: propietario_nombre
+                dto.setEmpresaNombre((String) row[11]);                        // 11: empresa_nombre
+                dto.setContactoId((Integer) row[12]);                          // 12: t.contacto_id
 
-                // Datos de actividades
-                Integer actividadesCount = ((Number) row[13]).intValue();
-                Integer actividadesAbiertasCount = ((Number) row[14]).intValue();
+                // Contadores de actividades
+                Integer actividadesCount = ((Number) row[13]).intValue();      // 13: actividades_count
+                Integer actividadesAbiertasCount = ((Number) row[14]).intValue(); // 14: actividades_abiertas_count
+
                 dto.setHasActivities(actividadesCount > 0);
                 dto.setActividadesAbiertasCount(actividadesAbiertasCount);
 
-                // Próxima actividad
-                dto.setProximaActividadTipo((String) row[15]);
-                if (row[16] != null) {
-                    // Cambiar la conversión de Date a LocalDate
+                dto.setProximaActividadTipo((String) row[15]);                 // 15: proxima_actividad_tipo
+                if (row[16] != null) {                                         // 16: proxima_actividad_fecha
                     dto.setProximaActividadFecha(convertToLocalDate(row[16]));
                 }
+
                 // Calcular si está desatendido
                 Instant fechaUltimaActividad = dto.getFechaUltimaActividad() != null ?
                         dto.getFechaUltimaActividad() : dto.getFechaCreacion();
@@ -1646,6 +1648,7 @@ public class TratoService {
                 dto.setIsNeglected(!dto.getHasActivities() && minutesInactive > 10080);
 
                 tratos.add(dto);
+
             } catch (Exception e) {
                 System.err.println("Error en convertToTratosBasicoDTOs: " + e.getMessage());
                 e.printStackTrace();

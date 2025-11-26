@@ -72,4 +72,11 @@ public class NotificacionController {
             ));
         }
     }
+
+    // Obtener actividades próximas (1 hora antes)
+    @GetMapping("/actividades-proximas")
+    public ResponseEntity<List<Map<String, Object>>> obtenerActividadesProximas() {
+        List<Map<String, Object>> actividadesProximas = notificacionService.obtenerActividadesProximasUsuario();
+        return ResponseEntity.ok(actividadesProximas);
+    }
 }

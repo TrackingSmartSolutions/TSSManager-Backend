@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -270,21 +271,28 @@ public class NotificacionService {
                                           List<CuentaPorCobrar> cuentasVencenManana,
                                           List<CuentaPorCobrar> cuentasVencidas) {
 
-        if (!cuentasVencenHoy.isEmpty()) {
-            cuentasVencenHoy.forEach(cuenta -> {
-                String mensaje = String.format("Cuenta por cobrar vence hoy: %s, Cliente: %s, Fecha: %s",
+        // Consolidar cuentas que vencen HOY (pendientes + en proceso que vencen hoy + vencidas)
+        List<CuentaPorCobrar> cuentasConsolidadasHoy = new ArrayList<>();
+        cuentasConsolidadasHoy.addAll(cuentasVencenHoy);
+        cuentasConsolidadasHoy.addAll(cuentasVencidas);
+
+        if (!cuentasConsolidadasHoy.isEmpty()) {
+            cuentasConsolidadasHoy.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por cobrar %s: %s, Cliente: %s, Fecha: %s",
+                        cuenta.getEstatus() == EstatusPagoEnum.VENCIDA ? "VENCIDA" : "vence hoy",
                         cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
 
                 notificarAdministradores("CUENTA_COBRAR", mensaje);
             });
 
             if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_COBRAR_HOY", hoy)) {
-                enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencenHoy, "HOY", hoy);
+                enviarCorreoConsolidadoCuentasPorCobrar(cuentasConsolidadasHoy, "HOY", hoy);
             } else {
                 logger.info("Saltando envío de correo de cuentas por cobrar (HOY) - Ya enviado");
             }
         }
 
+        // Consolidar cuentas que vencen MAÑANA
         if (!cuentasVencenManana.isEmpty()) {
             cuentasVencenManana.forEach(cuenta -> {
                 String mensaje = String.format("Cuenta por cobrar vence mañana: %s, Cliente: %s, Fecha: %s",
@@ -299,21 +307,6 @@ public class NotificacionService {
                 logger.info("Saltando envío de correo de cuentas por cobrar (MAÑANA) - Ya enviado");
             }
         }
-
-        if (!cuentasVencidas.isEmpty()) {
-            cuentasVencidas.forEach(cuenta -> {
-                String mensaje = String.format("Cuenta por cobrar VENCIDA: %s, Cliente: %s, Fecha: %s",
-                        cuenta.getFolio(), cuenta.getCliente().getNombre(), cuenta.getFechaPago());
-
-                notificarAdministradores("CUENTA_COBRAR_VENCIDA", mensaje);
-            });
-
-            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_COBRAR_VENCIDAS", hoy)) {
-                enviarCorreoConsolidadoCuentasPorCobrar(cuentasVencidas, "VENCIDAS", hoy);
-            } else {
-                logger.info("Saltando envío de correo de cuentas por cobrar (VENCIDAS) - Ya enviado");
-            }
-        }
     }
 
 
@@ -322,21 +315,28 @@ public class NotificacionService {
                                          List<CuentaPorPagar> cuentasVencenManana,
                                          List<CuentaPorPagar> cuentasVencidas) {
 
-        if (!cuentasVencenHoy.isEmpty()) {
-            cuentasVencenHoy.forEach(cuenta -> {
-                String mensaje = String.format("Cuenta por pagar vence hoy: %s, Cuenta: %s, Fecha: %s",
+        // Consolidar cuentas que vencen HOY (pendientes + en proceso que vencen hoy + vencidas)
+        List<CuentaPorPagar> cuentasConsolidadasHoy = new ArrayList<>();
+        cuentasConsolidadasHoy.addAll(cuentasVencenHoy);
+        cuentasConsolidadasHoy.addAll(cuentasVencidas);
+
+        if (!cuentasConsolidadasHoy.isEmpty()) {
+            cuentasConsolidadasHoy.forEach(cuenta -> {
+                String mensaje = String.format("Cuenta por pagar %s: %s, Cuenta: %s, Fecha: %s",
+                        "Vencida".equals(cuenta.getEstatus()) ? "VENCIDA" : "vence hoy",
                         cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
 
                 notificarAdministradores("CUENTA_PAGAR", mensaje);
             });
 
             if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_PAGAR_HOY", hoy)) {
-                enviarCorreoConsolidadoCuentasPorPagar(cuentasVencenHoy, "HOY", hoy);
+                enviarCorreoConsolidadoCuentasPorPagar(cuentasConsolidadasHoy, "HOY", hoy);
             } else {
                 logger.info("Saltando envío de correo de cuentas por pagar (HOY) - Ya enviado");
             }
         }
 
+        // Consolidar cuentas que vencen MAÑANA
         if (!cuentasVencenManana.isEmpty()) {
             cuentasVencenManana.forEach(cuenta -> {
                 String mensaje = String.format("Cuenta por pagar vence mañana: %s, Cuenta: %s, Fecha: %s",
@@ -351,21 +351,6 @@ public class NotificacionService {
                 logger.info("Saltando envío de correo de cuentas por pagar (MAÑANA) - Ya enviado");
             }
         }
-
-        if (!cuentasVencidas.isEmpty()) {
-            cuentasVencidas.forEach(cuenta -> {
-                String mensaje = String.format("Cuenta por pagar VENCIDA: %s, Cuenta: %s, Fecha: %s",
-                        cuenta.getFolio(), cuenta.getCuenta().getNombre(), cuenta.getFechaPago());
-
-                notificarAdministradores("CUENTA_PAGAR_VENCIDA", mensaje);
-            });
-
-            if (!yaSeEnvioCorreoConsolidadoHoy("CUENTAS_PAGAR_VENCIDAS", hoy)) {
-                enviarCorreoConsolidadoCuentasPorPagar(cuentasVencidas, "VENCIDAS", hoy);
-            } else {
-                logger.info("Saltando envío de correo de cuentas por pagar (VENCIDAS) - Ya enviado");
-            }
-        }
     }
 
     private void enviarCorreoConsolidadoCuentasPorCobrar(List<CuentaPorCobrar> cuentas, String cuandoVence, LocalDate fechaVencimiento) {
@@ -376,7 +361,9 @@ public class NotificacionService {
                 logger.warn("No hay administradores o gestores activos para enviar correos de Cuentas por Cobrar.");
                 return;
             }
-            String asunto = "Recordatorio: Cuentas por Cobrar - Vencen " + cuandoVence;
+            String asunto = cuandoVence.equals("VENCIDAS")
+                    ? "Recordatorio: Cuentas por Cobrar - Están VENCIDAS"
+                    : "Recordatorio: Cuentas por Cobrar - Vencen " + cuandoVence;
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorCobrar(cuentas, cuandoVence);
             String tipoCorreo = "CUENTAS_COBRAR_" + cuandoVence;
 
@@ -412,7 +399,9 @@ public class NotificacionService {
                 return;
             }
 
-            String asunto = "Recordatorio: Cuentas por Pagar - Vencen " + cuandoVence;
+            String asunto = cuandoVence.equals("VENCIDAS")
+                    ? "Recordatorio: Cuentas por Pagar - Están VENCIDAS"
+                    : "Recordatorio: Cuentas por Pagar - Vencen " + cuandoVence;
             String cuerpo = construirCuerpoCorreoConsolidadoCuentasPorPagar(cuentas, cuandoVence);
             String tipoCorreo = "CUENTAS_PAGAR_" + cuandoVence;
 
@@ -506,7 +495,6 @@ public class NotificacionService {
         <ul>
             <li><strong>Total de cuentas:</strong> %d</li>
             <li><strong>Monto total:</strong> $%s</li>
-            <li><strong>Fecha de Vencimiento:</strong> %s</li>
         </ul>
         
         <div style="text-align: center; margin: 20px 0;">
@@ -537,7 +525,6 @@ public class NotificacionService {
                 textoVencimiento,
                 cuentas.size(),
                 montoTotal,
-                fechaVencimiento,
                 urlCalendario != null ? urlCalendario : "#",
                 listadoCuentas.toString()
         );
@@ -615,7 +602,6 @@ public class NotificacionService {
                             <ul>
                                 <li><strong>Total de cuentas:</strong> %d</li>
                                 <li><strong>Monto total:</strong> $%s</li>
-                                <li><strong>Fecha de Vencimiento:</strong> %s</li>
                             </ul>
                         
                             <div style="text-align: center; margin: 20px 0;">
@@ -647,7 +633,6 @@ public class NotificacionService {
                 textoVencimiento,
                 cuentas.size(),
                 montoTotal,
-                fechaVencimiento,
                 urlCalendario != null ? urlCalendario : "#",
                 listadoCuentas.toString()
         );
@@ -1129,22 +1114,32 @@ public class NotificacionService {
 
     @Transactional(readOnly = true)
     public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencen(LocalDate fecha) {
-        return cuentaPorCobrarRepository.findByFechaPagoAndEstatusNot(fecha, EstatusPagoEnum.PAGADO);
+        return cuentaPorCobrarRepository.findByFechaPagoAndEstatusIn(
+                fecha,
+                List.of(EstatusPagoEnum.PENDIENTE, EstatusPagoEnum.EN_PROCESO)
+        );
     }
 
     @Transactional(readOnly = true)
     public List<CuentaPorPagar> obtenerCuentasPorPagarVencen(LocalDate fecha) {
-        return cuentaPorPagarRepository.findByFechaPagoAndEstatusNot(fecha, "Pagado");
+        return cuentaPorPagarRepository.findByFechaPagoAndEstatusIn(
+                fecha,
+                List.of("Pendiente", "En proceso")
+        );
     }
 
     @Transactional(readOnly = true)
     public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencidas() {
-        return cuentaPorCobrarRepository.findByEstatus(EstatusPagoEnum.VENCIDA);
+        return cuentaPorCobrarRepository.findByEstatusIn(
+                List.of(EstatusPagoEnum.VENCIDA, EstatusPagoEnum.PENDIENTE, EstatusPagoEnum.EN_PROCESO)
+        );
     }
 
     @Transactional(readOnly = true)
     public List<CuentaPorPagar> obtenerCuentasPorPagarVencidas() {
-        return cuentaPorPagarRepository.findByEstatus("Vencida");
+        return cuentaPorPagarRepository.findByEstatusIn(
+                List.of("Vencida", "Pendiente", "En proceso")
+        );
     }
 
     @Transactional(readOnly = true)
@@ -1162,5 +1157,80 @@ public class NotificacionService {
                         usuario.getCorreoElectronico(),
                         EstatusUsuarioEnum.ACTIVO))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> obtenerActividadesProximasUsuario() {
+        try {
+            Integer userId = ((CustomUserDetails) SecurityContextHolder.getContext()
+                    .getAuthentication().getPrincipal()).getId();
+
+            ZonedDateTime ahora = ZonedDateTime.now(ZONE_ID);
+            LocalDate hoy = ahora.toLocalDate();
+            LocalTime horaActual = ahora.toLocalTime();
+
+            LocalTime horaLimiteInferior = horaActual.plusMinutes(59);
+            LocalTime horaLimiteSuperior = horaActual.plusMinutes(61);
+
+            // Buscar actividades de hoy del usuario
+            List<Actividad> actividadesHoy = actividadRepository
+                    .findByAsignadoAIdAndFechaLimiteAndEstatus(
+                            userId, hoy, com.tss.tssmanager_backend.enums.EstatusActividadEnum.ABIERTA);
+
+            List<Map<String, Object>> actividadesProximas = new ArrayList<>();
+
+            for (Actividad actividad : actividadesHoy) {
+                // Solo reuniones y llamadas
+                if (actividad.getTipo() != com.tss.tssmanager_backend.enums.TipoActividadEnum.REUNION &&
+                        actividad.getTipo() != com.tss.tssmanager_backend.enums.TipoActividadEnum.LLAMADA) {
+                    continue;
+                }
+
+                if (actividad.getHoraInicio() != null) {
+                    LocalTime horaActividad = actividad.getHoraInicio().toLocalTime();
+
+                    if (!horaActividad.isBefore(horaLimiteInferior) &&
+                            horaActividad.isBefore(horaLimiteSuperior)) {
+
+                        Map<String, Object> actividadMap = new HashMap<>();
+                        actividadMap.put("id", actividad.getId());
+                        actividadMap.put("tratoId", actividad.getTratoId());
+                        actividadMap.put("tipo", actividad.getTipo().name());
+                        actividadMap.put("horaInicio", actividad.getHoraInicio().toString());
+                        actividadMap.put("duracion", actividad.getDuracion());
+                        actividadMap.put("modalidad", actividad.getModalidad() != null ?
+                                actividad.getModalidad().name() : null);
+                        actividadMap.put("enlaceReunion", actividad.getEnlaceReunion());
+                        actividadMap.put("lugarReunion", actividad.getLugarReunion());
+
+                        // Obtener nombre del trato
+                        if (actividad.getTratoId() != null) {
+                            tratoRepository.findById(actividad.getTratoId()).ifPresent(trato -> {
+                                actividadMap.put("tratoNombre", trato.getNombre());
+                                // Obtener nombre de la empresa
+                                if (trato.getEmpresaId() != null) {
+                                    empresaRepository.findById(trato.getEmpresaId()).ifPresent(empresa -> {
+                                        actividadMap.put("empresaNombre", empresa.getNombre());
+                                    });
+                                }
+                            });
+                        }
+
+                        // Calcular minutos restantes
+                        long minutosRestantes = ChronoUnit.MINUTES.between(horaActual, horaActividad);
+                        actividadMap.put("minutosRestantes", minutosRestantes);
+
+                        actividadesProximas.add(actividadMap);
+                    }
+                }
+            }
+
+            logger.info("Actividades próximas encontradas para usuario {}: {}", userId, actividadesProximas.size());
+            return actividadesProximas;
+
+        } catch (Exception e) {
+            logger.error("Error al obtener actividades próximas: {}", e.getMessage());
+            return new ArrayList<>();
+        }
     }
 }
