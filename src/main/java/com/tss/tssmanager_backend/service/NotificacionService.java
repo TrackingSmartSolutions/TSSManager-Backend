@@ -62,6 +62,8 @@ public class NotificacionService {
     private EmailService emailService;
     @Autowired
     private EquipoService equipoService;
+    @Autowired
+    private NotificacionPopupMostradaRepository notificacionPopupMostradaRepository;
 
 /*
     @PostConstruct
@@ -1169,9 +1171,6 @@ public class NotificacionService {
             LocalDate hoy = ahora.toLocalDate();
             LocalTime horaActual = ahora.toLocalTime();
 
-            LocalTime horaLimiteInferior = horaActual.plusMinutes(59);
-            LocalTime horaLimiteSuperior = horaActual.plusMinutes(61);
-
             // Buscar actividades de hoy del usuario
             List<Actividad> actividadesHoy = actividadRepository
                     .findByAsignadoAIdAndFechaLimiteAndEstatus(
@@ -1188,10 +1187,19 @@ public class NotificacionService {
 
                 if (actividad.getHoraInicio() != null) {
                     LocalTime horaActividad = actividad.getHoraInicio().toLocalTime();
+                    long minutosRestantes = ChronoUnit.MINUTES.between(horaActual, horaActividad);
 
-                    if (!horaActividad.isBefore(horaLimiteInferior) &&
-                            horaActividad.isBefore(horaLimiteSuperior)) {
+                    boolean mostrarNotificacion = false;
 
+                    if (actividad.getTipo() == com.tss.tssmanager_backend.enums.TipoActividadEnum.LLAMADA) {
+                        // LLAMADAS: Mostrar SOLO cuando minutosRestantes es exactamente 0
+                        mostrarNotificacion = (minutosRestantes == 0);
+                    } else {
+                        // REUNIONES: Mostrar SOLO cuando minutosRestantes es exactamente 30
+                        mostrarNotificacion = (minutosRestantes == 30);
+                    }
+
+                    if (mostrarNotificacion) {
                         Map<String, Object> actividadMap = new HashMap<>();
                         actividadMap.put("id", actividad.getId());
                         actividadMap.put("tratoId", actividad.getTratoId());
@@ -1216,11 +1224,24 @@ public class NotificacionService {
                             });
                         }
 
-                        // Calcular minutos restantes
-                        long minutosRestantes = ChronoUnit.MINUTES.between(horaActual, horaActividad);
                         actividadMap.put("minutosRestantes", minutosRestantes);
 
-                        actividadesProximas.add(actividadMap);
+                        // VERIFICAR si ya se mostró este popup
+                        if (!notificacionPopupMostradaRepository.existsByActividadIdAndUsuarioId(
+                                actividad.getId(), userId)) {
+
+                            // Registrar que se va a mostrar
+                            NotificacionPopupMostrada registro = new NotificacionPopupMostrada();
+                            registro.setActividadId(actividad.getId());
+                            registro.setUsuarioId(userId);
+                            registro.setFechaMostrado(obtenerInstantLocal());
+                            notificacionPopupMostradaRepository.save(registro);
+
+                            actividadesProximas.add(actividadMap);
+                            logger.info("Popup programado para actividad {} - Usuario {}", actividad.getId(), userId);
+                        } else {
+                            logger.debug("Popup ya mostrado para actividad {} - Usuario {}", actividad.getId(), userId);
+                        }
                     }
                 }
             }
