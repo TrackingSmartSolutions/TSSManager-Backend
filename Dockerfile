@@ -1,28 +1,28 @@
-# --- FASE 1: Builder ---
+# --- FASE 1: Builder  ---
 FROM maven:3-eclipse-temurin-21-alpine AS builder
 
 WORKDIR /app
 
 COPY pom.xml .
+
+RUN mvn dependency:go-offline
+
 COPY src ./src
 
-# Usamos -B (Batch mode) para que los logs sean más limpios
-RUN mvn clean package -DskipTests -B
+RUN mvn clean package -DskipTests
 
-# --- FASE 2: Runtime  ---
+# Usamos Alpine: Linux recortado que pesa nada
 FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Creamos usuario sin privilegios
+# Creamos un usuario sin privilegios (Seguridad basica)
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
 
-# Copiamos el JAR generado
 COPY --from=builder /app/target/*.jar app.jar
 
 # Exponemos el puerto
 EXPOSE 8080
 
-# Entrypoint con soporte para JAVA_OPTS
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
