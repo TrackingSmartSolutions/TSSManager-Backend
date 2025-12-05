@@ -1895,4 +1895,38 @@ public class TratoService {
 
         return convertToDTO(updatedActividad);
     }
+
+    @Transactional(readOnly = true)
+    public List<ActividadConEmpresaDTO> getPendientesConEmpresa(Integer asignadoAId, LocalDate fecha) {
+        List<Object[]> results = actividadRepository.findActividadesPendientesConEmpresa(asignadoAId, fecha);
+
+        return results.stream().map(row -> {
+            ActividadConEmpresaDTO dto = new ActividadConEmpresaDTO();
+            dto.setId((Integer) row[0]);
+            dto.setTratoId((Integer) row[1]);
+            dto.setTipo(TipoActividadEnum.valueOf((String) row[2]));
+            if (row[3] != null) {
+                dto.setSubtipoTarea(SubtipoTareaEnum.valueOf((String) row[3]));
+            }
+            dto.setAsignadoAId((Integer) row[4]);
+            dto.setFechaLimite(convertToLocalDate(row[5]));
+            dto.setHoraInicio((Time) row[6]);
+            dto.setDuracion((String) row[7]);
+            if (row[8] != null) {
+                dto.setModalidad(ModalidadActividadEnum.valueOf((String) row[8]));
+            }
+            dto.setLugarReunion((String) row[9]);
+            if (row[10] != null) {
+                dto.setMedio(MedioReunionEnum.valueOf((String) row[10]));
+            }
+            dto.setEnlaceReunion((String) row[11]);
+            dto.setEstatus(EstatusActividadEnum.valueOf((String) row[12]));
+            dto.setContactoId((Integer) row[13]);
+            dto.setContactoNombre((String) row[14]);
+            dto.setEmpresaNombre((String) row[15]);
+            dto.setEmpresaId((Integer) row[16]);
+
+            return dto;
+        }).collect(Collectors.toList());
+    }
 }

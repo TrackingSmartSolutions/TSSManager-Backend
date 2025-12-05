@@ -170,7 +170,7 @@ public class TratoController {
     }
 
     @GetMapping("/actividades/pendientes")
-    public ResponseEntity<List<ActividadDTO>> getPendientesByAsignadoA(
+    public ResponseEntity<List<ActividadConEmpresaDTO>> getPendientesByAsignadoA(
             @RequestParam Integer asignadoAId,
             @RequestParam(required = false) Instant fecha) {
 
@@ -178,12 +178,8 @@ public class TratoController {
                 ? fecha.atZone(ZoneId.of("America/Mexico_City")).toLocalDate()
                 : LocalDate.now(ZoneId.of("America/Mexico_City"));
 
-        List<Actividad> actividades = actividadRepository.findByAsignadoAIdAndFechaLimiteAndEstatus(
-                asignadoAId, targetDate, EstatusActividadEnum.ABIERTA);
-
-        return ResponseEntity.ok(actividades.stream()
-                .map(tratoService::convertToDTO)
-                .collect(Collectors.toList()));
+        List<ActividadConEmpresaDTO> actividades = tratoService.getPendientesConEmpresa(asignadoAId, targetDate);
+        return ResponseEntity.ok(actividades);
     }
 
     @PostMapping("/{tratoId}/actividades/{actividadId}/enviar-notificacion-email")

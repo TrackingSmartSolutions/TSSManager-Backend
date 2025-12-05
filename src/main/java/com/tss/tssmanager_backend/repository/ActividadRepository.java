@@ -59,4 +59,39 @@ public interface ActividadRepository extends JpaRepository<Actividad, Integer> {
                            @Param("nuevoAsignadoId") Integer nuevoAsignadoId);
 
     Long countByAsignadoAIdAndEstatus(Integer asignadoAId, EstatusActividadEnum estatus);
+
+    @Query(value = """
+    SELECT 
+        a.id,
+        a.trato_id,
+        a.tipo,
+        a.subtipo_tarea,
+        a.asignado_a_id,
+        a.fecha_limite,
+        a.hora_inicio,
+        a.duracion,
+        a.modalidad,
+        a.lugar_reunion,
+        a.medio,
+        a.enlace_reunion,
+        a.estatus,
+        a.contacto_id,
+        c.nombre as contacto_nombre,
+        e.nombre as empresa_nombre,
+        e.id as empresa_id
+    FROM "Actividades" a
+    LEFT JOIN "Contactos" c ON a.contacto_id = c.id
+    LEFT JOIN "Tratos" t ON a.trato_id = t.id
+    LEFT JOIN "Empresas" e ON t.empresa_id = e.id
+    WHERE a.asignado_a_id = :asignadoAId 
+    AND a.fecha_limite = :fecha
+    AND a.estatus = 'ABIERTA'
+    ORDER BY 
+        CASE WHEN a.hora_inicio IS NULL THEN 1 ELSE 0 END,
+        a.hora_inicio ASC
+    """, nativeQuery = true)
+    List<Object[]> findActividadesPendientesConEmpresa(
+            @Param("asignadoAId") Integer asignadoAId,
+            @Param("fecha") LocalDate fecha
+    );
 }
