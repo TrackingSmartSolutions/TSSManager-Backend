@@ -216,6 +216,16 @@ public class CuentaPorCobrarService {
 
         if (dto.getFechaPago() != null) {
             cuenta.setFechaPago(dto.getFechaPago());
+
+            // Recalcular el estatus basado en la nueva fecha
+            LocalDate hoy = LocalDate.now();
+            if (cuenta.getEstatus() != EstatusPagoEnum.PAGADO && cuenta.getEstatus() != EstatusPagoEnum.EN_PROCESO) {
+                if (dto.getFechaPago().isBefore(hoy)) {
+                    cuenta.setEstatus(EstatusPagoEnum.VENCIDA);
+                } else {
+                    cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
+                }
+            }
         }
 
         boolean montoModificado = false;

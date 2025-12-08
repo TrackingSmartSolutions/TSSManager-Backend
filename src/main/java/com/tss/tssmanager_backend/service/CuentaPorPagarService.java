@@ -217,7 +217,18 @@ public class CuentaPorPagarService {
         // Actualizar campos editables
         if (fechaPago != null) {
             cuenta.setFechaPago(fechaPago);
+
+            // Recalcular el estatus basado en la nueva fecha si no está pagada
+            if (!"Pagado".equals(cuenta.getEstatus()) && !"En proceso".equals(cuenta.getEstatus())) {
+                LocalDate hoy = LocalDate.now();
+                if (fechaPago.isBefore(hoy)) {
+                    cuenta.setEstatus("Vencida");
+                } else {
+                    cuenta.setEstatus("Pendiente");
+                }
+            }
         }
+
         if (monto != null) {
             cuenta.setMonto(monto);
 
