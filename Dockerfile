@@ -1,28 +1,27 @@
-# --- FASE 1: Builder  ---
-FROM maven:3-eclipse-temurin-21-alpine AS builder
+# --- FASE 1: Construcción (Builder) ---
+# Usamos una imagen que INCLUYE Maven y el JDK
+FROM maven:3-eclipse-temurin-21 AS builder
 
+# Establece el directorio de trabajo
 WORKDIR /app
 
+# Copia el pom y el código fuente
 COPY pom.xml .
-
-RUN mvn dependency:go-offline
-
 COPY src ./src
 
-RUN mvn clean package -DskipTests
+# Compila la aplicación
+RUN mvn clean install -DskipTests
 
-# Usamos Alpine: Linux recortado que pesa nada
-FROM eclipse-temurin:21-jre-alpine
+# --- FASE 2: Ejecución (Final) ---
+# Usamos una imagen JRE (Java Runtime Environment)
+FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-# Creamos un usuario sin privilegios (Seguridad basica)
-RUN addgroup -S spring && adduser -S spring -G spring
-USER spring:spring
-
-COPY --from=builder /app/target/*.jar app.jar
-
-# Exponemos el puerto
+# Expone el puerto de tu aplicación
 EXPOSE 8080
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+COPY --from=builder /app/target/tssmanager-backend-0.0.1-SNAPSHOT.jar app.jar
+
+# Comando para arrancar la aplicación
+ENTRYPOINT ["java", "-jar", "app.jar"]
