@@ -1132,6 +1132,7 @@ public class NotificacionService {
 
     @Transactional(readOnly = true)
     public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencidas() {
+        // Obtenemos todas las que tienen estatus pendiente/vencida
         List<CuentaPorCobrar> todas = cuentaPorCobrarRepository.findByEstatusIn(
                 List.of(EstatusPagoEnum.VENCIDA, EstatusPagoEnum.PENDIENTE, EstatusPagoEnum.EN_PROCESO)
         );
