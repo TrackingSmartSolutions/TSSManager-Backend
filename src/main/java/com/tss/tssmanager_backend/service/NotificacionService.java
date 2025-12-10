@@ -1132,16 +1132,26 @@ public class NotificacionService {
 
     @Transactional(readOnly = true)
     public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencidas() {
-        return cuentaPorCobrarRepository.findByEstatusIn(
+        List<CuentaPorCobrar> todas = cuentaPorCobrarRepository.findByEstatusIn(
                 List.of(EstatusPagoEnum.VENCIDA, EstatusPagoEnum.PENDIENTE, EstatusPagoEnum.EN_PROCESO)
         );
+
+        LocalDate hoy = LocalDate.now(ZONE_ID);
+        return todas.stream()
+                .filter(c -> c.getFechaPago() != null && c.getFechaPago().isBefore(hoy))
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<CuentaPorPagar> obtenerCuentasPorPagarVencidas() {
-        return cuentaPorPagarRepository.findByEstatusIn(
+        List<CuentaPorPagar> todas = cuentaPorPagarRepository.findByEstatusIn(
                 List.of("Vencida", "Pendiente", "En proceso")
         );
+
+        LocalDate hoy = LocalDate.now(ZONE_ID);
+        return todas.stream()
+                .filter(c -> c.getFechaPago() != null && c.getFechaPago().isBefore(hoy))
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
