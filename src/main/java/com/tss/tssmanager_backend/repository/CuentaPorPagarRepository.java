@@ -31,4 +31,13 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
     List<CuentaPorPagar> findByEstatus(String estatus);
     List<CuentaPorPagar> findByFechaPagoAndEstatusIn(LocalDate fechaPago, List<String> estatus);
     List<CuentaPorPagar> findByEstatusIn(List<String> estatus);
+    @Query("""
+        SELECT c FROM CuentaPorPagar c 
+        JOIN FETCH c.transaccion t
+        JOIN FETCH t.cuenta cu
+        LEFT JOIN FETCH t.categoria cat
+        WHERE (:estatus IS NULL OR c.estatus = :estatus)
+        ORDER BY c.fechaPago ASC
+        """)
+    List<CuentaPorPagar> findAllWithRelationsFiltered(@Param("estatus") String estatus);
 }

@@ -43,8 +43,13 @@ public class CuentaPorPagarService {
     @Autowired
     private PlataformaService plataformaService;
 
-    public List<CuentaPorPagar> obtenerTodas() {
-        return cuentasPorPagarRepository.findAllByOrderByFechaPagoAsc();
+    public List<CuentaPorPagar> obtenerTodas(String estatus) {
+
+        if ("Todas".equals(estatus) || estatus == null) {
+            return cuentasPorPagarRepository.findAllWithRelationsFiltered(null);
+        }
+
+        return cuentasPorPagarRepository.findAllWithRelationsFiltered(estatus);
     }
 
     @Transactional

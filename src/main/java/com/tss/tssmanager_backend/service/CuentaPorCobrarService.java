@@ -412,13 +412,12 @@ public class CuentaPorCobrarService {
     }
 
     @Transactional(readOnly = true)
-    public List<CuentaPorCobrarDTO> listarCuentasPorCobrar() {
-        logger.info("Listando todas las cuentas por cobrar");
+    // Aceptamos el estatus como parámetro (puede ser null para traer todas)
+    public List<CuentaPorCobrarDTO> listarCuentasPorCobrar(EstatusPagoEnum estatus) {
+        logger.info("Listando cuentas por cobrar con estatus: {}", estatus);
 
-        // CAMBIO: Usar la nueva query optimizada
-        List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository.findAllWithRelations();
+        List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository.findByEstatusWithRelations(estatus);
 
-        // CAMBIO: Obtener IDs vinculadas en una sola consulta
         List<Integer> idsVinculadas = cuentaPorCobrarRepository.findAllVinculatedIds();
         Set<Integer> vinculadasSet = new HashSet<>(idsVinculadas);
 

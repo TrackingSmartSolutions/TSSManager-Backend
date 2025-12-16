@@ -40,4 +40,25 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
     List<CuentaPorCobrar> findByEstatus(EstatusPagoEnum estatus);
     List<CuentaPorCobrar> findByFechaPagoAndEstatusIn(LocalDate fechaPago, List<EstatusPagoEnum> estatus);
     List<CuentaPorCobrar> findByEstatusIn(List<EstatusPagoEnum> estatus);
+    @Query("SELECT new com.tss.tssmanager_backend.dto.BalanceResumenDTO$EquipoVendidoDTO(" +
+            "c.cliente.nombre, c.fechaRealPago, c.noEquipos) " +
+            "FROM CuentaPorCobrar c " +
+            "WHERE c.estatus = 'PAGADO' " +
+            "AND c.noEquipos > 0 " +
+            "AND (:anio IS NULL OR YEAR(c.fechaRealPago) = :anio) " +
+            "AND (:mes IS NULL OR MONTH(c.fechaRealPago) = :mes) " +
+            "ORDER BY c.fechaRealPago ASC")
+    List<com.tss.tssmanager_backend.dto.BalanceResumenDTO.EquipoVendidoDTO> findEquiposVendidosReporte(
+            @org.springframework.data.repository.query.Param("anio") Integer anio,
+            @org.springframework.data.repository.query.Param("mes") Integer mes
+    );
+    @Query("""
+        SELECT c FROM CuentaPorCobrar c 
+        JOIN FETCH c.cliente 
+        JOIN FETCH c.cotizacion 
+        LEFT JOIN FETCH c.solicitudesFacturasNotas
+        WHERE (:estatus IS NULL OR c.estatus = :estatus)
+        ORDER BY c.fechaPago ASC
+        """)
+    List<CuentaPorCobrar> findByEstatusWithRelations(@Param("estatus") EstatusPagoEnum estatus);
 }

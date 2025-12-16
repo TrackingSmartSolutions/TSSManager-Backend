@@ -28,9 +28,10 @@ public class CuentaPorPagarController {
     private ReporteCuentasPorPagarService reporteService;
 
     @GetMapping
-    public ResponseEntity<List<CuentaPorPagar>> obtenerTodasLasCuentasPorPagar() {
+    public ResponseEntity<List<CuentaPorPagar>> obtenerTodasLasCuentasPorPagar(
+            @RequestParam(required = false) String estatus) {
         try {
-            List<CuentaPorPagar> cuentas = cuentasPorPagarService.obtenerTodas();
+            List<CuentaPorPagar> cuentas = cuentasPorPagarService.obtenerTodas(estatus);
             return new ResponseEntity<>(cuentas, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);

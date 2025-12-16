@@ -4,6 +4,7 @@ import com.tss.tssmanager_backend.dto.CuentaPorCobrarDTO;
 import com.tss.tssmanager_backend.entity.CategoriaTransacciones;
 import com.tss.tssmanager_backend.entity.CuentaPorCobrar;
 import com.tss.tssmanager_backend.enums.EsquemaCobroEnum;
+import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
 import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.CategoriaTransaccionesRepository;
@@ -90,9 +91,10 @@ public class CuentaPorCobrarController {
     }
 
     @GetMapping
-    public ResponseEntity<List<CuentaPorCobrarDTO>> listarCuentasPorCobrar() {
-        logger.info("Solicitud para listar todas las cuentas por cobrar");
-        return ResponseEntity.ok(cuentaPorCobrarService.listarCuentasPorCobrar());
+    public ResponseEntity<List<CuentaPorCobrarDTO>> listarCuentasPorCobrar(
+            @RequestParam(required = false) EstatusPagoEnum estatus) {
+        logger.info("Solicitud para listar cuentas por cobrar filtradas por: {}", estatus);
+        return ResponseEntity.ok(cuentaPorCobrarService.listarCuentasPorCobrar(estatus));
     }
 
     @GetMapping("/{id}/check-vinculada")
