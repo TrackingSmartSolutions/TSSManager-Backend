@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.dto.CotizacionDTO;
 import com.tss.tssmanager_backend.entity.Cotizacion;
+import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.service.CotizacionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,6 +70,22 @@ public class CotizacionController {
             return ResponseEntity.ok(cotizaciones);
         } catch (Exception e) {
             logger.error("Error al listar cotizaciones: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(null);
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CotizacionDTO> obtenerCotizacionPorId(@PathVariable Integer id) {
+        try {
+            logger.debug("Solicitud para obtener cotización con ID: {}", id);
+            Cotizacion cotizacion = cotizacionService.findById(id);
+            CotizacionDTO dto = cotizacionService.convertToDTO(cotizacion);
+            return ResponseEntity.ok(dto);
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Cotización no encontrada con ID {}: {}", id, e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error al obtener cotización con ID {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(500).body(null);
         }
     }
