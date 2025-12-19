@@ -75,6 +75,16 @@ public class CotizacionService {
             "seiscientos", "setecientos", "ochocientos", "novecientos"
     };
 
+    @Transactional(readOnly = true)
+    public CotizacionDTO obtenerCotizacionPorId(Integer id) {
+        logger.info("Buscando cotización completa con ID: {}", id);
+
+        Cotizacion cotizacion = cotizacionRepository.findByIdWithUnidades(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + id));
+
+        return convertToDTO(cotizacion);
+    }
+
     @Transactional
     public CotizacionDTO crearCotizacion(CotizacionDTO cotizacionDTO) {
         logger.info("Creando nueva cotización para cliente: {}", cotizacionDTO.getClienteNombre());

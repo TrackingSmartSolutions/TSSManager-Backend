@@ -78,9 +78,11 @@ public class CotizacionController {
     public ResponseEntity<CotizacionDTO> obtenerCotizacionPorId(@PathVariable Integer id) {
         try {
             logger.debug("Solicitud para obtener cotización con ID: {}", id);
-            Cotizacion cotizacion = cotizacionService.findById(id);
-            CotizacionDTO dto = cotizacionService.convertToDTO(cotizacion);
+
+            CotizacionDTO dto = cotizacionService.obtenerCotizacionPorId(id);
+
             return ResponseEntity.ok(dto);
+
         } catch (ResourceNotFoundException e) {
             logger.warn("Cotización no encontrada con ID {}: {}", id, e.getMessage());
             return ResponseEntity.notFound().build();
