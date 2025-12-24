@@ -700,4 +700,16 @@ public class SimService {
 
         return ultimosSaldos;
     }
+
+    public BigDecimal obtenerSaldoNumerico(Integer simId) {
+        try {
+            HistorialSaldosSim ultimo = obtenerUltimoSaldo(simId);
+            if (ultimo != null && ultimo.getSaldoActual() != null) {
+                return ultimo.getSaldoActual();
+            }
+            return BigDecimal.ZERO;
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
+    }
 }

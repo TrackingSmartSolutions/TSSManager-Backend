@@ -403,4 +403,12 @@ ORDER BY a.fecha_limite ASC, n.fecha_creacion DESC
 
     @Query("SELECT t FROM Trato t WHERE t.empresaId = :empresaId AND t.fase IN ('COTIZACION_PROPUESTA_PRACTICA', 'NEGOCIACION_REVISION', 'CERRADO_GANADO', 'INTERES_FUTURO', 'CERRADO_PERDIDO', 'RESPUESTA_POR_CORREO') ORDER BY t.fechaModificacion DESC")
     List<Trato> findTratosDisponiblesParaCotizacion(@Param("empresaId") Integer empresaId);
+
+    // Consulta para buscar tratos sin actividad reciente (más de 7 días) y que no estén perdidos
+    @Query("SELECT t FROM Trato t " +
+            "WHERE t.fase <> 'CERRADO_PERDIDO' " +
+            "AND t.fechaUltimaActividad < :fechaLimite " +
+            "AND t.propietarioId IS NOT NULL " +
+            "ORDER BY t.propietarioId")
+    List<Trato> findTratosDesatendidos(@Param("fechaLimite") Instant fechaLimite);
 }

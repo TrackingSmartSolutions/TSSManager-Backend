@@ -1152,4 +1152,45 @@ public class CotizacionService {
         return convertToDTO(cotizacion);
     }
 
+    @Transactional
+    public Map<String, Object> actualizarEstatusCotizacionesConCuentas() {
+        logger.info("Buscando cotizaciones con cuentas por cobrar vinculadas");
+
+        // Obtener todas las cotizaciones que tienen cuentas por cobrar
+        List<Integer> cotizacionesConCuentas = cuentaPorCobrarRepository.findAll()
+                .stream()
+                .map(cuenta -> cuenta.getCotizacion().getId())
+                .distinct()
+                .collect(Collectors.toList());
+
+        int actualizadas = 0;
+        int yaAceptadas = 0;
+
+        for (Integer cotizacionId : cotizacionesConCuentas) {
+            Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId).orElse(null);
+
+            if (cotizacion != null) {
+                if (cotizacion.getEstatus() != EstatusCotizacionEnum.ACEPTADA) {
+                    logger.info("Actualizando cotización {} de {} a ACEPTADA",
+                            cotizacion.getId(), cotizacion.getEstatus());
+                    cotizacion.setEstatus(EstatusCotizacionEnum.ACEPTADA);
+                    cotizacionRepository.save(cotizacion);
+                    actualizadas++;
+                } else {
+                    yaAceptadas++;
+                }
+            }
+        }
+
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("cotizacionesActualizadas", actualizadas);
+        resultado.put("cotizacionesYaAceptadas", yaAceptadas);
+        resultado.put("total", cotizacionesConCuentas.size());
+
+        logger.info("Actualización completada: {} actualizadas, {} ya estaban aceptadas",
+                actualizadas, yaAceptadas);
+
+        return resultado;
     }
+
+}

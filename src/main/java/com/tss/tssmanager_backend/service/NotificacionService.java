@@ -126,7 +126,7 @@ public class NotificacionService {
 
     @Transactional
     public void generarNotificacionActividad(Actividad actividad) {
-        Integer asignadoAId = actividad.getAsignadoAId();
+        /*Integer asignadoAId = actividad.getAsignadoAId();
         Integer tratoId = actividad.getTratoId();
 
         try {
@@ -167,7 +167,7 @@ public class NotificacionService {
             }
         } catch (Exception e) {
             logger.error("Error al generar notificación de actividad: {}", e.getMessage());
-        }
+        } */
     }
 
     @Transactional
@@ -228,7 +228,7 @@ public class NotificacionService {
     // Método separado para verificar actividades próximas
     @Transactional
     public void verificarActividadesProximas() {
-        LocalDate hoy = LocalDate.now(ZONE_ID);
+        /*LocalDate hoy = LocalDate.now(ZONE_ID);
         LocalDate manana = hoy.plusDays(1);
 
         // Buscar actividades para hoy y mañana
@@ -240,6 +240,7 @@ public class NotificacionService {
 
         // Procesar actividades de mañana
         actividadesManana.forEach(this::generarNotificacionActividad);
+        */
     }
 
     public void generarNotificacionCuentasYSims() {
@@ -1267,5 +1268,108 @@ public class NotificacionService {
             logger.error("Error al obtener actividades próximas: {}", e.getMessage());
             return new ArrayList<>();
         }
+    }
+
+    // Se ejecuta a las 10:00 AM todos los lunes
+    @Scheduled(cron = "0 0 10 * * MON", zone = "America/Mexico_City")
+    @Transactional(readOnly = true)
+    public void enviarReporteSemanalTratosDesatendidos() {
+        logger.info("Iniciando reporte semanal de tratos desatendidos...");
+
+        Instant hace7Dias = ZonedDateTime.now(ZONE_ID).minusDays(7).toInstant();
+
+        List<Trato> tratosDesatendidos = tratoRepository.findTratosDesatendidos(hace7Dias);
+
+        if (tratosDesatendidos.isEmpty()) {
+            logger.info("No se encontraron tratos desatendidos para reportar.");
+            return;
+        }
+
+        Map<Integer, List<Trato>> tratosPorUsuario = tratosDesatendidos.stream()
+                .collect(Collectors.groupingBy(Trato::getPropietarioId));
+
+        tratosPorUsuario.forEach((usuarioId, listaTratos) -> {
+            usuarioRepository.findById(usuarioId).ifPresent(usuario -> {
+                if (usuario.getCorreoElectronico() != null && !usuario.getCorreoElectronico().isEmpty()) {
+
+                    String asunto = "Reporte Semanal: Tratos sin interacción programada";
+                    String cuerpo = construirCuerpoCorreoDesatendidos(usuario.getNombre(), listaTratos);
+
+                    try {
+                        emailService.enviarCorreo(
+                                usuario.getCorreoElectronico(),
+                                asunto,
+                                cuerpo,
+                                null,
+                                null,
+                                null,
+                                "REPORTE_DESATENDIDOS"
+                        );
+                        logger.info("Reporte de desatendidos enviado a: {}", usuario.getCorreoElectronico());
+
+                        Thread.sleep(500);
+                    } catch (Exception e) {
+                        logger.error("Error enviando reporte a usuario {}: {}", usuarioId, e.getMessage());
+                    }
+                }
+            });
+        });
+    }
+
+    private String construirCuerpoCorreoDesatendidos(String nombreUsuario, List<Trato> tratos) {
+        StringBuilder filasTabla = new StringBuilder();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+                .withZone(ZONE_ID);
+
+        for (Trato t : tratos) {
+            String nombreCliente = "Sin contacto";
+            if (t.getContacto() != null) {
+                nombreCliente = t.getContacto().getNombre();
+            } else if (t.getEmpresaId() != null) {
+                nombreCliente = "Empresa (ID: " + t.getEmpresaId() + ")";
+            }
+
+            String fechaUltima = t.getFechaUltimaActividad() != null
+                    ? formatter.format(t.getFechaUltimaActividad())
+                    : "Sin actividad registrada";
+
+            filasTabla.append(String.format(
+                    "<tr>" +
+                            "<td style='padding: 8px; border-bottom: 1px solid #ddd;'>%s</td>" +
+                            "<td style='padding: 8px; border-bottom: 1px solid #ddd;'>%s</td>" +
+                            "<td style='padding: 8px; border-bottom: 1px solid #ddd; text-align: center;'>%s</td>" +
+                            "</tr>",
+                    t.getNombre(),
+                    nombreCliente,
+                    fechaUltima
+            ));
+        }
+
+        return String.format("""
+            <html>
+            <body style="font-family: Arial, sans-serif; color: #333;">
+                <h2 style="color: #d32f2f;">⚠️ Tratos Desatendidos</h2>
+                <p>Hola <strong>%s</strong>,</p>
+                <p>Los siguientes tratos no han tenido una interacción programada en los últimos 7 días. Te recomendamos revisarlos para no perder el seguimiento.</p>
+                
+                <table style="width: 100%%; border-collapse: collapse; margin-top: 15px;">
+                    <thead>
+                        <tr style="background-color: #f5f5f5;">
+                            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Nombre del Trato</th>
+                            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Cliente / Contacto</th>
+                            <th style="padding: 10px; text-align: center; border-bottom: 2px solid #ddd;">Última Actividad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        %s
+                    </tbody>
+                </table>
+                
+                <p style="margin-top: 20px; font-size: 12px; color: #777;">
+                    Este es un reporte automático generado por TSS Manager.
+                </p>
+            </body>
+            </html>
+            """, nombreUsuario, filasTabla.toString());
     }
 }

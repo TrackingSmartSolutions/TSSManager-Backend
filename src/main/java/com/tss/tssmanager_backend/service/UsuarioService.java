@@ -1,6 +1,7 @@
 package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.UsuarioDTO;
+import com.tss.tssmanager_backend.entity.Actividad;
 import com.tss.tssmanager_backend.entity.Usuario;
 import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import com.tss.tssmanager_backend.enums.EstatusUsuarioEnum;
@@ -16,6 +17,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Time;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -155,5 +159,74 @@ public class UsuarioService {
         counts.put("actividades", actividadesAbiertasCount.intValue());
 
         return counts;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> verificarConflictos(Integer idUsuarioOrigen, Integer idUsuarioDestino) {
+        List<Actividad> actividadesOrigen = actividadRepository.findByAsignadoAIdAndEstatus(idUsuarioOrigen, EstatusActividadEnum.ABIERTA);
+        List<Map<String, Object>> conflictos = new ArrayList<>();
+
+        for (Actividad actOrigen : actividadesOrigen) {
+            if (actOrigen.getFechaLimite() == null || actOrigen.getHoraInicio() == null) continue;
+
+            List<Actividad> actividadesDestino = actividadRepository.findConflictingActivities(idUsuarioDestino, actOrigen.getFechaLimite());
+
+            boolean hayChoque = false;
+            // Lógica simple de empalme (puedes refinarla con la duración si la tienes precisa)
+            for (Actividad actDestino : actividadesDestino) {
+                if (actDestino.getHoraInicio() != null) {
+                    // Si la diferencia es menor a 1 hora (ejemplo), lo consideramos conflicto
+                    long diferenciaMinutos = Math.abs(java.time.Duration.between(actOrigen.getHoraInicio().toLocalTime(), actDestino.getHoraInicio().toLocalTime()).toMinutes());
+                    if (diferenciaMinutos < 60) {
+                        hayChoque = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hayChoque) {
+                Map<String, Object> conflicto = new HashMap<>();
+                conflicto.put("actividad", convertToActividadMap(actOrigen)); // Necesitarás un helper simple o usar tu DTO
+                conflicto.put("motivo", "El usuario destino ya tiene actividades cerca de las " + actOrigen.getHoraInicio());
+                conflictos.add(conflicto);
+            }
+        }
+        return conflictos;
+    }
+
+    private Map<String, Object> convertToActividadMap(Actividad a) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", a.getId());
+        map.put("tipo", a.getTipo());
+        map.put("fechaLimite", a.getFechaLimite());
+        map.put("horaInicio", a.getHoraInicio());
+        map.put("duracion", a.getDuracion());
+        map.put("descripcion", a.getTipo() + " - " + (a.getNotas() != null ? a.getNotas() : ""));
+        return map;
+    }
+
+    @Transactional
+    public void desactivarUsuarioConResolucion(Integer usuarioId, Integer usuarioDestinoId, List<Map<String, Object>> actividadesReprogramadas) {
+
+        if (actividadesReprogramadas != null) {
+            for (Map<String, Object> item : actividadesReprogramadas) {
+                Integer actId = Integer.valueOf(item.get("id").toString());
+
+                String nuevaFecha = (String) item.get("fecha");
+                String nuevaHora = (String) item.get("hora");
+
+                Actividad actividad = actividadRepository.findById(actId).orElse(null);
+                if (actividad != null) {
+                    actividad.setFechaLimite(LocalDate.parse(nuevaFecha));
+                    String horaFormateada = nuevaHora.length() == 5 ? nuevaHora + ":00" : nuevaHora;
+                    actividad.setHoraInicio(Time.valueOf(horaFormateada));
+
+                    actividad.setAsignadoAId(usuarioDestinoId);
+                    actividadRepository.save(actividad);
+                }
+            }
+        }
+
+        desactivarUsuarioConReasignacion(usuarioId, usuarioDestinoId);
     }
 }

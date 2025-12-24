@@ -233,4 +233,16 @@ public class CotizacionController {
             return ResponseEntity.status(500).body(null);
         }
     }
+
+    @PutMapping("/actualizar-estatus-antiguas")
+    public ResponseEntity<Map<String, Object>> actualizarEstatusAntiguasConCuentas() {
+        try {
+            logger.info("Iniciando actualización de estatus de cotizaciones antiguas con cuentas por cobrar");
+            Map<String, Object> resultado = cotizacionService.actualizarEstatusCotizacionesConCuentas();
+            return ResponseEntity.ok(resultado);
+        } catch (Exception e) {
+            logger.error("Error al actualizar estatus de cotizaciones: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
 }

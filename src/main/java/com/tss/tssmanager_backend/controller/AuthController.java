@@ -161,5 +161,34 @@ public class AuthController {
             return ResponseEntity.status(500).body(Map.of("error", 0));
         }
     }
+
+    @GetMapping("/users/{userId}/check-conflicts")
+    public ResponseEntity<?> checkConflicts(@PathVariable Integer userId, @RequestParam Integer targetUserId) {
+        List<Map<String, Object>> conflictos = usuarioService.verificarConflictos(userId, targetUserId);
+        return ResponseEntity.ok(conflictos);
+    }
+
+    @PostMapping("/users/{userId}/deactivate-resolved")
+    public ResponseEntity<?> deactivateWithResolution(
+            @PathVariable Integer userId,
+            @RequestBody Map<String, Object> payload) {
+
+        try {
+            Object targetIdObj = payload.get("targetUserId");
+            if (targetIdObj == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "targetUserId es requerido"));
+            }
+            Integer targetUserId = Integer.valueOf(targetIdObj.toString());
+
+            List<Map<String, Object>> resoluciones = (List<Map<String, Object>>) payload.get("resoluciones");
+
+            usuarioService.desactivarUsuarioConResolucion(userId, targetUserId, resoluciones);
+            return ResponseEntity.ok(Map.of("message", "Usuario desactivado y actividades reasignadas correctamente"));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }
 

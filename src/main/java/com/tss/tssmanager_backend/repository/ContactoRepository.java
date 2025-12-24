@@ -15,9 +15,6 @@ public interface ContactoRepository extends JpaRepository<Contacto, Integer> {
     long countByEmpresaId(Integer empresaId);
     List<Contacto> findByEmpresaId(Integer empresaId);
     List<Contacto> findByEmpresaIdAndRol(Integer empresaId, RolContactoEnum rol);
-
-
-
     List<Contacto> findByPropietario_Id(Integer propietarioId);
 
     @Modifying
@@ -26,4 +23,21 @@ public interface ContactoRepository extends JpaRepository<Contacto, Integer> {
     void deleteByPropietario_Id(@Param("propietarioId") Integer propietarioId);
 
     Optional<Contacto> findByNombreAndPropietario_Id(String nombre, Integer propietarioId);
+
+    @Query("SELECT COUNT(c) FROM Contacto c " +
+            "LEFT JOIN c.correos cor " +
+            "LEFT JOIN c.telefonos tel " +
+            "WHERE c.empresa.id = :empresaId " +
+            "AND (:excludeId IS NULL OR c.id != :excludeId) " +
+            "AND (" +
+            "   (LOWER(c.nombre) = LOWER(:nombre)) " +
+            "   OR (cor.correo IN :correos) " +
+            "   OR (tel.telefono IN :telefonos) " +
+            ")")
+    Long countDuplicados(@Param("empresaId") Integer empresaId,
+                         @Param("nombre") String nombre,
+                         @Param("correos") List<String> correos,
+                         @Param("telefonos") List<String> telefonos,
+                         @Param("excludeId") Integer excludeId);
+
 }

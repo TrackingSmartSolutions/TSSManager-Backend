@@ -101,43 +101,52 @@ public class EmpresaController {
     }
 
     @PostMapping("/{empresaId}/contactos")
-    public ResponseEntity<ContactoDTO> agregarContacto(@PathVariable Integer empresaId, @RequestBody ContactoDTO contactoDTO) {
+    public ResponseEntity<?> agregarContacto(@PathVariable Integer empresaId, @RequestBody ContactoDTO contactoDTO) {
         try {
             logger.debug("Solicitud para agregar contacto a empresa con ID: {}", empresaId);
             ContactoDTO nuevoContactoDTO = empresaService.agregarContacto(empresaId, contactoDTO);
             return ResponseEntity.ok(nuevoContactoDTO);
+
+        } catch (IllegalArgumentException e) {
+            logger.warn("Error de validación al agregar contacto: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+
         } catch (ResourceNotFoundException e) {
             logger.error("Empresa no encontrada con ID: {}", empresaId, e);
             return ResponseEntity.notFound().build();
         } catch (SecurityException e) {
-            logger.error("Usuario no autenticado al agregar contacto: {}", e.getMessage(), e);
+            logger.error("Usuario no autenticado: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
             logger.error("Error interno al agregar contacto: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Ocurrió un error interno en el servidor."));
         }
     }
 
     @PutMapping("/contactos/{id}")
-    public ResponseEntity<ContactoDTO> editarContacto(@PathVariable Integer id, @RequestBody ContactoDTO contactoDTO) {
+    public ResponseEntity<?> editarContacto(@PathVariable Integer id, @RequestBody ContactoDTO contactoDTO) {
         try {
             logger.debug("Solicitud para editar contacto con ID: {}", id);
             if (contactoDTO == null) {
-                logger.error("El cuerpo de la solicitud para editar el contacto con ID: {} es nulo", id);
-                return ResponseEntity.badRequest().body(null);
+                return ResponseEntity.badRequest().body(Map.of("message", "El cuerpo de la solicitud es nulo"));
             }
-            logger.debug("Datos recibidos para editar contacto: {}", contactoDTO);
             ContactoDTO contactoActualizadoDTO = empresaService.editarContacto(id, contactoDTO);
             return ResponseEntity.ok(contactoActualizadoDTO);
+
+        } catch (IllegalArgumentException e) {
+            logger.warn("Error de validación al editar contacto: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+
         } catch (ResourceNotFoundException e) {
             logger.error("Contacto no encontrado con ID: {}", id, e);
             return ResponseEntity.notFound().build();
-        } catch (IllegalArgumentException | SecurityException e) {
-            logger.error("Error al editar contacto con ID {}: {}", id, e.getMessage(), e);
-            return ResponseEntity.badRequest().body(null);
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
             logger.error("Error interno al editar contacto con ID {}: {}", id, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Ocurrió un error interno en el servidor."));
         }
     }
 

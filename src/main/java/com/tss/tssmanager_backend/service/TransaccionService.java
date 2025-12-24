@@ -51,7 +51,6 @@ public class TransaccionService {
             throw new IllegalArgumentException("Todos los campos obligatorios deben estar completos y el monto debe ser mayor a 0.");
         }
 
-        // CORRECCIÓN: Verificar que la categoría no sea null antes de crear cuenta
         if (transaccion.getCuenta() == null && transaccion.getNombreCuenta() != null && transaccion.getCategoria() != null) {
             CuentasTransacciones cuenta = crearCuentaSiNoExiste(transaccion.getNombreCuenta(), transaccion.getCategoria().getId());
             transaccion.setCuenta(cuenta);
@@ -61,15 +60,53 @@ public class TransaccionService {
             throw new IllegalArgumentException("La cuenta es obligatoria.");
         }
 
-        transaccion.setFechaCreacion(LocalDateTime.now());
-        transaccion.setFechaModificacion(LocalDateTime.now());
-        Transaccion savedTransaccion = transaccionRepository.save(transaccion);
+        int totalPagos = transaccion.getNumeroPagos() != null ? transaccion.getNumeroPagos() : getDefaultPagos(transaccion.getEsquema());
 
-        if ("GASTO".equals(transaccion.getTipo().name())) {
-            generarCuentasPorPagar(savedTransaccion);
+        if ("INGRESO".equals(transaccion.getTipo().name()) && totalPagos > 1) {
+            Transaccion primeraTransaccionGuardada = null;
+            LocalDate fechaInicial = transaccion.getFechaPago();
+            String notaOriginal = transaccion.getNotas() != null ? transaccion.getNotas() : "";
+
+            for (int i = 0; i < totalPagos; i++) {
+                Transaccion t = new Transaccion();
+
+                t.setFecha(transaccion.getFecha());
+                t.setTipo(transaccion.getTipo());
+                t.setCategoria(transaccion.getCategoria());
+                t.setCuenta(transaccion.getCuenta());
+                t.setMonto(transaccion.getMonto());
+                t.setEsquema(transaccion.getEsquema());
+                t.setNumeroPagos(totalPagos);
+                t.setFormaPago(transaccion.getFormaPago());
+
+                LocalDate nuevaFechaPago = calcularFechaPago(fechaInicial, transaccion.getEsquema(), i);
+                t.setFechaPago(nuevaFechaPago);
+
+                t.setNotas(notaOriginal + " (Pago " + (i + 1) + " de " + totalPagos + ")");
+
+                t.setFechaCreacion(LocalDateTime.now());
+                t.setFechaModificacion(LocalDateTime.now());
+
+                Transaccion saved = transaccionRepository.save(t);
+
+                if (i == 0) {
+                    primeraTransaccionGuardada = saved;
+                }
+            }
+            return primeraTransaccionGuardada;
         }
 
-        return savedTransaccion;
+        else {
+            transaccion.setFechaCreacion(LocalDateTime.now());
+            transaccion.setFechaModificacion(LocalDateTime.now());
+            Transaccion savedTransaccion = transaccionRepository.save(transaccion);
+
+            if ("GASTO".equals(transaccion.getTipo().name())) {
+                generarCuentasPorPagar(savedTransaccion);
+            }
+
+            return savedTransaccion;
+        }
     }
 
     @Transactional

@@ -267,6 +267,8 @@ public class EmpresaService {
             throw new SecurityException("Usuario no autenticado");
         }
 
+        validarDuplicados(empresaId, contactoDTO, null);
+
         Contacto contacto = new Contacto();
         contacto.setEmpresa(empresa);
         contacto.setPropietario(empresa.getPropietario());
@@ -332,6 +334,7 @@ public class EmpresaService {
                         return new ResourceNotFoundException("Contacto no encontrado con id: " + id);
                     });
 
+            validarDuplicados(contacto.getEmpresa().getId(), contactoDTO, id);
             // Actualizar campos básicos
             contacto.setNombre(contactoDTO.getNombre());
             contacto.setRol(contactoDTO.getRol());
@@ -581,4 +584,36 @@ public class EmpresaService {
         return empresaRepository.findEmpresasConEquipos();
     }
 
+    private void validarDuplicados(Integer empresaId, ContactoDTO dto, Integer excludeId) {
+        List<String> listaCorreos = dto.getCorreos() != null
+                ? dto.getCorreos().stream()
+                .map(c -> c.getCorreo() != null ? c.getCorreo().trim() : "")
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList())
+                : List.of();
+
+        List<String> listaTelefonos = dto.getTelefonos() != null
+                ? dto.getTelefonos().stream()
+                .map(t -> t.getTelefono() != null ? t.getTelefono().trim() : "")
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList())
+                : List.of();
+
+        if (listaCorreos.isEmpty()) listaCorreos.add("###IGNORAR###");
+        if (listaTelefonos.isEmpty()) listaTelefonos.add("###IGNORAR###");
+
+        String nombreValidar = dto.getNombre() != null ? dto.getNombre().trim() : "";
+
+        Long duplicados = contactoRepository.countDuplicados(
+                empresaId,
+                nombreValidar,
+                listaCorreos,
+                listaTelefonos,
+                excludeId
+        );
+
+        if (duplicados > 0) {
+            throw new IllegalArgumentException("Ya existe un contacto registrado en esta empresa con el mismo Nombre, Correo o Teléfono.");
+        }
+    }
 }

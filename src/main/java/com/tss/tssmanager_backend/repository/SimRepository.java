@@ -17,6 +17,9 @@ public interface SimRepository extends JpaRepository<Sim, Integer> {
     @Query("SELECT COUNT(s) FROM Sim s WHERE s.grupo = :grupo")
     Long countSimsByGrupo(Integer grupo);
 
+    @Query("SELECT s.numero FROM Sim s WHERE s.grupo = :grupo AND s.principal = 'SI'")
+    Optional<String> findNumeroPrincipalByGrupo(@Param("grupo") Integer grupo);
+
     @Query("SELECT DISTINCT s.grupo FROM Sim s WHERE s.grupo IS NOT NULL")
     List<Integer> findAllGroups();
 

@@ -94,4 +94,9 @@ public interface ActividadRepository extends JpaRepository<Actividad, Integer> {
             @Param("asignadoAId") Integer asignadoAId,
             @Param("fecha") LocalDate fecha
     );
+
+    List<Actividad> findByAsignadoAIdAndEstatus(Integer asignadoAId, EstatusActividadEnum estatus);
+
+    @Query("SELECT a FROM Actividad a WHERE a.asignadoAId = :userId AND a.fechaLimite = :fecha AND a.estatus = 'ABIERTA'")
+    List<Actividad> findConflictingActivities(@Param("userId") Integer userId, @Param("fecha") LocalDate fecha);
 }

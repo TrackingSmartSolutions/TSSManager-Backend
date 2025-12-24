@@ -26,6 +26,12 @@ public class ReporteCuentasPorPagarService {
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
 
+    @Autowired
+    private com.tss.tssmanager_backend.repository.SimRepository simRepository;
+
+    @Autowired
+    private com.tss.tssmanager_backend.service.SimService simService;
+
     private static final Color PRIMARY_BLUE = new Color(30, 60, 114);
     private static final Color ACCENT_BLUE = new Color(65, 131, 215);
     private static final Color SUCCESS_GREEN = new Color(34, 139, 34);
@@ -109,6 +115,7 @@ public class ReporteCuentasPorPagarService {
         NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("es", "MX"));
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
+        // Definición de fuentes (Igual que tenías)
         Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 24, PRIMARY_BLUE);
         Font subtitleFont = FontFactory.getFont(FontFactory.HELVETICA, 12, new Color(108, 117, 125));
         Font sectionTitleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, PRIMARY_BLUE);
@@ -116,14 +123,47 @@ public class ReporteCuentasPorPagarService {
         Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 9, TEXT_DARK);
         Font moneyFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, SUCCESS_GREEN);
 
-        addModernHeader(document, datosReporte, dateFormatter, currencyFormat,
-                titleFont, subtitleFont, moneyFont);
+        Font saldoAcumuladoFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, new Color(34, 139, 34)); // Verde fuerte
 
-        addResumenEjecutivo(document, datosReporte, dateFormatter, currencyFormat,
-                sectionTitleFont, tableHeaderFont, normalFont);
+        addModernHeader(document, datosReporte, dateFormatter, currencyFormat, titleFont, subtitleFont, moneyFont);
 
-        addDesgloseDia(document, datosReporte, dateFormatter, currencyFormat,
-                sectionTitleFont, tableHeaderFont, normalFont);
+        addResumenEjecutivo(document, datosReporte, dateFormatter, currencyFormat, sectionTitleFont, tableHeaderFont, normalFont);
+
+        List<CuentaPorPagar> cuentasRaw = obtenerCuentasFiltradas(datosReporte.getFechaInicio(), datosReporte.getFechaFin(), datosReporte.getFiltroEstatus());
+
+        List<CuentaPorPagar> otrosPagos = new ArrayList<>();
+        List<DatosTelcelEnriquecidos> pagosTelcel = new ArrayList<>();
+
+        for (CuentaPorPagar c : cuentasRaw) {
+            boolean tieneSim = c.getSim() != null;
+            boolean esCategoriaTelcel = c.getTransaccion() != null &&
+                    c.getTransaccion().getCategoria() != null &&
+                    c.getTransaccion().getCategoria().getDescripcion().toUpperCase().contains("TELCEL");
+
+            if (tieneSim || esCategoriaTelcel) {
+                if (tieneSim) {
+                    Integer grupoId = c.getSim().getGrupo();
+                    String numeroPrincipal = "Sin Grupo / Individual";
+
+                    if (grupoId != null && grupoId > 0) {
+                        numeroPrincipal = simRepository.findNumeroPrincipalByGrupo(grupoId).orElse("No asignado");
+                    }
+
+                    BigDecimal saldoActual = simService.obtenerSaldoNumerico(c.getSim().getId());
+                    boolean usarSaldo = saldoActual.compareTo(new BigDecimal("210")) > 0;
+
+                    pagosTelcel.add(new DatosTelcelEnriquecidos(c, numeroPrincipal, usarSaldo, grupoId != null ? grupoId : 9999));
+                } else {
+                    otrosPagos.add(c);
+                }
+            } else {
+                otrosPagos.add(c);
+            }
+        }
+
+        addSeccionOtrosPagos(document, otrosPagos, currencyFormat, dateFormatter, sectionTitleFont, tableHeaderFont, normalFont);
+
+        addSeccionRecargasTelcel(document, pagosTelcel, currencyFormat, dateFormatter, sectionTitleFont, tableHeaderFont, normalFont, saldoAcumuladoFont);
 
         addSimpleFooter(document, normalFont);
 
@@ -349,5 +389,126 @@ public class ReporteCuentasPorPagarService {
         cell.setBorderColor(new Color(233, 236, 239));
         cell.setBorderWidth(0.5f);
         table.addCell(cell);
+    }
+
+    // Clase auxiliar simple para transportar los datos calculados
+    private static class DatosTelcelEnriquecidos {
+        CuentaPorPagar cuenta;
+        String numeroPrincipal;
+        boolean usarSaldo;
+        Integer grupoId;
+
+        public DatosTelcelEnriquecidos(CuentaPorPagar c, String np, boolean us, Integer g) {
+            this.cuenta = c; this.numeroPrincipal = np; this.usarSaldo = us; this.grupoId = g;
+        }
+    }
+
+    private void addSeccionOtrosPagos(Document document, List<CuentaPorPagar> cuentas, NumberFormat currencyFormat,
+                                      DateTimeFormatter dateFormatter, Font titleFont, Font headerFont, Font normalFont) throws DocumentException {
+        if (cuentas.isEmpty()) return;
+
+        Paragraph title = new Paragraph("Otros Pagos y Servicios", titleFont);
+        title.setSpacingBefore(20);
+        title.setSpacingAfter(10);
+        document.add(title);
+
+        PdfPTable table = new PdfPTable(5); // Ajustamos columnas
+        table.setWidthPercentage(100);
+        table.setWidths(new float[]{15, 25, 20, 20, 20});
+
+        String[] headers = {"Fecha", "Cuenta", "Categoría", "Forma Pago", "Monto"};
+        for (String h : headers) addCleanHeaderCell(table, h, headerFont);
+
+        boolean alt = false;
+        for (CuentaPorPagar c : cuentas) {
+            Color bg = alt ? LIGHT_GRAY : Color.WHITE;
+
+            String categoria = (c.getTransaccion() != null && c.getTransaccion().getCategoria() != null)
+                    ? c.getTransaccion().getCategoria().getDescripcion() : "-";
+            String formaPago = FORMAS_PAGO.getOrDefault(c.getFormaPago(), c.getFormaPago());
+
+            addCleanDataCell(table, c.getFechaPago().format(dateFormatter), normalFont, bg, Element.ALIGN_CENTER);
+            addCleanDataCell(table, c.getCuenta().getNombre(), normalFont, bg, Element.ALIGN_LEFT);
+            addCleanDataCell(table, categoria, normalFont, bg, Element.ALIGN_CENTER);
+            addCleanDataCell(table, formaPago, normalFont, bg, Element.ALIGN_CENTER);
+            addCleanDataCell(table, currencyFormat.format(c.getMonto()), normalFont, bg, Element.ALIGN_RIGHT);
+
+            alt = !alt;
+        }
+        document.add(table);
+    }
+
+    private void addSeccionRecargasTelcel(Document document, List<DatosTelcelEnriquecidos> datos, NumberFormat currencyFormat,
+                                          DateTimeFormatter dateFormatter, Font titleFont, Font headerFont, Font normalFont, Font saldoFont) throws DocumentException {
+        if (datos.isEmpty()) return;
+
+        Paragraph title = new Paragraph("Recargas Telcel (Agrupadas)", titleFont);
+        title.setSpacingBefore(20);
+        title.setSpacingAfter(10);
+        document.add(title);
+
+        // Agrupar por ID de Grupo
+        Map<Integer, List<DatosTelcelEnriquecidos>> agrupadoPorGrupo = datos.stream()
+                .collect(Collectors.groupingBy(d -> d.grupoId));
+
+        // Iterar sobre los grupos
+        for (Map.Entry<Integer, List<DatosTelcelEnriquecidos>> entry : agrupadoPorGrupo.entrySet()) {
+            List<DatosTelcelEnriquecidos> listaGrupo = entry.getValue();
+            Integer grupoId = entry.getKey();
+            String numeroPrincipal = listaGrupo.get(0).numeroPrincipal; // Todos en el grupo tienen el mismo padre
+
+            // Subtítulo del grupo con el dato clave (Número Principal)
+            PdfPTable groupHeaderTable = new PdfPTable(1);
+            groupHeaderTable.setWidthPercentage(100);
+            groupHeaderTable.setSpacingBefore(15);
+            groupHeaderTable.setSpacingAfter(5);
+
+            PdfPCell cellHeader = new PdfPCell(new Phrase(
+                    String.format("Grupo %d - Línea Principal: %s", grupoId, numeroPrincipal),
+                    FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, Color.WHITE)
+            ));
+            cellHeader.setBackgroundColor(ACCENT_BLUE); // Azul un poco más claro para subsecciones
+            cellHeader.setPadding(6);
+            cellHeader.setBorder(Rectangle.NO_BORDER);
+            groupHeaderTable.addCell(cellHeader);
+            document.add(groupHeaderTable);
+
+            // Tabla de datos del grupo
+            PdfPTable table = new PdfPTable(6);
+            table.setWidthPercentage(100);
+            table.setWidths(new float[]{15, 15, 20, 15, 15, 20}); // Ajuste de anchos
+
+            String[] headers = {"Fecha", "SIM", "Cuenta/Cliente", "Estatus", "Saldo Actual", "Acción/Monto"};
+            for (String h : headers) addCompactHeaderCell(table, h, headerFont);
+
+            boolean alt = false;
+            for (DatosTelcelEnriquecidos d : listaGrupo) {
+                Color bg = alt ? new Color(248, 249, 250) : Color.WHITE;
+                CuentaPorPagar c = d.cuenta;
+
+                addCompactDataCell(table, c.getFechaPago().format(dateFormatter), normalFont, bg, Element.ALIGN_CENTER);
+                addCompactDataCell(table, c.getSim().getNumero(), normalFont, bg, Element.ALIGN_CENTER);
+                addCompactDataCell(table, c.getCuenta().getNombre(), normalFont, bg, Element.ALIGN_LEFT);
+                addCompactDataCell(table, c.getEstatus(), normalFont, bg, Element.ALIGN_CENTER);
+
+                BigDecimal saldoReal = simService.obtenerSaldoNumerico(c.getSim().getId());
+                addCompactDataCell(table, currencyFormat.format(saldoReal), normalFont, bg, Element.ALIGN_RIGHT);
+
+                if (d.usarSaldo) {
+                    PdfPCell cellSaldo = new PdfPCell(new Phrase("SALDO ACUMULADO", saldoFont));
+                    cellSaldo.setBackgroundColor(new Color(220, 255, 220)); // Verde muy suave de fondo
+                    cellSaldo.setHorizontalAlignment(Element.ALIGN_CENTER);
+                    cellSaldo.setPadding(4);
+                    cellSaldo.setBorderColor(BORDER_GRAY);
+                    table.addCell(cellSaldo);
+                } else {
+                    // Monto normal
+                    addCompactDataCell(table, currencyFormat.format(c.getMonto()), normalFont, bg, Element.ALIGN_RIGHT);
+                }
+
+                alt = !alt;
+            }
+            document.add(table);
+        }
     }
 }
