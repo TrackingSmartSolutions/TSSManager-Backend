@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,28 +61,32 @@ public class EmailService {
         return email;
     }
 
-    public EmailRecord enviarCorreo(String destinatario, String asunto, String cuerpo, List<String> rutasArchivosAdjuntos, Integer tratoId) {
-        return enviarCorreo(destinatario, asunto, cuerpo, rutasArchivosAdjuntos, tratoId, null);
+    public EmailRecord enviarCorreo(String destinatario, String asunto, String cuerpo,
+                                    List<String> rutasArchivosAdjuntos,
+                                    MultipartFile[] adjuntosDirectos, 
+                                    Integer tratoId) {
+        return enviarCorreo(destinatario, asunto, cuerpo, rutasArchivosAdjuntos, adjuntosDirectos, tratoId, null);
     }
 
-    public EmailRecord enviarCorreo(String destinatario, String asunto, String cuerpo, List<String> rutasArchivosAdjuntos, Integer tratoId, String tipoCorreoConsolidado) {
+    public EmailRecord enviarCorreo(String destinatario, String asunto, String cuerpo,
+                                    List<String> rutasArchivosAdjuntos,
+                                    MultipartFile[] adjuntosDirectos,
+                                    Integer tratoId, String tipoCorreoConsolidado) {
         boolean exito = false;
         String resendEmailId = null;
 
-        try {
-            String[] emailArray;
-            if (destinatario.contains(",")) {
-                emailArray = destinatario.split(",");
-                for (int i = 0; i < emailArray.length; i++) {
-                    emailArray[i] = normalizarEmail(emailArray[i]);
-                }
-            } else {
-                emailArray = new String[]{normalizarEmail(destinatario)};
-            }
+        List<String> logNombresArchivos = new ArrayList<>();
+        if (rutasArchivosAdjuntos != null) {
+            logNombresArchivos.addAll(rutasArchivosAdjuntos);
+        }
 
-            for (String email : emailArray) {
-                if (email == null || email.isEmpty() || !email.contains("@")) {
-                    throw new RuntimeException("Email inválido después de normalización: " + email);
+        try {
+            String[] emailArray = new String[]{normalizarEmail(destinatario)};
+            if (destinatario.contains(",")) {
+                String[] rawEmails = destinatario.split(",");
+                emailArray = new String[rawEmails.length];
+                for (int i = 0; i < rawEmails.length; i++) {
+                    emailArray[i] = normalizarEmail(rawEmails[i]);
                 }
             }
 
@@ -92,15 +97,32 @@ public class EmailService {
                     .html(procesarImagenesEmbebidas(cuerpo));
 
             List<com.resend.services.emails.model.Attachment> attachments = new ArrayList<>();
-            if (rutasArchivosAdjuntos != null && !rutasArchivosAdjuntos.isEmpty()) {
-                if (rutasArchivosAdjuntos.size() > 3) {
-                    throw new RuntimeException("Demasiados archivos adjuntos. Máximo 3 permitidos.");
+
+            if (adjuntosDirectos != null && adjuntosDirectos.length > 0) {
+                for (MultipartFile file : adjuntosDirectos) {
+                    if (!file.isEmpty()) {
+                        try {
+                            String base64Content = Base64.getEncoder().encodeToString(file.getBytes());
+
+                            attachments.add(com.resend.services.emails.model.Attachment.builder()
+                                    .fileName(file.getOriginalFilename())
+                                    .content(base64Content)
+                                    .build());
+
+                            logNombresArchivos.add("Archivo: " + file.getOriginalFilename());
+
+                        } catch (IOException e) {
+                            System.err.println("Error procesando adjunto directo: " + e.getMessage());
+                        }
+                    }
                 }
+            }
+
+            if (rutasArchivosAdjuntos != null && !rutasArchivosAdjuntos.isEmpty()) {
                 for (String ruta : rutasArchivosAdjuntos) {
                     try {
-                        byte[] fileContent = null;
+                        byte[] fileContent;
                         String fileName;
-                        String base64Content = null;
 
                         if (isUrl(ruta)) {
                             fileContent = downloadFileFromUrl(ruta);
@@ -111,25 +133,23 @@ public class EmailService {
                             fileName = filePath.getFileName().toString();
                         }
 
-                        base64Content = Base64.getEncoder().encodeToString(fileContent);
-                        fileContent = null;
-                        System.gc();
+                        String base64Content = Base64.getEncoder().encodeToString(fileContent);
 
                         attachments.add(com.resend.services.emails.model.Attachment.builder()
                                 .fileName(fileName)
                                 .content(base64Content)
                                 .build());
 
-                        base64Content = null;
-
-                    } catch (IOException e) {
-                        System.err.println("Error procesando archivo adjunto " + ruta + ": " + e.getMessage());
-                        System.gc();
+                    } catch (Exception e) {
+                        System.err.println("Error procesando adjunto de URL " + ruta + ": " + e.getMessage());
                     }
                 }
             }
+
+            // Agregar todos los adjuntos al correo
             emailBuilder.attachments(attachments);
 
+            // Enviar a Resend
             CreateEmailResponse response = resendClient.emails().send(emailBuilder.build());
 
             exito = response.getId() != null;
@@ -144,7 +164,7 @@ public class EmailService {
             e.printStackTrace();
         }
 
-        return guardarEmailRecord(destinatario, asunto, cuerpo, rutasArchivosAdjuntos,
+        return guardarEmailRecord(destinatario, asunto, cuerpo, logNombresArchivos,
                 tratoId, exito, resendEmailId, tipoCorreoConsolidado);
     }
 

@@ -140,6 +140,7 @@ public class CorreosSeguimientoService {
                     plantilla.getAsunto(),
                     plantilla.getMensaje(),
                     rutasAdjuntos,
+                    null,
                     trato.getId()
             );
 

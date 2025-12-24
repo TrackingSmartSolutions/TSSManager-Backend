@@ -36,7 +36,7 @@ public class CuentasVencidasSchedulerService {
         actualizarCuentasVencidas();
     }
 
-    @Scheduled(cron = "0 1 0 * * *")
+    @Scheduled(cron = "0 0 0 * * *", zone = "America/Mexico_City")
     @Transactional
     public void actualizarCuentasVencidas() {
         logger.info("Iniciando proceso de actualización de cuentas vencidas...");

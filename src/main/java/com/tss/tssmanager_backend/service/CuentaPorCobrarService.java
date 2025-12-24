@@ -58,14 +58,12 @@ public class CuentaPorCobrarService {
         Empresa cliente = cotizacion.getCliente();
         List<CuentaPorCobrar> cuentas = new ArrayList<>();
 
-        // DEBUG: Imprimir conceptos disponibles y seleccionados
         logger.info("Conceptos seleccionados: {}", conceptosSeleccionados);
         logger.info("Conceptos disponibles en cotización:");
         cotizacion.getUnidades().forEach(u ->
                 logger.info("  - Concepto: '{}', Importe: {}", u.getConcepto(), u.getImporteTotal())
         );
 
-        // Obtener el total de las unidades seleccionadas con mejor matching
         BigDecimal totalUnidadesSeleccionadas = cotizacion.getUnidades().stream()
                 .filter(u -> conceptosSeleccionados.stream()
                         .anyMatch(conceptoSeleccionado ->
@@ -161,6 +159,8 @@ public class CuentaPorCobrarService {
         }
 
         List<CuentaPorCobrar> savedCuentas = cuentaPorCobrarRepository.saveAll(cuentas);
+        cotizacion.setEstatus(EstatusCotizacionEnum.ACEPTADA);
+        cotizacionRepository.save(cotizacion);
         return savedCuentas.stream().map(this::convertToDTOWithFolio).collect(Collectors.toList());
     }
 

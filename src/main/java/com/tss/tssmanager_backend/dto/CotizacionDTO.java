@@ -1,5 +1,6 @@
 package com.tss.tssmanager_backend.dto;
 
+import com.tss.tssmanager_backend.enums.EstatusCotizacionEnum;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -26,4 +27,9 @@ public class CotizacionDTO {
     private String notasComercialesTopo;
     private String fichaTecnicaNombre;
     private String fichaTecnicaTipo;
+    private EstatusCotizacionEnum estatus;
+    private Integer tratoId;
+    private String tratoNombre;
+    private Integer usuarioCreadorId;
+    private String usuarioCreadorNombre;
 }

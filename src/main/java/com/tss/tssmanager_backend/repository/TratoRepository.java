@@ -400,4 +400,7 @@ ORDER BY a.fecha_limite ASC, n.fecha_creacion DESC
                              @Param("nuevoPropietarioId") Integer nuevoPropietarioId);
 
     Long countByPropietarioId(Integer propietarioId);
+
+    @Query("SELECT t FROM Trato t WHERE t.empresaId = :empresaId AND t.fase IN ('COTIZACION_PROPUESTA_PRACTICA', 'NEGOCIACION_REVISION', 'CERRADO_GANADO', 'INTERES_FUTURO', 'CERRADO_PERDIDO', 'RESPUESTA_POR_CORREO') ORDER BY t.fechaModificacion DESC")
+    List<Trato> findTratosDisponiblesParaCotizacion(@Param("empresaId") Integer empresaId);
 }

@@ -1,5 +1,6 @@
 package com.tss.tssmanager_backend.entity;
 
+import com.tss.tssmanager_backend.enums.EstatusCotizacionEnum;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
@@ -17,6 +18,12 @@ public class Cotizacion {
     @ManyToOne
     @JoinColumn(name = "cliente_id", nullable = false, foreignKey = @ForeignKey(name = "fk_cotizacion_cliente"))
     private Empresa cliente;
+
+    @Column(name = "trato_id")
+    private Integer tratoId;
+
+    @Column(name = "usuario_creador_id")
+    private Integer usuarioCreadorId;
 
     @Column(name = "subtotal", nullable = false, precision = 10, scale = 2)
     private BigDecimal subtotal;
@@ -38,6 +45,10 @@ public class Cotizacion {
 
     @Column(name = "fecha_creacion", nullable = false)
     private Instant fechaCreacion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estatus", nullable = false, length = 20)
+    private EstatusCotizacionEnum estatus = EstatusCotizacionEnum.PENDIENTE;
 
     @OneToMany(mappedBy = "cotizacion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UnidadCotizacion> unidades;

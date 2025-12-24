@@ -49,4 +49,13 @@ ORDER BY e.nombre
 
     @Query("SELECT u.nombre, COUNT(e) FROM Empresa e JOIN e.propietario u GROUP BY u.id, u.nombre")
     List<Object[]> contarEmpresasPorPropietario();
+
+    @Query(value = """
+    SELECT DISTINCT e.* 
+    FROM "Empresas" e
+    INNER JOIN "Equipos" eq ON e.id = eq.cliente_id
+    WHERE e.estatus IN ('CLIENTE', 'EN_PROCESO')
+    ORDER BY e.nombre
+    """, nativeQuery = true)
+    List<Empresa> findEmpresasConEquipos();
 }

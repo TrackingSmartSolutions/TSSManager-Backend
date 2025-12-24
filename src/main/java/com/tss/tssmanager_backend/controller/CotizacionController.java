@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.dto.CotizacionDTO;
 import com.tss.tssmanager_backend.entity.Cotizacion;
+import com.tss.tssmanager_backend.enums.EstatusCotizacionEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.service.CotizacionService;
 import org.slf4j.Logger;
@@ -181,6 +182,55 @@ public class CotizacionController {
         } catch (Exception e) {
             logger.error("Error al verificar vinculación de cotización con ID {}: {}", id, e.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", true));
+        }
+    }
+
+    @GetMapping("/trato/{tratoId}")
+    public ResponseEntity<List<CotizacionDTO>> listarCotizacionesPorTrato(@PathVariable Integer tratoId) {
+        try {
+            logger.debug("Solicitud para listar cotizaciones del trato: {}", tratoId);
+            List<CotizacionDTO> cotizaciones = cotizacionService.listarCotizacionesPorTrato(tratoId);
+            return ResponseEntity.ok(cotizaciones);
+        } catch (Exception e) {
+            logger.error("Error al listar cotizaciones del trato {}: {}", tratoId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(null);
+        }
+    }
+
+    @PutMapping("/{id}/estatus")
+    public ResponseEntity<CotizacionDTO> cambiarEstatus(
+            @PathVariable Integer id,
+            @RequestParam EstatusCotizacionEnum nuevoEstatus) {
+        try {
+            logger.debug("Solicitud para cambiar estatus de cotización {} a {}", id, nuevoEstatus);
+            CotizacionDTO updated = cotizacionService.cambiarEstatus(id, nuevoEstatus);
+            return ResponseEntity.ok(updated);
+        } catch (Exception e) {
+            logger.error("Error al cambiar estatus: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(null);
+        }
+    }
+
+    @GetMapping("/tratos-disponibles/{empresaId}")
+    public ResponseEntity<List<Map<String, Object>>> obtenerTratosDisponibles(@PathVariable Integer empresaId) {
+        try {
+            List<Map<String, Object>> tratos = cotizacionService.obtenerTratosDisponibles(empresaId);
+            return ResponseEntity.ok(tratos);
+        } catch (Exception e) {
+            logger.error("Error al obtener tratos disponibles: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(null);
+        }
+    }
+
+    @PutMapping("/{id}/marcar-enviada")
+    public ResponseEntity<CotizacionDTO> marcarComoEnviada(@PathVariable Integer id) {
+        try {
+            logger.debug("Marcando cotización {} como enviada", id);
+            CotizacionDTO updated = cotizacionService.cambiarEstatusAEnviada(id);
+            return ResponseEntity.ok(updated);
+        } catch (Exception e) {
+            logger.error("Error al marcar cotización como enviada: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(null);
         }
     }
 }

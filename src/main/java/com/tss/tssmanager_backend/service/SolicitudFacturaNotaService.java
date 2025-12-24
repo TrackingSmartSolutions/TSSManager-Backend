@@ -1023,22 +1023,53 @@ public class SolicitudFacturaNotaService {
                                             String conceptosTexto) {
         if (conceptosTexto == null || conceptosTexto.trim().isEmpty()) return;
 
-        String[] conceptos = conceptosTexto.split(", ");
-        boolean isEvenRow = false;
+        // Dividir por ", " (coma y espacio)
+        String[] conceptos = conceptosTexto.split(",\\s*");
 
-        for (String concepto : conceptos) {
-            if (concepto.trim().isEmpty()) continue;
+        logger.info("Procesando {} conceptos personalizados", conceptos.length);
+
+        // Obtener los conceptos originales de la cotización para obtener sus precios
+        Map<String, BigDecimal> preciosOriginales = new HashMap<>();
+
+        if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getUnidades() != null) {
+            for (UnidadCotizacion unidad : solicitud.getCotizacion().getUnidades()) {
+                preciosOriginales.put(
+                        unidad.getConcepto().trim().toLowerCase(),
+                        unidad.getImporteTotal()
+                );
+            }
+        }
+
+        boolean isEvenRow = false;
+        BigDecimal subtotalRestante = solicitud.getSubtotal();
+        int conceptosRestantes = conceptos.length;
+
+        for (int i = 0; i < conceptos.length; i++) {
+            String conceptoLimpio = conceptos[i].trim();
+            if (conceptoLimpio.isEmpty()) continue;
+
+            logger.info("Agregando concepto {}: {}", i + 1, conceptoLimpio);
 
             Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
             // Cantidad (default 1)
-            conceptosTable.addCell(createStyledTableCell("1", Element.ALIGN_CENTER, normalFont, rowColor));
+            conceptosTable.addCell(createStyledTableCell(
+                    "1",
+                    Element.ALIGN_CENTER,
+                    normalFont,
+                    rowColor
+            ));
 
             // Unidad (default "Servicio")
-            conceptosTable.addCell(createStyledTableCell("Servicio", Element.ALIGN_CENTER, normalFont, rowColor));
+            conceptosTable.addCell(createStyledTableCell(
+                    "Servicio",
+                    Element.ALIGN_CENTER,
+                    normalFont,
+                    rowColor
+            ));
 
             // Concepto personalizado
-            PdfPCell conceptoCell = new PdfPCell(new Phrase(concepto.trim(), normalFont));
+            PdfPCell conceptoCell = new PdfPCell(new Phrase(conceptoLimpio, normalFont));
             conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
             conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
             conceptoCell.setPadding(8);
@@ -1048,21 +1079,71 @@ public class SolicitudFacturaNotaService {
             conceptoCell.setBorderWidth(0.5f);
             conceptosTable.addCell(conceptoCell);
 
-            // Precio unitario (usar el total/número de conceptos)
-            BigDecimal precioPromedio = solicitud.getSubtotal().divide(
-                    BigDecimal.valueOf(conceptos.length), 2, RoundingMode.HALF_UP);
+            // Calcular el precio para este concepto
+            BigDecimal precioConcepto;
+
+            // Buscar si este concepto existe en los originales
+            String conceptoKey = conceptoLimpio.toLowerCase();
+            BigDecimal precioOriginal = null;
+
+            for (Map.Entry<String, BigDecimal> entry : preciosOriginales.entrySet()) {
+                if (entry.getKey().contains(conceptoKey) || conceptoKey.contains(entry.getKey())) {
+                    precioOriginal = entry.getValue();
+                    logger.info("Encontrado precio original para '{}': {}", conceptoLimpio, precioOriginal);
+                    break;
+                }
+            }
+
+            if (precioOriginal != null) {
+                // Si encontramos el precio original, usarlo
+                precioConcepto = precioOriginal;
+                subtotalRestante = subtotalRestante.subtract(precioOriginal);
+                conceptosRestantes--;
+            } else if (conceptosRestantes == 1) {
+                // Si es el último concepto, asignar todo lo que queda
+                precioConcepto = subtotalRestante;
+                logger.info("Último concepto, asignando saldo restante: {}", subtotalRestante);
+            } else {
+                // Si no se encuentra el precio original, dividir equitativamente lo que queda
+                precioConcepto = subtotalRestante.divide(
+                        BigDecimal.valueOf(conceptosRestantes),
+                        2,
+                        RoundingMode.HALF_UP
+                );
+                subtotalRestante = subtotalRestante.subtract(precioConcepto);
+                conceptosRestantes--;
+                logger.info("Concepto sin precio original, calculando: {}", precioConcepto);
+            }
+
+            // Precio unitario
             conceptosTable.addCell(createStyledTableCell(
-                    formatCurrency(precioPromedio), Element.ALIGN_RIGHT, normalFont, rowColor));
+                    formatCurrency(precioConcepto),
+                    Element.ALIGN_RIGHT,
+                    normalFont,
+                    rowColor
+            ));
 
             // Descuento (0%)
-            conceptosTable.addCell(createStyledTableCell("0%", Element.ALIGN_RIGHT, normalFont, rowColor));
+            conceptosTable.addCell(createStyledTableCell(
+                    "$0.00",
+                    Element.ALIGN_RIGHT,
+                    normalFont,
+                    rowColor
+            ));
 
             // Importe
             conceptosTable.addCell(createStyledTableCell(
-                    formatCurrency(precioPromedio), Element.ALIGN_RIGHT, boldFont, rowColor));
+                    formatCurrency(precioConcepto),
+                    Element.ALIGN_RIGHT,
+                    boldFont,
+                    rowColor
+            ));
 
             isEvenRow = !isEvenRow;
         }
+
+        logger.info("Total de conceptos agregados: {}", conceptos.length);
+        logger.info("Saldo restante después de asignación: {}", subtotalRestante);
     }
 
     private void recalcularTotalesConConceptosFiltrados(SolicitudFacturaNota solicitud,

@@ -11,7 +11,11 @@ import java.util.List;
 
 public interface TransaccionRepository extends JpaRepository<Transaccion, Integer> {
     // Obtener años disponibles
-    @Query("SELECT DISTINCT YEAR(t.fechaPago) FROM Transaccion t WHERE t.fechaPago IS NOT NULL ORDER BY YEAR(t.fechaPago)")
+    @Query("SELECT DISTINCT YEAR(t.fechaPago) FROM Transaccion t " +
+            "WHERE t.fechaPago IS NOT NULL " +
+            "AND LOWER(t.categoria.descripcion) <> 'reposición' " +
+            "AND (t.tipo = 'INGRESO' OR (t.tipo = 'GASTO' AND t.notas LIKE '%Transacción generada desde Cuentas por Pagar%')) " +
+            "ORDER BY YEAR(t.fechaPago)")
     List<Integer> findDistinctYears();
 
     // Suma Ingresos Totales (filtrando Reposición)
@@ -45,6 +49,7 @@ public interface TransaccionRepository extends JpaRepository<Transaccion, Intege
     // Obtener transacciones básicas para gráfico
     @Query("SELECT t.fechaPago, t.monto, t.tipo, t.notas FROM Transaccion t " +
             "WHERE LOWER(t.categoria.descripcion) <> 'reposición' " +
+            "AND (t.tipo = 'INGRESO' OR (t.tipo = 'GASTO' AND t.notas LIKE '%Transacción generada desde Cuentas por Pagar%')) " +
             "AND (:anio IS NULL OR YEAR(t.fechaPago) = :anio) " +
             "AND (:mes IS NULL OR MONTH(t.fechaPago) = :mes)")
     List<Object[]> findDatosGrafico(@Param("anio") Integer anio, @Param("mes") Integer mes);

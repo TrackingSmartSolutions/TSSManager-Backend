@@ -10,19 +10,17 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import com.tss.tssmanager_backend.dto.CotizacionDTO;
 import com.tss.tssmanager_backend.dto.UnidadCotizacionDTO;
-import com.tss.tssmanager_backend.entity.Cotizacion;
-import com.tss.tssmanager_backend.entity.Empresa;
-import com.tss.tssmanager_backend.entity.UnidadCotizacion;
+import com.tss.tssmanager_backend.entity.*;
+import com.tss.tssmanager_backend.enums.EstatusCotizacionEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
-import com.tss.tssmanager_backend.repository.CotizacionRepository;
-import com.tss.tssmanager_backend.repository.CuentaPorCobrarRepository;
-import com.tss.tssmanager_backend.repository.EmpresaRepository;
-import com.tss.tssmanager_backend.repository.UnidadCotizacionRepository;
+import com.tss.tssmanager_backend.repository.*;
+import com.tss.tssmanager_backend.security.CustomUserDetails;
 import org.apache.tomcat.util.http.fileupload.ByteArrayOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,8 +32,10 @@ import java.math.RoundingMode;
 import java.text.NumberFormat;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -57,6 +57,12 @@ public class CotizacionService {
 
     @Autowired
     private CuentaPorCobrarRepository cuentaPorCobrarRepository;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private TratoRepository tratoRepository;
 
     private byte[] membreteCache = null;
     private final Object membreteLock = new Object();
@@ -88,6 +94,7 @@ public class CotizacionService {
     @Transactional
     public CotizacionDTO crearCotizacion(CotizacionDTO cotizacionDTO) {
         logger.info("Creando nueva cotización para cliente: {}", cotizacionDTO.getClienteNombre());
+
         Empresa cliente = empresaRepository.findByNombreContainingIgnoreCase(cotizacionDTO.getClienteNombre())
                 .stream()
                 .filter(e -> e.getNombre().equalsIgnoreCase(cotizacionDTO.getClienteNombre()))
@@ -97,6 +104,13 @@ public class CotizacionService {
         Cotizacion cotizacion = new Cotizacion();
         cotizacion.setCliente(cliente);
         cotizacion.setFechaCreacion(Instant.now());
+        cotizacion.setEstatus(EstatusCotizacionEnum.PENDIENTE);
+
+        if (cotizacionDTO.getTratoId() != null) {
+            cotizacion.setTratoId(cotizacionDTO.getTratoId());
+        }
+
+        cotizacion.setUsuarioCreadorId(getCurrentUserId());
 
         BigDecimal subtotal = cotizacionDTO.getUnidades().stream()
                 .map(u -> {
@@ -106,10 +120,10 @@ public class CotizacionService {
                     return u.getPrecioUnitario().multiply(new BigDecimal(u.getCantidad())).subtract(descuentoMonto);
                 })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
         BigDecimal isrEstatal = BigDecimal.ZERO;
         BigDecimal isrFederal = BigDecimal.ZERO;
-
         BigDecimal total = subtotal.add(iva);
 
         cotizacion.setSubtotal(subtotal);
@@ -138,11 +152,17 @@ public class CotizacionService {
 
         unidadCotizacionRepository.saveAll(unidades);
         cotizacion.setUnidades(unidades);
+
         CotizacionDTO result = convertToDTO(savedCotizacion);
         result.setIsrEstatal(isrEstatal);
         result.setIsrFederal(isrFederal);
         result.setEmpresaData(empresaService.convertToEmpresaDTO(cliente));
+
         return result;
+    }
+
+    private Integer getCurrentUserId() {
+        return ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
     }
 
     @Transactional
@@ -158,6 +178,9 @@ public class CotizacionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado: " + cotizacionDTO.getClienteNombre()));
 
         cotizacion.setCliente(cliente);
+        if (cotizacionDTO.getTratoId() != null) {
+            cotizacion.setTratoId(cotizacionDTO.getTratoId());
+        }
 
         BigDecimal subtotal = cotizacionDTO.getUnidades().stream()
                 .map(u -> {
@@ -245,6 +268,23 @@ public class CotizacionService {
         dto.setFecha(cotizacion.getFechaCreacion()
                 .atZone(java.time.ZoneId.of("America/Mexico_City"))
                 .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+
+        dto.setEstatus(cotizacion.getEstatus());
+        dto.setTratoId(cotizacion.getTratoId());
+        dto.setUsuarioCreadorId(cotizacion.getUsuarioCreadorId());
+
+        // Cargar nombre de usuario creador
+        if (cotizacion.getUsuarioCreadorId() != null) {
+            Usuario usuario = usuarioRepository.findById(cotizacion.getUsuarioCreadorId()).orElse(null);
+            dto.setUsuarioCreadorNombre(usuario != null ? usuario.getNombre() : "Usuario Desconocido");
+        }
+
+        // Cargar nombre del trato
+        if (cotizacion.getTratoId() != null) {
+            Trato trato = tratoRepository.findById(cotizacion.getTratoId()).orElse(null);
+            dto.setTratoNombre(trato != null ? trato.getNombre() : "Trato Desconocido");
+        }
+
         dto.setUnidades(cotizacion.getUnidades().stream().map(u -> {
             UnidadCotizacionDTO udto = new UnidadCotizacionDTO();
             udto.setId(u.getId());
@@ -256,6 +296,7 @@ public class CotizacionService {
             udto.setImporteTotal(u.getImporteTotal());
             return udto;
         }).collect(Collectors.toList()));
+
         dto.setCantidadTotal(
                 cotizacion.getUnidades().stream()
                         .filter(u -> "Equipos".equals(u.getUnidad()))
@@ -268,6 +309,7 @@ public class CotizacionService {
         dto.setNotasComercialesTopo(cotizacion.getNotasComercialesTopo());
         dto.setFichaTecnicaNombre(cotizacion.getFichaTecnicaNombre());
         dto.setFichaTecnicaTipo(cotizacion.getFichaTecnicaTipo());
+
         return dto;
     }
 
@@ -1044,4 +1086,70 @@ public class CotizacionService {
             System.gc();
         }
     }
+
+    @Transactional(readOnly = true)
+    public List<CotizacionDTO> listarCotizacionesPorTrato(Integer tratoId) {
+        logger.info("Listando cotizaciones para trato ID: {}", tratoId);
+        return cotizacionRepository.findByTratoIdOrderByFechaCreacionDesc(tratoId)
+                .stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public CotizacionDTO cambiarEstatus(Integer cotizacionId, EstatusCotizacionEnum nuevoEstatus) {
+        logger.info("Cambiando estatus de cotización {} a {}", cotizacionId, nuevoEstatus);
+
+        Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada con id: " + cotizacionId));
+
+        cotizacion.setEstatus(nuevoEstatus);
+        Cotizacion updated = cotizacionRepository.save(cotizacion);
+
+        return convertToDTO(updated);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> obtenerTratosDisponibles(Integer empresaId) {
+        logger.info("Obteniendo tratos disponibles para empresa: {}", empresaId);
+
+        List<Trato> tratos = tratoRepository.findTratosDisponiblesParaCotizacion(empresaId);
+
+        return tratos.stream()
+                .map(trato -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", trato.getId());
+                    map.put("nombre", trato.getNombre());
+                    map.put("fase", trato.getFase());
+                    return map;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void cambiarEstatusAutomaticoPorTrato(Integer tratoId, EstatusCotizacionEnum nuevoEstatus) {
+        List<Cotizacion> cotizaciones = cotizacionRepository.findByTratoIdOrderByFechaCreacionDesc(tratoId);
+
+        for (Cotizacion cotizacion : cotizaciones) {
+            if (cotizacion.getEstatus() != EstatusCotizacionEnum.ACEPTADA) {
+                cotizacion.setEstatus(nuevoEstatus);
+                cotizacionRepository.save(cotizacion);
+            }
+        }
+    }
+
+    @Transactional
+    public CotizacionDTO cambiarEstatusAEnviada(Integer cotizacionId) {
+        Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada"));
+
+        if (cotizacion.getEstatus() == EstatusCotizacionEnum.PENDIENTE) {
+            cotizacion.setEstatus(EstatusCotizacionEnum.ENVIADA);
+            Cotizacion updated = cotizacionRepository.save(cotizacion);
+            return convertToDTO(updated);
+        }
+
+        return convertToDTO(cotizacion);
+    }
+
     }

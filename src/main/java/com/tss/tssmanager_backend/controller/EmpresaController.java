@@ -234,6 +234,11 @@ public class EmpresaController {
         }
     }
 
+    @GetMapping("/con-equipos")
+    public ResponseEntity<List<Empresa>> obtenerEmpresasConEquipos() {
+        return ResponseEntity.ok(empresaService.obtenerEmpresasConEquipos());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<EmpresaDTO> getEmpresaById(@PathVariable Integer id) {
         try {

@@ -99,12 +99,14 @@ public class CuentaPorPagarController {
                 cuentasPorPagarService.regenerarCuentasPorPagarManual(
                         request.getTransaccionId(),
                         request.getFechaUltimoPago(),
-                        request.getNuevoMonto()
+                        request.getNuevoMonto(),
+                        request.getFormaPago()
                 );
             } else {
                 cuentasPorPagarService.regenerarCuentasPorPagarManual(
                         request.getTransaccionId(),
-                        request.getFechaUltimoPago()
+                        request.getFechaUltimoPago(),
+                        request.getFormaPago()
                 );
             }
             return ResponseEntity.ok().build();

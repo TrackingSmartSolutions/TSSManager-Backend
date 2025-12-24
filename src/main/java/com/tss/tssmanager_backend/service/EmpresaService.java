@@ -577,4 +577,8 @@ public class EmpresaService {
         return result;
     }
 
+    public List<Empresa> obtenerEmpresasConEquipos() {
+        return empresaRepository.findEmpresasConEquipos();
+    }
+
 }

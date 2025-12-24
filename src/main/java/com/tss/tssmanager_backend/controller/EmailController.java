@@ -6,20 +6,13 @@ import com.tss.tssmanager_backend.entity.PlantillaCorreo;
 import com.tss.tssmanager_backend.service.EmailService;
 import com.tss.tssmanager_backend.service.PlantillaCorreoService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/correos")
@@ -41,39 +34,16 @@ public class EmailController {
             @RequestParam Integer tratoId,
             @RequestParam(required = false) MultipartFile[] archivosAdjuntos) {
 
-        List<String> rutasArchivosAdjuntos = new ArrayList<>();
+        EmailRecord emailRecord = emailService.enviarCorreo(
+                destinatario,
+                asunto,
+                cuerpo,
+                null,
+                archivosAdjuntos,
+                tratoId
+        );
 
-        // Procesar archivos adjuntos si existen
-        if (archivosAdjuntos != null && archivosAdjuntos.length > 0) {
-            for (MultipartFile archivo : archivosAdjuntos) {
-                if (!archivo.isEmpty()) {
-                    try {
-                        // Crear directorio temporal si no existe
-                        Path directorioTemporal = Paths.get("temp/adjuntos");
-                        if (!Files.exists(directorioTemporal)) {
-                            Files.createDirectories(directorioTemporal);
-                        }
-
-                        // Generar nombre único para el archivo
-                        String nombreArchivo = UUID.randomUUID().toString() + "_" + archivo.getOriginalFilename();
-                        Path rutaArchivo = directorioTemporal.resolve(nombreArchivo);
-
-                        // Guardar archivo temporalmente
-                        Files.copy(archivo.getInputStream(), rutaArchivo, StandardCopyOption.REPLACE_EXISTING);
-                        String cloudinaryUrl = emailService.uploadTempFileToCloudinary(rutaArchivo);
-                        rutasArchivosAdjuntos.add(cloudinaryUrl);
-                        Files.deleteIfExists(rutaArchivo);
-
-                    } catch (IOException e) {
-                        System.err.println("Error al procesar archivo adjunto: " + e.getMessage());
-                    }
-                }
-            }
-        }
-
-        EmailRecord emailRecord = emailService.enviarCorreo(destinatario, asunto, cuerpo, rutasArchivosAdjuntos, tratoId);
-
-        if (emailRecord.isExito()) {
+        if (emailRecord != null && emailRecord.isExito()) {
             return ResponseEntity.status(HttpStatus.CREATED).body(emailRecord);
         } else {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(emailRecord);
@@ -89,52 +59,19 @@ public class EmailController {
             @RequestParam(required = false) MultipartFile[] archivosAdjuntosAdicionales) {
 
         try {
-            // Obtener la plantilla con adjuntos
+            // Obtener la plantilla con adjuntos (URLs de Cloudinary)
             Optional<PlantillaCorreo> plantillaOpt = plantillaService.obtenerPlantillaPorId(plantillaId);
             if (!plantillaOpt.isPresent()) {
                 return ResponseEntity.badRequest().build();
             }
 
             PlantillaCorreo plantilla = plantillaOpt.get();
-
-            // Usar el cuerpo personalizado si se proporciona, sino usar el de la plantilla
             String cuerpo = cuerpoPersonalizado != null ? cuerpoPersonalizado : plantilla.getMensaje();
 
             List<String> rutasArchivosAdjuntos = new ArrayList<>();
-
-
             if (plantilla.getAdjuntos() != null && !plantilla.getAdjuntos().isEmpty()) {
                 for (Adjunto adjunto : plantilla.getAdjuntos()) {
                     rutasArchivosAdjuntos.add(adjunto.getAdjuntoUrl());
-                }
-            }
-
-            // Procesar archivos adjuntos adicionales si existen
-            if (archivosAdjuntosAdicionales != null && archivosAdjuntosAdicionales.length > 0) {
-                for (MultipartFile archivo : archivosAdjuntosAdicionales) {
-                    if (!archivo.isEmpty()) {
-                        try {
-                            // Crear directorio temporal si no existe
-                            Path directorioTemporal = Paths.get("temp/adjuntos");
-                            if (!Files.exists(directorioTemporal)) {
-                                Files.createDirectories(directorioTemporal);
-                            }
-
-                            // Generar nombre único para el archivo
-                            String nombreArchivo = UUID.randomUUID().toString() + "_" + archivo.getOriginalFilename();
-                            Path rutaArchivo = directorioTemporal.resolve(nombreArchivo);
-
-                            // Guardar archivo temporalmente
-                            Files.copy(archivo.getInputStream(), rutaArchivo, StandardCopyOption.REPLACE_EXISTING);
-                            String cloudinaryUrl = emailService.uploadTempFileToCloudinary(rutaArchivo);
-                            rutasArchivosAdjuntos.add(cloudinaryUrl);
-
-                            Files.deleteIfExists(rutaArchivo);
-
-                        } catch (IOException e) {
-                            System.err.println("Error al procesar archivo adjunto adicional: " + e.getMessage());
-                        }
-                    }
                 }
             }
 
@@ -143,11 +80,11 @@ public class EmailController {
                     plantilla.getAsunto(),
                     cuerpo,
                     rutasArchivosAdjuntos,
+                    archivosAdjuntosAdicionales,
                     tratoId
             );
 
-
-            if (emailRecord.isExito()) {
+            if (emailRecord != null && emailRecord.isExito()) {
                 return ResponseEntity.status(HttpStatus.CREATED).body(emailRecord);
             } else {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(emailRecord);

@@ -110,7 +110,7 @@ public class CuentaPorPagarService {
         registrarAbonoCreditos(transaccionOriginal, montoPago, cuenta, cantidadCreditos);
 
         if (cuentaCompletamentePagada) {
-            verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal, regenerarAutomaticamente, cuenta.getFechaPago());
+            verificarYRegenerarSiEsNecesario(cuenta, transaccionOriginal, regenerarAutomaticamente, cuenta.getFechaPago(), formaPago);
         }
     }
 
@@ -295,7 +295,7 @@ public class CuentaPorPagarService {
         }
     }
 
-    private void verificarYRegenerarSiEsNecesario(CuentaPorPagar cuentaPagada, Transaccion transaccionOriginal, boolean regenerarAutomaticamente, LocalDate fechaPagoReal) {
+    private void verificarYRegenerarSiEsNecesario(CuentaPorPagar cuentaPagada, Transaccion transaccionOriginal, boolean regenerarAutomaticamente, LocalDate fechaPagoReal, String formaPago) {
         if (!"Pagado".equals(cuentaPagada.getEstatus())) {
             return;
         }
@@ -307,31 +307,36 @@ public class CuentaPorPagarService {
             System.out.println("Última cuenta de la serie pagada para transacción " + transaccionOriginal.getId());
 
             if (regenerarAutomaticamente) {
-                regenerarCuentasPorPagar(transaccionOriginal, fechaPagoReal, null);
+                regenerarCuentasPorPagar(transaccionOriginal, fechaPagoReal, null, formaPago);
             }
         }
     }
 
     @Transactional
-    public void regenerarCuentasPorPagarManual(Integer transaccionId, LocalDate fechaUltimoPago, BigDecimal nuevoMonto) {
+    public void regenerarCuentasPorPagarManual(Integer transaccionId, LocalDate fechaUltimoPago, BigDecimal nuevoMonto, String ultimaFormaPago) {
         Transaccion transaccionOriginal = transaccionRepository.findById(transaccionId)
                 .orElseThrow(() -> new IllegalArgumentException("Transacción no encontrada"));
 
-        regenerarCuentasPorPagar(transaccionOriginal, fechaUltimoPago, nuevoMonto);
+        regenerarCuentasPorPagar(transaccionOriginal, fechaUltimoPago, nuevoMonto, ultimaFormaPago);
+    }
+
+    @Transactional
+    public void regenerarCuentasPorPagarManual(Integer transaccionId, LocalDate fechaUltimoPago, String ultimaFormaPago) {
+        regenerarCuentasPorPagarManual(transaccionId, fechaUltimoPago, null, ultimaFormaPago);
     }
 
     @Transactional
     public void regenerarCuentasPorPagarManual(Integer transaccionId, LocalDate fechaUltimoPago) {
-        regenerarCuentasPorPagarManual(transaccionId, fechaUltimoPago, null);
+        regenerarCuentasPorPagarManual(transaccionId, fechaUltimoPago, null, null);
     }
 
     @Transactional
     private void regenerarCuentasPorPagar(Transaccion transaccionOriginal, LocalDate fechaUltimoPago) {
-        regenerarCuentasPorPagar(transaccionOriginal, fechaUltimoPago, null);
+        regenerarCuentasPorPagar(transaccionOriginal, fechaUltimoPago, null, null);
     }
 
     @Transactional
-    private void regenerarCuentasPorPagar(Transaccion transaccionOriginal, LocalDate fechaUltimoPago, BigDecimal nuevoMonto) {
+    private void regenerarCuentasPorPagar(Transaccion transaccionOriginal, LocalDate fechaUltimoPago, BigDecimal nuevoMonto, String nuevaFormaPago) {
         try {
             // Obtener la SIM asociada ANTES de crear la nueva transacción
             Sim simAsociada = null;
@@ -352,7 +357,12 @@ public class CuentaPorPagarService {
             LocalDate proximaFechaPago = calcularProximaFechaPago(fechaUltimoPago, transaccionOriginal.getEsquema());
             nuevaTransaccion.setFechaPago(proximaFechaPago);
 
-            nuevaTransaccion.setFormaPago(transaccionOriginal.getFormaPago());
+            if (nuevaFormaPago != null && !nuevaFormaPago.isEmpty()) {
+                nuevaTransaccion.setFormaPago(nuevaFormaPago);
+            } else {
+                nuevaTransaccion.setFormaPago(transaccionOriginal.getFormaPago());
+            }
+
             nuevaTransaccion.setNotas("Serie regenerada - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
             nuevaTransaccion.setNumeroPagos(transaccionOriginal.getNumeroPagos());
             nuevaTransaccion.setFechaCreacion(LocalDateTime.now());
@@ -366,16 +376,8 @@ public class CuentaPorPagarService {
                     nuevaCuenta.setSim(simAsociada);
                     cuentasPorPagarRepository.save(nuevaCuenta);
                 }
-
                 System.out.println("SIM " + simAsociada.getNumero() + " asociada a " + nuevasCuentas.size() + " nuevas cuentas por pagar");
             }
-
-            System.out.println("Cuentas por pagar regeneradas exitosamente:");
-            System.out.println("- Transacción original: " + transaccionOriginal.getId());
-            System.out.println("- Nueva transacción: " + nuevaTransaccion.getId());
-            System.out.println("- Nueva serie: " + nuevaTransaccion.getNumeroPagos() + " pagos");
-            System.out.println("- Primera fecha de pago: " + proximaFechaPago);
-            System.out.println("- Monto: " + nuevaTransaccion.getMonto());
 
         } catch (Exception e) {
             System.err.println("Error al regenerar cuentas por pagar: " + e.getMessage());

@@ -377,6 +377,7 @@ public class NotificacionService {
                             cuerpo,
                             null,
                             null,
+                            null,
                             tipoCorreo
                     );
                     Thread.sleep(1000);
@@ -413,6 +414,7 @@ public class NotificacionService {
                             admin.getCorreoElectronico(),
                             asunto,
                             cuerpo,
+                            null,
                             null,
                             null,
                             tipoCorreo
@@ -836,6 +838,7 @@ public class NotificacionService {
                             admin.getCorreoElectronico(),
                             asunto,
                             cuerpo,
+                            null,
                             null,
                             null,
                             tipoCorreo

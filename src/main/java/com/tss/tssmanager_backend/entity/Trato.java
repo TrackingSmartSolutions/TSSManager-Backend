@@ -72,4 +72,7 @@ public class Trato {
 
     @Column(name = "correos_seguimiento_enviados")
     private Integer correosSeguimientoEnviados = 0;
+
+    @Column(name = "cotizacion_id")
+    private Integer cotizacionId;
 }

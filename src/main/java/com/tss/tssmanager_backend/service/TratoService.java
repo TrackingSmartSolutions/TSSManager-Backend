@@ -45,6 +45,8 @@ public class TratoService {
     private EntityManager entityManager;
     @Autowired
     private EmailService emailService;
+    @Autowired
+    private CotizacionRepository cotizacionRepository;
 
 
     @Cacheable(value = "tratos", key = "#id")
@@ -344,15 +346,25 @@ public class TratoService {
         String faseAnterior = trato.getFase();
         Integer propietarioAnterior = trato.getPropietarioId();
         trato.setFase(nuevaFase);
+
+        if ("CERRADO_PERDIDO".equals(nuevaFase)) {
+            List<Cotizacion> cotizacionesPendientes = cotizacionRepository.findByTratoIdOrderByFechaCreacionDesc(id);
+            for (Cotizacion cotizacion : cotizacionesPendientes) {
+                if (cotizacion.getEstatus() == EstatusCotizacionEnum.PENDIENTE ||
+                        cotizacion.getEstatus() == EstatusCotizacionEnum.ENVIADA) {
+                    cotizacion.setEstatus(EstatusCotizacionEnum.RECHAZADA);
+                    cotizacionRepository.save(cotizacion);
+                }
+            }
+        }
+
         trato.setProbabilidad(getProbabilidadPorFase(nuevaFase));
         trato.setFechaModificacion(Instant.now());
         trato.setFechaUltimaActividad(Instant.now());
 
-        // Información sobre escalamiento
         boolean escalado = false;
         Integer nuevoAdministrador = null;
 
-        // Solo escalar si el propietario actual es EMPLEADO y la fase requiere escalamiento
         if (requiereEscalamiento(nuevaFase) && propietarioAnterior != null && !esAdministrador(propietarioAnterior)) {
             Integer adminId = getAdministradorPredeterminado();
             if (adminId != null) {
@@ -364,7 +376,8 @@ public class TratoService {
         }
 
         Trato updatedTrato = tratoRepository.save(trato);
-        notificacionService.generarNotificacionTratoGanado(updatedTrato); // Verifica si el trato se ganó al cambiar la fase
+        notificacionService.generarNotificacionTratoGanado(updatedTrato);
+
         if (requiereEscalamiento(nuevaFase) && !esAdministrador(propietarioAnterior)) {
             Integer adminId = getAdministradorPredeterminado();
             if (adminId != null) {
@@ -375,9 +388,8 @@ public class TratoService {
                 notificacionService.generarNotificacionEscalamiento(updatedTrato, adminId);
             }
         }
-        TratoDTO result = convertToDTO(updatedTrato);
 
-        // Agregar información sobre escalamiento al DTO
+        TratoDTO result = convertToDTO(updatedTrato);
         result.setEscalado(escalado);
         if (escalado && nuevoAdministrador != null) {
             Usuario administrador = usuarioRepository.findById(nuevoAdministrador).orElse(null);
@@ -1187,7 +1199,7 @@ public class TratoService {
             // Enviar correo al contacto
             if (correoContacto != null && !correoContacto.trim().isEmpty()) {
                 try {
-                    EmailRecord recordContacto = emailService.enviarCorreo(correoContacto, asunto, cuerpoCorreo, null, tratoId);
+                    EmailRecord recordContacto = emailService.enviarCorreo(correoContacto, asunto, cuerpoCorreo,null,null, tratoId);
                 } catch (Exception e) {
                     System.err.println("ERROR enviando correo al contacto: " + e.getMessage());
                     e.printStackTrace();
@@ -1202,7 +1214,7 @@ public class TratoService {
                     !usuarioAsignado.getCorreoElectronico().trim().isEmpty()) {
                 try {
                     EmailRecord recordUsuario = emailService.enviarCorreo(
-                            usuarioAsignado.getCorreoElectronico(), asunto, cuerpoCorreo, null, tratoId);
+                            usuarioAsignado.getCorreoElectronico(), asunto, cuerpoCorreo, null, null, tratoId);
                 } catch (Exception e) {
                     System.err.println("ERROR enviando correo al usuario: " + e.getMessage());
                     e.printStackTrace();
@@ -1411,7 +1423,7 @@ public class TratoService {
             // Enviar correo al contacto
             if (correoContacto != null && !correoContacto.trim().isEmpty()) {
                 try {
-                    EmailRecord recordContacto = emailService.enviarCorreo(correoContacto, asunto, cuerpoCorreo, null, tratoId);
+                    EmailRecord recordContacto = emailService.enviarCorreo(correoContacto, asunto, cuerpoCorreo, null, null, tratoId);
                 } catch (Exception e) {
                     System.err.println("ERROR enviando correo al contacto: " + e.getMessage());
                     e.printStackTrace();
@@ -1426,7 +1438,7 @@ public class TratoService {
                     !usuarioAsignado.getCorreoElectronico().trim().isEmpty()) {
                 try {
                     EmailRecord recordUsuario = emailService.enviarCorreo(
-                            usuarioAsignado.getCorreoElectronico(), asunto, cuerpoCorreo, null, tratoId);
+                            usuarioAsignado.getCorreoElectronico(), asunto, cuerpoCorreo, null, null, tratoId);
                 } catch (Exception e) {
                     System.err.println("ERROR enviando correo al usuario: " + e.getMessage());
                     e.printStackTrace();
