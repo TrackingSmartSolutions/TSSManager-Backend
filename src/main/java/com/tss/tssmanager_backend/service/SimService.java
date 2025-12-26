@@ -712,4 +712,18 @@ public class SimService {
             return BigDecimal.ZERO;
         }
     }
+
+    @Transactional
+    public void aprobarAlertaSaldo(Integer simId) {
+        // Obtenemos el historial más reciente de esa SIM
+        HistorialSaldosSim ultimoSaldo = obtenerUltimoSaldo(simId);
+
+        if (ultimoSaldo != null) {
+            // Marcamos ESE registro específico como revisado
+            ultimoSaldo.setRevisado(true);
+            historialSaldosSimRepository.save(ultimoSaldo);
+        } else {
+            throw new EntityNotFoundException("No hay historial para aprobar.");
+        }
+    }
 }

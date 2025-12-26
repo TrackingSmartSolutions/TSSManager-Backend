@@ -26,4 +26,7 @@ public class HistorialSaldosSim {
 
     @Column(name = "fecha", nullable = false)
     private Date fecha;
+
+    @Column(columnDefinition = "boolean default false")
+    private Boolean revisado = false;
 }

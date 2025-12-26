@@ -311,9 +311,7 @@ public class SimController {
             if (sim.getTarifa() != TarifaSimEnum.POR_SEGUNDO) {
                 return ResponseEntity.ok(Map.of("tieneCaida", false));
             }
-
             List<HistorialSaldosSim> historial = simService.obtenerHistorialSaldos(id);
-
             // Necesitamos al menos 2 registros para comparar
             if (historial.size() < 2) {
                 return ResponseEntity.ok(Map.of("tieneCaida", false));
@@ -321,6 +319,10 @@ public class SimController {
 
             HistorialSaldosSim ultimo = historial.get(0);
             HistorialSaldosSim penultimo = historial.get(1);
+
+            if (Boolean.TRUE.equals(ultimo.getRevisado())) {
+                return ResponseEntity.ok(Map.of("tieneCaida", false));
+            }
 
             if (ultimo.getSaldoActual() == null || penultimo.getSaldoActual() == null) {
                 return ResponseEntity.ok(Map.of("tieneCaida", false));
@@ -339,6 +341,18 @@ public class SimController {
 
         } catch (EntityNotFoundException e) {
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping("/{id}/aprobar-alerta")
+    public ResponseEntity<Void> aprobarAlerta(@PathVariable Integer id) {
+        try {
+            simService.aprobarAlertaSaldo(id);
+            return ResponseEntity.ok().build();
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
         }
     }
 }
