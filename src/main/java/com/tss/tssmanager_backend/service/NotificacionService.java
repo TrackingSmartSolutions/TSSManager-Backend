@@ -243,6 +243,7 @@ public class NotificacionService {
         */
     }
 
+    @Transactional
     public void generarNotificacionCuentasYSims() {
         LocalDate hoy = LocalDate.now(ZONE_ID);
         LocalDate manana = hoy.plusDays(1);
