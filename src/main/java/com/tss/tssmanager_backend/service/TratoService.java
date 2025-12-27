@@ -780,7 +780,11 @@ public class TratoService {
                         dto.getFechaUltimaActividad() : dto.getFechaCreacion();
 
                 long minutesInactive = ChronoUnit.MINUTES.between(fechaUltimaActividad, currentTime);
-                dto.setIsNeglected(!hasActivities && minutesInactive > 10080);
+                boolean sinActividadesPendientes = actividadesAbiertasCount == 0;
+                boolean tiempoExcedido = minutesInactive > 10080;
+
+                dto.setIsNeglected(sinActividadesPendientes && tiempoExcedido);
+
                 dto.setHasActivities(hasActivities);
 
                 // Inicializar listas vacías (se llenarán después si es necesario)
