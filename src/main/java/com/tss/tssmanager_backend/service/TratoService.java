@@ -1661,7 +1661,11 @@ public class TratoService {
                 Instant fechaUltimaActividad = dto.getFechaUltimaActividad() != null ?
                         dto.getFechaUltimaActividad() : dto.getFechaCreacion();
                 long minutesInactive = ChronoUnit.MINUTES.between(fechaUltimaActividad, currentTime);
-                dto.setIsNeglected(!dto.getHasActivities() && minutesInactive > 10080);
+
+                boolean sinActividadesPendientes = dto.getActividadesAbiertasCount() == 0;
+                boolean tiempoExcedido = minutesInactive > 10080;
+
+                dto.setIsNeglected(sinActividadesPendientes && tiempoExcedido);
 
                 tratos.add(dto);
 
