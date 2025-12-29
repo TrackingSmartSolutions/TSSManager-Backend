@@ -94,8 +94,6 @@ public class NotificacionService {
             verificarActividadesProximas();
             logger.info("Limpiando notificaciones leídas al arranque...");
             limpiarNotificacionesLeidas();
-            logger.info("Verificando alertas de equipos pendientes al arranque...");
-            verificarYEnviarAlertaEquiposPendiente();
             logger.info("Inicialización de notificaciones completada.");
         } catch (Exception e) {
             logger.error("Error durante la inicialización de notificaciones al arranque: {}", e.getMessage());
@@ -446,11 +444,15 @@ public class NotificacionService {
 
         StringBuilder listadoCuentas = new StringBuilder();
         for (CuentaPorCobrar cuenta : cuentas) {
+            String estatusDisplay = cuenta.getEstatus().name();
+
             listadoCuentas.append(String.format(
-                    "<tr><td>%s</td><td>%s</td><td>$%s</td></tr>",
+                    "<tr><td>%s</td><td>%s</td><td>$%s</td><td style=\"font-weight: bold; color: %s;\">%s</td></tr>",
                     cuenta.getFolio(),
                     cuenta.getCliente().getNombre(),
-                    cuenta.getCantidadCobrar()
+                    cuenta.getCantidadCobrar(),
+                    obtenerColorEstatus(cuenta.getEstatus()),
+                    formatearEstatus(estatusDisplay)
             ));
         }
 
@@ -516,6 +518,7 @@ public class NotificacionService {
                     <th style="padding: 8px;">Folio</th>
                     <th style="padding: 8px;">Cliente</th>
                     <th style="padding: 8px;">Monto</th>
+                     <th style="padding: 8px;">Estatus</th>
                 </tr>
             </thead>
             <tbody>
@@ -552,12 +555,16 @@ public class NotificacionService {
             String cuentaNombre = cuenta.getCuenta() != null ? cuenta.getCuenta().getNombre() : "Sin cuenta";
             String simNumero = cuenta.getSim() != null ? cuenta.getSim().getNumero() : "N/A";
 
+            String estatusDisplay = cuenta.getEstatus();
+
             listadoCuentas.append(String.format(
-                    "<tr><td>%s</td><td>%s</td><td>%s</td><td>$%s</td></tr>",
+                    "<tr><td>%s</td><td>%s</td><td>%s</td><td>$%s</td><td style=\"font-weight: bold; color: %s;\">%s</td></tr>",
                     categoria,
                     cuentaNombre,
                     simNumero,
-                    cuenta.getMonto()
+                    cuenta.getMonto(),
+                    obtenerColorEstatusPagar(estatusDisplay),
+                    formatearEstatusPagar(estatusDisplay)
             ));
         }
 
@@ -624,6 +631,7 @@ public class NotificacionService {
                                         <th style="padding: 8px;">Cuenta</th>
                                         <th style="padding: 8px;">SIM</th>
                                         <th style="padding: 8px;">Monto</th>
+                                        <th style="padding: 8px;">Estatus</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1121,31 +1129,69 @@ public class NotificacionService {
 
     @Transactional(readOnly = true)
     public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencen(LocalDate fecha) {
-        return cuentaPorCobrarRepository.findByFechaPagoAndEstatusIn(
+        List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository.findByFechaPagoAndEstatusIn(
                 fecha,
                 List.of(EstatusPagoEnum.PENDIENTE, EstatusPagoEnum.EN_PROCESO)
         );
+
+        cuentas.forEach(c -> {
+            if (c.getConceptos() != null) {
+                c.getConceptos().length();
+            }
+            if (c.getCliente() != null) {
+                c.getCliente().getNombre();
+            }
+        });
+
+        return cuentas;
     }
 
     @Transactional(readOnly = true)
     public List<CuentaPorPagar> obtenerCuentasPorPagarVencen(LocalDate fecha) {
-        return cuentaPorPagarRepository.findByFechaPagoAndEstatusIn(
+        List<CuentaPorPagar> cuentas = cuentaPorPagarRepository.findByFechaPagoAndEstatusIn(
                 fecha,
                 List.of("Pendiente", "En proceso")
         );
+
+        cuentas.forEach(c -> {
+            if (c.getNota() != null) {
+                c.getNota().length();
+            }
+            if (c.getTransaccion() != null && c.getTransaccion().getCategoria() != null) {
+                String desc = c.getTransaccion().getCategoria().getDescripcion();
+                if (desc != null) {
+                    desc.length();
+                }
+            }
+            if (c.getCuenta() != null) {
+                c.getCuenta().getNombre();
+            }
+        });
+
+        return cuentas;
     }
 
     @Transactional(readOnly = true)
     public List<CuentaPorCobrar> obtenerCuentasPorCobrarVencidas() {
-        // Obtenemos todas las que tienen estatus pendiente/vencida
         List<CuentaPorCobrar> todas = cuentaPorCobrarRepository.findByEstatusIn(
                 List.of(EstatusPagoEnum.VENCIDA, EstatusPagoEnum.PENDIENTE, EstatusPagoEnum.EN_PROCESO)
         );
 
         LocalDate hoy = LocalDate.now(ZONE_ID);
-        return todas.stream()
+        List<CuentaPorCobrar> filtradas = todas.stream()
                 .filter(c -> c.getFechaPago() != null && c.getFechaPago().isBefore(hoy))
                 .collect(Collectors.toList());
+
+        filtradas.forEach(c -> {
+            if (c.getConceptos() != null) {
+                c.getConceptos().length();
+            }
+            if (c.getCliente() != null) {
+                c.getCliente().getNombre();
+            }
+        });
+
+        return filtradas;
     }
 
     @Transactional(readOnly = true)
@@ -1155,9 +1201,26 @@ public class NotificacionService {
         );
 
         LocalDate hoy = LocalDate.now(ZONE_ID);
-        return todas.stream()
+        List<CuentaPorPagar> filtradas = todas.stream()
                 .filter(c -> c.getFechaPago() != null && c.getFechaPago().isBefore(hoy))
                 .collect(Collectors.toList());
+
+        filtradas.forEach(c -> {
+            if (c.getNota() != null) {
+                c.getNota().length();
+            }
+            if (c.getTransaccion() != null && c.getTransaccion().getCategoria() != null) {
+                String desc = c.getTransaccion().getCategoria().getDescripcion();
+                if (desc != null) {
+                    desc.length();
+                }
+            }
+            if (c.getCuenta() != null) {
+                c.getCuenta().getNombre();
+            }
+        });
+
+        return filtradas;
     }
 
     @Transactional(readOnly = true)
@@ -1372,5 +1435,48 @@ public class NotificacionService {
             </body>
             </html>
             """, nombreUsuario, filasTabla.toString());
+    }
+
+    private String formatearEstatus(String estatus) {
+        switch (estatus) {
+            case "PENDIENTE":
+                return "Pendiente";
+            case "VENCIDA":
+                return "Vencida";
+            case "EN_PROCESO":
+                return "En Proceso";
+            default:
+                return estatus;
+        }
+    }
+
+    private String obtenerColorEstatus(EstatusPagoEnum estatus) {
+        switch (estatus) {
+            case VENCIDA:
+                return "#d32f2f";
+            case PENDIENTE:
+                return "#f57c00";
+            case EN_PROCESO:
+                return "#1976d2";
+            default:
+                return "#666666";
+        }
+    }
+
+    private String formatearEstatusPagar(String estatus) {
+        return estatus;
+    }
+
+    private String obtenerColorEstatusPagar(String estatus) {
+        switch (estatus.toLowerCase()) {
+            case "vencida":
+                return "#d32f2f";
+            case "pendiente":
+                return "#f57c00";
+            case "en proceso":
+                return "#1976d2";
+            default:
+                return "#666666";
+        }
     }
 }

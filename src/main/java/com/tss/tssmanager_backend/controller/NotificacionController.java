@@ -79,4 +79,14 @@ public class NotificacionController {
         List<Map<String, Object>> actividadesProximas = notificacionService.obtenerActividadesProximasUsuario();
         return ResponseEntity.ok(actividadesProximas);
     }
+
+    @PostMapping("/admin/forzar-envio-cuentas")
+    public ResponseEntity<String> forzarEnvioCuentas() {
+        try {
+            notificacionService.generarNotificacionCuentasYSims();
+            return ResponseEntity.ok("Proceso de envío manual ejecutado. Revisa los logs para confirmar.");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Error al ejecutar envío manual: " + e.getMessage());
+        }
+    }
 }
