@@ -13,8 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -30,8 +29,6 @@ import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 
 @Service
 public class NotificacionService {
@@ -1355,6 +1352,12 @@ public class NotificacionService {
         tratosPorUsuario.forEach((usuarioId, listaTratos) -> {
             usuarioRepository.findById(usuarioId).ifPresent(usuario -> {
                 if (usuario.getCorreoElectronico() != null && !usuario.getCorreoElectronico().isEmpty()) {
+
+                    // Ordenamos la lista: Nulls primero (nunca tocados), luego fechas ascendentes (más viejos arriba)
+                    listaTratos.sort(Comparator.comparing(
+                            Trato::getFechaUltimaActividad,
+                            Comparator.nullsFirst(Comparator.naturalOrder())
+                    ));
 
                     String asunto = "Reporte Semanal: Tratos sin interacción programada";
                     String cuerpo = construirCuerpoCorreoDesatendidos(usuario.getNombre(), listaTratos);
