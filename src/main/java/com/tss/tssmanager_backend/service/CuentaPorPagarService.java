@@ -363,7 +363,10 @@ public class CuentaPorPagarService {
                 nuevaTransaccion.setFormaPago(transaccionOriginal.getFormaPago());
             }
 
-            nuevaTransaccion.setNotas("Serie regenerada - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
+            String notaOriginal = transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : "";
+            String notaLimpia = limpiarNotaRegenerada(notaOriginal);
+
+            nuevaTransaccion.setNotas("Serie regenerada - " + notaLimpia);
             nuevaTransaccion.setNumeroPagos(transaccionOriginal.getNumeroPagos());
             nuevaTransaccion.setFechaCreacion(LocalDateTime.now());
             nuevaTransaccion.setFechaModificacion(LocalDateTime.now());
@@ -384,6 +387,13 @@ public class CuentaPorPagarService {
             e.printStackTrace();
             throw new RuntimeException("Error crítico al regenerar cuentas por pagar: " + e.getMessage(), e);
         }
+    }
+
+    private String limpiarNotaRegenerada(String nota) {
+        if (nota == null || nota.isEmpty()) {
+            return "";
+        }
+        return nota.replaceAll("(?i)serie regenerada\\s*-\\s*", "").trim();
     }
 
     private LocalDate calcularProximaFechaPago(LocalDate fechaUltimoPago, com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum esquema) {
