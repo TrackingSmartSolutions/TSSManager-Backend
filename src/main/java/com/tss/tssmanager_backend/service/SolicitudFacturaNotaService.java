@@ -87,10 +87,13 @@ public class SolicitudFacturaNotaService {
 
     private static final Map<String, String> FORMAS_PAGO = new HashMap<>() {{
         put("01", "Efectivo");
-        put("02", "Cheque nominativo");
+        put("02", "Tarjeta Spin");
         put("03", "Transferencia electrónica de fondos");
         put("04", "Tarjeta de crédito");
+        put("07", "Con Saldo Acumulado");
         put("28", "Tarjeta de débito");
+        put("30", "Aplicación de anticipos");
+        put("99", "Por definir");
     }};
 
     private static final Map<String, String> CLAVES_PRODUCTO_SERVICIO = new HashMap<>() {{
@@ -683,7 +686,7 @@ public class SolicitudFacturaNotaService {
                 BigDecimal precioUnitarioConDescuento = unidad.getPrecioUnitario().multiply(factorDescuento);
 
                 conceptosTable.addCell(createStyledTableCell(
-                        formatCurrency(precioUnitarioConDescuento),
+                        formatCurrency(unidad.getPrecioUnitario()),
                         Element.ALIGN_RIGHT,
                         normalFont,
                         rowColor
