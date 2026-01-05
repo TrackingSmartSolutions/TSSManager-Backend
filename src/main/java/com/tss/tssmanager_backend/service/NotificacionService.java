@@ -214,6 +214,7 @@ public class NotificacionService {
     }
 
     @Scheduled(cron = "0 0 10 * * *", zone = "America/Mexico_City")
+    @Transactional
     public void verificarNotificacionesMatutina() {
         logger.info("Verificación matutina de las 10 AM ejecutada");
         generarNotificacionCuentasYSims();

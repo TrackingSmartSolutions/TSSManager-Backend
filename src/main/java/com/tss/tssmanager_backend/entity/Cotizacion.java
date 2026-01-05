@@ -74,5 +74,4 @@ public class Cotizacion {
     @Column(name = "ficha_tecnica_tipo")
     private String fichaTecnicaTipo;
 
-
 }

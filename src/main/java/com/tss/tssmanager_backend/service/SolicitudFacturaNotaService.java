@@ -11,6 +11,7 @@ import com.lowagie.text.pdf.PdfWriter;
 import com.tss.tssmanager_backend.dto.FacturaDTO;
 import com.tss.tssmanager_backend.dto.SolicitudFacturaNotaDTO;
 import com.tss.tssmanager_backend.entity.*;
+import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
 import com.tss.tssmanager_backend.enums.TipoDocumentoSolicitudEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.*;
@@ -368,6 +369,14 @@ public class SolicitudFacturaNotaService {
     @Transactional
     public void eliminarSolicitud(Integer id) {
         logger.info("Eliminando solicitud con ID: {}", id);
+
+        Optional<EstatusPagoEnum> estatusCuenta = cuentaPorCobrarRepository.findEstatusBySolicitudId(id);
+
+        if (estatusCuenta.isPresent() && estatusCuenta.get() == EstatusPagoEnum.PAGADO) {
+            throw new IllegalStateException(
+                    "No se puede eliminar esta solicitud porque la cuenta por cobrar asociada ya ha sido marcada como pagada."
+            );
+        }
         SolicitudFacturaNota solicitud = solicitudRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + id));
         solicitudRepository.delete(solicitud);
@@ -1029,20 +1038,19 @@ public class SolicitudFacturaNotaService {
                                             String conceptosTexto) {
         if (conceptosTexto == null || conceptosTexto.trim().isEmpty()) return;
 
-        // Dividir por ", " (coma y espacio)
         String[] conceptos = conceptosTexto.split(",\\s*");
-
         logger.info("Procesando {} conceptos personalizados", conceptos.length);
 
-        // Obtener las unidades originales de la cotización para tener referencia
         Map<String, UnidadCotizacion> unidadesOriginales = new HashMap<>();
-
         if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getUnidades() != null) {
             for (UnidadCotizacion unidad : solicitud.getCotizacion().getUnidades()) {
-                String key = unidad.getConcepto().trim().toLowerCase();
+                String key = unidad.getConcepto().toLowerCase().trim();
                 unidadesOriginales.put(key, unidad);
             }
         }
+
+        BigDecimal subtotalSolicitud = solicitud.getSubtotal();
+        BigDecimal dineroAsignado = BigDecimal.ZERO;
 
         boolean isEvenRow = false;
 
@@ -1050,117 +1058,91 @@ public class SolicitudFacturaNotaService {
             String conceptoLimpio = conceptos[i].trim();
             if (conceptoLimpio.isEmpty()) continue;
 
-            logger.info("Agregando concepto {}: {}", i + 1, conceptoLimpio);
-
             Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
-            // Buscar la unidad original que corresponde a este concepto
-            UnidadCotizacion unidadOriginal = null;
-            String conceptoKey = conceptoLimpio.toLowerCase()
-                    .replaceAll("[,\\s]+", " ")
-                    .replaceAll("[\\r\\n]+", " ")
-                    .trim();
+            BigDecimal precioUnitarioFinal = BigDecimal.ZERO;
+            BigDecimal importeFinal = BigDecimal.ZERO;
+            BigDecimal cantidad = BigDecimal.ONE;
+            String unidadMedida = "Servicio";
 
-            for (Map.Entry<String, UnidadCotizacion> entry : unidadesOriginales.entrySet()) {
-                String conceptoBD = entry.getKey()
-                        .replaceAll("[,\\s]+", " ")
-                        .replaceAll("[\\r\\n]+", " ")
-                        .trim();
+            if (conceptos.length == 1) {
+                precioUnitarioFinal = subtotalSolicitud;
+                importeFinal = subtotalSolicitud;
+                if (!unidadesOriginales.isEmpty()) {
+                    UnidadCotizacion first = unidadesOriginales.values().iterator().next();
+                    unidadMedida = first.getUnidad();
+                    cantidad = new BigDecimal(first.getCantidad());
+                }
+                logger.info("Unico concepto detectado, asignando subtotal completo: {}", subtotalSolicitud);
+            }
+            else {
+                UnidadCotizacion unidadMatch = null;
+                String conceptoBuscar = conceptoLimpio.toLowerCase();
 
-                String prefijoBD = conceptoBD.length() > 30 ? conceptoBD.substring(0, 30) : conceptoBD;
-                String prefijoKey = conceptoKey.length() > 30 ? conceptoKey.substring(0, 30) : conceptoKey;
+                unidadMatch = unidadesOriginales.get(conceptoBuscar);
 
-                if (prefijoBD.equals(prefijoKey) ||
-                        conceptoBD.contains(prefijoKey) ||
-                        prefijoKey.contains(prefijoBD)) {
-                    unidadOriginal = entry.getValue();
-                    logger.info("Match encontrado: '{}' <-> '{}'", conceptoLimpio, entry.getValue().getConcepto());
-                    break;
+                if (unidadMatch == null) {
+                    for (Map.Entry<String, UnidadCotizacion> entry : unidadesOriginales.entrySet()) {
+                        String keyBD = entry.getKey();
+                        if (keyBD.contains(conceptoBuscar) || conceptoBuscar.contains(keyBD)) {
+                            unidadMatch = entry.getValue();
+                            break;
+                        }
+                    }
+                }
+
+                if (unidadMatch != null) {
+                    cantidad = new BigDecimal(unidadMatch.getCantidad());
+                    unidadMedida = unidadMatch.getUnidad();
+
+                    BigDecimal descuento = unidadMatch.getDescuento() != null ? unidadMatch.getDescuento() : BigDecimal.ZERO;
+                    BigDecimal factor = BigDecimal.ONE.subtract(descuento.divide(BigDecimal.valueOf(100)));
+
+                    importeFinal = unidadMatch.getImporteTotal();
+                    precioUnitarioFinal = unidadMatch.getPrecioUnitario().multiply(factor);
+
+                    dineroAsignado = dineroAsignado.add(importeFinal);
+                } else {
+                    if (i == conceptos.length - 1) {
+                        BigDecimal restante = subtotalSolicitud.subtract(dineroAsignado);
+                        if (restante.compareTo(BigDecimal.ZERO) > 0) {
+                            precioUnitarioFinal = restante;
+                            importeFinal = restante;
+                            logger.info("Asignando saldo restante al ultimo concepto sin match: {}", restante);
+                        }
+                    } else {
+                        logger.warn("No se encontró match para '{}' en multi-concepto. Asignando 0 temporales.", conceptoLimpio);
+                    }
                 }
             }
 
-            if (unidadOriginal != null) {
+            conceptosTable.addCell(createStyledTableCell(
+                    String.valueOf(cantidad), Element.ALIGN_CENTER, normalFont, rowColor));
 
-                // Cantidad
-                conceptosTable.addCell(createStyledTableCell(
-                        String.valueOf(unidadOriginal.getCantidad()),
-                        Element.ALIGN_CENTER,
-                        normalFont,
-                        rowColor
-                ));
+            conceptosTable.addCell(createStyledTableCell(
+                    unidadMedida, Element.ALIGN_CENTER, normalFont, rowColor));
 
-                // Unidad
-                conceptosTable.addCell(createStyledTableCell(
-                        unidadOriginal.getUnidad(),
-                        Element.ALIGN_CENTER,
-                        normalFont,
-                        rowColor
-                ));
+            PdfPCell conceptoCell = new PdfPCell(new Phrase(conceptoLimpio, normalFont));
+            conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+            conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
+            conceptoCell.setPadding(8);
+            conceptoCell.setBackgroundColor(rowColor);
+            conceptoCell.setBorder(Rectangle.BOX);
+            conceptoCell.setBorderColor(grisMedio);
+            conceptoCell.setBorderWidth(0.5f);
+            conceptosTable.addCell(conceptoCell);
 
-                // Concepto
-                PdfPCell conceptoCell = new PdfPCell(new Phrase(conceptoLimpio, normalFont));
-                conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
-                conceptoCell.setPadding(8);
-                conceptoCell.setBackgroundColor(rowColor);
-                conceptoCell.setBorder(Rectangle.BOX);
-                conceptoCell.setBorderColor(grisMedio);
-                conceptoCell.setBorderWidth(0.5f);
-                conceptosTable.addCell(conceptoCell);
+            conceptosTable.addCell(createStyledTableCell(
+                    formatCurrency(precioUnitarioFinal), Element.ALIGN_RIGHT, normalFont, rowColor));
 
-                BigDecimal descuento = unidadOriginal.getDescuento() != null ? unidadOriginal.getDescuento() : BigDecimal.ZERO;
-                BigDecimal factorDescuento = BigDecimal.ONE.subtract(descuento.divide(BigDecimal.valueOf(100)));
-                BigDecimal precioUnitarioConDescuento = unidadOriginal.getPrecioUnitario().multiply(factorDescuento);
+            conceptosTable.addCell(createStyledTableCell(
+                    "$0.00", Element.ALIGN_RIGHT, normalFont, rowColor));
 
-                conceptosTable.addCell(createStyledTableCell(
-                        formatCurrency(unidadOriginal.getPrecioUnitario()),
-                        Element.ALIGN_RIGHT,
-                        normalFont,
-                        rowColor
-                ));
-
-                BigDecimal descuentoPorUnidad = unidadOriginal.getPrecioUnitario().subtract(precioUnitarioConDescuento);
-                BigDecimal descuentoTotal = descuentoPorUnidad.multiply(BigDecimal.valueOf(unidadOriginal.getCantidad()));
-
-                conceptosTable.addCell(createStyledTableCell(
-                        formatCurrency(descuentoTotal),
-                        Element.ALIGN_RIGHT,
-                        normalFont,
-                        rowColor
-                ));
-
-                conceptosTable.addCell(createStyledTableCell(
-                        formatCurrency(unidadOriginal.getImporteTotal()),
-                        Element.ALIGN_RIGHT,
-                        boldFont,
-                        rowColor
-                ));
-
-            } else {
-                logger.warn("No se encontró unidad original para: {}", conceptoLimpio);
-
-                conceptosTable.addCell(createStyledTableCell("1", Element.ALIGN_CENTER, normalFont, rowColor));
-                conceptosTable.addCell(createStyledTableCell("Servicio", Element.ALIGN_CENTER, normalFont, rowColor));
-
-                PdfPCell conceptoCell = new PdfPCell(new Phrase(conceptoLimpio, normalFont));
-                conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                conceptoCell.setVerticalAlignment(Element.ALIGN_TOP);
-                conceptoCell.setPadding(8);
-                conceptoCell.setBackgroundColor(rowColor);
-                conceptoCell.setBorder(Rectangle.BOX);
-                conceptoCell.setBorderColor(grisMedio);
-                conceptoCell.setBorderWidth(0.5f);
-                conceptosTable.addCell(conceptoCell);
-
-                conceptosTable.addCell(createStyledTableCell("$0.00", Element.ALIGN_RIGHT, normalFont, rowColor));
-                conceptosTable.addCell(createStyledTableCell("$0.00", Element.ALIGN_RIGHT, normalFont, rowColor));
-                conceptosTable.addCell(createStyledTableCell("$0.00", Element.ALIGN_RIGHT, boldFont, rowColor));
-            }
+            conceptosTable.addCell(createStyledTableCell(
+                    formatCurrency(importeFinal), Element.ALIGN_RIGHT, boldFont, rowColor));
 
             isEvenRow = !isEvenRow;
         }
-
-        logger.info("Total de conceptos agregados: {}", conceptos.length);
     }
 
     private void recalcularTotalesConConceptosFiltrados(SolicitudFacturaNota solicitud,

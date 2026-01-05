@@ -56,11 +56,19 @@ public class ReporteCuentasPorPagarService {
         ReporteCuentasPorPagarDTO reporte = new ReporteCuentasPorPagarDTO(fechaInicio, fechaFin, filtroEstatus);
 
         BigDecimal montoTotal = cuentas.stream()
+                .filter(cuenta -> !"07".equals(cuenta.getFormaPago())) // Excluir "Con Saldo Acumulado"
                 .map(CuentaPorPagar::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         reporte.setMontoTotal(montoTotal);
 
+        BigDecimal montoSaldoAcumulado = cuentas.stream()
+                .filter(cuenta -> "07".equals(cuenta.getFormaPago()))
+                .map(CuentaPorPagar::getMonto)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        reporte.setMontoSaldoAcumulado(montoSaldoAcumulado);
+
         Map<LocalDate, BigDecimal> montoPorDia = cuentas.stream()
+                .filter(cuenta -> !"07".equals(cuenta.getFormaPago()))
                 .collect(Collectors.groupingBy(
                         CuentaPorPagar::getFechaPago,
                         Collectors.reducing(BigDecimal.ZERO, CuentaPorPagar::getMonto, BigDecimal::add)
@@ -188,9 +196,9 @@ public class ReporteCuentasPorPagarService {
         periodo.setSpacingAfter(20);
         document.add(periodo);
 
-        PdfPTable infoCard = new PdfPTable(3);
+        PdfPTable infoCard = new PdfPTable(4);
         infoCard.setWidthPercentage(100);
-        infoCard.setWidths(new float[]{33, 34, 33});
+        infoCard.setWidths(new float[]{25, 25, 25, 25});
         infoCard.setSpacingAfter(25);
 
         // Total
@@ -232,6 +240,19 @@ public class ReporteCuentasPorPagarService {
         diasP.setAlignment(Element.ALIGN_CENTER);
         diasCell.addElement(diasP);
         infoCard.addCell(diasCell);
+
+        PdfPCell saldoCell = new PdfPCell();
+        saldoCell.setBorder(Rectangle.BOX);
+        saldoCell.setBorderColor(BORDER_GRAY);
+        saldoCell.setBackgroundColor(new Color(220, 255, 220));
+        saldoCell.setPadding(15);
+        Paragraph saldoP = new Paragraph();
+        saldoP.add(new Phrase("SALDO APLICADO\n", FontFactory.getFont(FontFactory.HELVETICA, 10, new Color(108, 117, 125))));
+        saldoP.add(new Phrase(currencyFormat.format(datosReporte.getMontoSaldoAcumulado()),
+                FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, new Color(34, 139, 34))));
+        saldoP.setAlignment(Element.ALIGN_CENTER);
+        saldoCell.addElement(saldoP);
+        infoCard.addCell(saldoCell);
 
         document.add(infoCard);
     }

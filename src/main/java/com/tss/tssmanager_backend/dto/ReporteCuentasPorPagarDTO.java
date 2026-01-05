@@ -12,6 +12,7 @@ public class ReporteCuentasPorPagarDTO {
     private LocalDate fechaFin;
     private String filtroEstatus;
     private BigDecimal montoTotal;
+    private BigDecimal montoSaldoAcumulado = BigDecimal.ZERO;
     private Map<LocalDate, BigDecimal> montoPorDia;
     private Map<LocalDate, List<CuentaReporteDTO>> cuentasPorDia;
 

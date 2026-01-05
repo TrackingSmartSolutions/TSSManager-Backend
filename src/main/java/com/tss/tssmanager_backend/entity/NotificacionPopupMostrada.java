@@ -2,7 +2,7 @@ package com.tss.tssmanager_backend.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp; // Importante para la fecha
+import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 
 @Data

@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar, Integer> {
     boolean existsByFolio(String folio);
@@ -61,4 +62,9 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
         ORDER BY c.fechaPago ASC
         """)
     List<CuentaPorCobrar> findByEstatusWithRelations(@Param("estatus") EstatusPagoEnum estatus);
+
+    @Query("SELECT c.estatus FROM CuentaPorCobrar c " +
+            "JOIN c.solicitudesFacturasNotas s " +
+            "WHERE s.id = :solicitudId")
+    Optional<EstatusPagoEnum> findEstatusBySolicitudId(@Param("solicitudId") Integer solicitudId);
 }
