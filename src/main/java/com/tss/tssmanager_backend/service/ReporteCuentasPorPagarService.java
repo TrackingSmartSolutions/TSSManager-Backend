@@ -55,24 +55,45 @@ public class ReporteCuentasPorPagarService {
 
         ReporteCuentasPorPagarDTO reporte = new ReporteCuentasPorPagarDTO(fechaInicio, fechaFin, filtroEstatus);
 
-        BigDecimal montoTotal = cuentas.stream()
-                .filter(cuenta -> !"07".equals(cuenta.getFormaPago())) // Excluir "Con Saldo Acumulado"
-                .map(CuentaPorPagar::getMonto)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        reporte.setMontoTotal(montoTotal);
+        BigDecimal montoTotal = BigDecimal.ZERO;
+        BigDecimal montoSaldoAcumulado = BigDecimal.ZERO;
 
-        BigDecimal montoSaldoAcumulado = cuentas.stream()
-                .filter(cuenta -> "07".equals(cuenta.getFormaPago()))
-                .map(CuentaPorPagar::getMonto)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        for (CuentaPorPagar cuenta : cuentas) {
+            boolean usarSaldo = false;
+
+            // Verificar si es una cuenta Telcel con saldo > 210
+            if (cuenta.getSim() != null) {
+                BigDecimal saldoActual = simService.obtenerSaldoNumerico(cuenta.getSim().getId());
+                usarSaldo = saldoActual.compareTo(new BigDecimal("210")) > 0;
+            }
+
+            if (usarSaldo) {
+                montoSaldoAcumulado = montoSaldoAcumulado.add(cuenta.getMonto());
+            } else {
+                montoTotal = montoTotal.add(cuenta.getMonto());
+            }
+        }
+
+        reporte.setMontoTotal(montoTotal);
         reporte.setMontoSaldoAcumulado(montoSaldoAcumulado);
 
-        Map<LocalDate, BigDecimal> montoPorDia = cuentas.stream()
-                .filter(cuenta -> !"07".equals(cuenta.getFormaPago()))
-                .collect(Collectors.groupingBy(
-                        CuentaPorPagar::getFechaPago,
-                        Collectors.reducing(BigDecimal.ZERO, CuentaPorPagar::getMonto, BigDecimal::add)
-                ));
+        Map<LocalDate, BigDecimal> montoPorDia = new HashMap<>();
+
+        for (CuentaPorPagar cuenta : cuentas) {
+            boolean usarSaldo = false;
+
+            if (cuenta.getSim() != null) {
+                BigDecimal saldoActual = simService.obtenerSaldoNumerico(cuenta.getSim().getId());
+                usarSaldo = saldoActual.compareTo(new BigDecimal("210")) > 0;
+            }
+
+            if (!usarSaldo) {
+                LocalDate fecha = cuenta.getFechaPago();
+                BigDecimal montoActual = montoPorDia.getOrDefault(fecha, BigDecimal.ZERO);
+                montoPorDia.put(fecha, montoActual.add(cuenta.getMonto()));
+            }
+        }
+
         reporte.setMontoPorDia(montoPorDia);
 
         Map<LocalDate, List<CuentaReporteDTO>> cuentasPorDia = cuentas.stream()
