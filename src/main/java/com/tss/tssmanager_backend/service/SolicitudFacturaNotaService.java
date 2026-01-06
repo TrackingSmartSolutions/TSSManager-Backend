@@ -385,7 +385,7 @@ public class SolicitudFacturaNotaService {
     @Transactional(readOnly = true)
     public List<SolicitudFacturaNotaDTO> listarSolicitudes() {
         logger.info("Listando todas las solicitudes");
-        List<SolicitudFacturaNota> solicitudes = solicitudRepository.findAll();
+        List<SolicitudFacturaNota> solicitudes = solicitudRepository.findAllWithRelations();
         return solicitudes.stream()
                 .map(SolicitudFacturaNotaDTO::fromEntity)
                 .collect(Collectors.toList());

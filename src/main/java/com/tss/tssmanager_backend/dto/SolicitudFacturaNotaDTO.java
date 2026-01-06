@@ -1,6 +1,7 @@
 package com.tss.tssmanager_backend.dto;
 
 import com.tss.tssmanager_backend.entity.*;
+import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
 import com.tss.tssmanager_backend.enums.TipoDocumentoSolicitudEnum;
 import lombok.Data;
 
@@ -31,7 +32,7 @@ public class SolicitudFacturaNotaDTO {
     private String folio;
     private String usoCfdi;
     private List<String> conceptosSeleccionados;
-
+    private EstatusPagoEnum estatusCuentaPorCobrar;
 
     public static SolicitudFacturaNotaDTO fromEntity(SolicitudFacturaNota solicitud) {
         SolicitudFacturaNotaDTO dto = new SolicitudFacturaNotaDTO();
@@ -58,6 +59,10 @@ public class SolicitudFacturaNotaDTO {
             dto.setReceptor(solicitud.getCuentaPorCobrar().getCliente() != null ? solicitud.getCuentaPorCobrar().getCliente().getNombre() : "N/A");
             dto.setConcepto(solicitud.getCuentaPorCobrar().getConceptos() != null ? solicitud.getCuentaPorCobrar().getConceptos() : "N/A");
             dto.setFolio(solicitud.getCuentaPorCobrar().getFolio() != null ? solicitud.getCuentaPorCobrar().getFolio() : "N/A");
+
+            dto.setEstatusCuentaPorCobrar(solicitud.getCuentaPorCobrar().getEstatus() != null
+                    ? solicitud.getCuentaPorCobrar().getEstatus()
+                    : EstatusPagoEnum.PENDIENTE);
         }
         dto.setConceptosSeleccionados(solicitud.getConceptosSeleccionados() != null ?
                 List.of(solicitud.getConceptosSeleccionados().split(", ")) : List.of());
