@@ -20,4 +20,6 @@ public interface EmailRecordRepository extends JpaRepository<EmailRecord, Intege
             String asunto, ZonedDateTime fechaEnvio);
     boolean existsByTipoCorreoConsolidadoAndExitoTrueAndFechaEnvioAfter(
             String tipoCorreoConsolidado, ZonedDateTime fechaEnvio);
+
+    EmailRecord findByResendEmailId(String resendEmailId);
 }

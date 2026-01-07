@@ -37,6 +37,9 @@ public class EmailRecord {
     @Column(name = "resend_email_id")
     private String resendEmailId;
 
+    @Column(name = "status")
+    private String status;
+
     @Column(name = "tipo_correo_consolidado")
     private String tipoCorreoConsolidado;
 }

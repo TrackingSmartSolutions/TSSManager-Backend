@@ -182,6 +182,7 @@ public class EmailService {
         emailRecord.setTratoId(tratoId);
         emailRecord.setExito(exito);
         emailRecord.setResendEmailId(resendEmailId);
+        emailRecord.setStatus(exito ? "sent" : "failed");
         emailRecord.setTipoCorreoConsolidado(tipoCorreoConsolidado);
 
         return emailRecordRepository.save(emailRecord);
@@ -410,5 +411,29 @@ public class EmailService {
         }
 
         return uploadResult.get("url").toString();
+    }
+
+    @Transactional
+    public void actualizarEstadoDesdeWebhook(String resendEmailId, String nuevoEstado) {
+        if (resendEmailId == null) return;
+
+        EmailRecord email = emailRecordRepository.findByResendEmailId(resendEmailId);
+        if (email != null) {
+            String statusFinal = "sent";
+
+            if ("email.delivered".equals(nuevoEstado)) {
+                statusFinal = "delivered";
+            } else if ("email.bounced".equals(nuevoEstado)) {
+                statusFinal = "bounced";
+            } else if ("email.sent".equals(nuevoEstado)) {
+                statusFinal = "sent";
+            }
+
+            email.setStatus(statusFinal);
+            emailRecordRepository.save(email);
+            System.out.println("Estado actualizado para ID " + resendEmailId + ": " + statusFinal);
+        } else {
+            System.out.println("No se encontró correo con ID Resend: " + resendEmailId);
+        }
     }
 }
