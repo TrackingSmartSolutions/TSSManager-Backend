@@ -188,6 +188,33 @@ public class CuentaPorPagarController {
         }
     }
 
+    @GetMapping("/reporte/pdf-resumido")
+    public ResponseEntity<byte[]> generarReporteResumidoPDF(
+            @RequestParam String fechaInicio,
+            @RequestParam String fechaFin,
+            @RequestParam(defaultValue = "Todas") String filtroEstatus) {
+        try {
+            LocalDate inicio = LocalDate.parse(fechaInicio);
+            LocalDate fin = LocalDate.parse(fechaFin);
+
+            byte[] pdfBytes = reporteService.generarReporteResumidoPDF(inicio, fin, filtroEstatus);
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            String fileName = String.format("reporte_resumido_cuentas_por_pagar_%s_%s.pdf",
+                    inicio.format(formatter), fin.format(formatter));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentLength(pdfBytes.length);
+
+            return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            System.err.println("Error al generar reporte resumido PDF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<CuentaPorPagar> obtenerCuentaPorId(@PathVariable Integer id) {
         try {

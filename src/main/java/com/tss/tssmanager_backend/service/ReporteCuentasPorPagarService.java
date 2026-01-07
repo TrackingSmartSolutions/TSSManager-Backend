@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.service;
 
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.*;
+import com.tss.tssmanager_backend.dto.FilaResumenDTO;
 import com.tss.tssmanager_backend.dto.ReporteCuentasPorPagarDTO;
 import com.tss.tssmanager_backend.dto.ReporteCuentasPorPagarDTO.CuentaReporteDTO;
 import com.tss.tssmanager_backend.entity.CuentaPorPagar;
@@ -61,10 +62,14 @@ public class ReporteCuentasPorPagarService {
         for (CuentaPorPagar cuenta : cuentas) {
             boolean usarSaldo = false;
 
-            // Verificar si es una cuenta Telcel con saldo > 210
             if (cuenta.getSim() != null) {
                 BigDecimal saldoActual = simService.obtenerSaldoNumerico(cuenta.getSim().getId());
-                usarSaldo = saldoActual.compareTo(new BigDecimal("210")) > 0;
+                boolean montoEs50 = cuenta.getMonto().compareTo(new BigDecimal("50")) == 0;
+                boolean esquemaEsPorSegundo = cuenta.getSim().getTarifa() != null &&
+                        cuenta.getSim().getTarifa() == com.tss.tssmanager_backend.enums.TarifaSimEnum.POR_SEGUNDO;
+                boolean tieneSaldoSuficiente = saldoActual.compareTo(new BigDecimal("210")) > 0;
+
+                usarSaldo = montoEs50 && esquemaEsPorSegundo && tieneSaldoSuficiente;
             }
 
             if (usarSaldo) {
@@ -84,7 +89,12 @@ public class ReporteCuentasPorPagarService {
 
             if (cuenta.getSim() != null) {
                 BigDecimal saldoActual = simService.obtenerSaldoNumerico(cuenta.getSim().getId());
-                usarSaldo = saldoActual.compareTo(new BigDecimal("210")) > 0;
+                boolean montoEs50 = cuenta.getMonto().compareTo(new BigDecimal("50")) == 0;
+                boolean esquemaEsPorSegundo = cuenta.getSim().getTarifa() != null &&
+                        cuenta.getSim().getTarifa() == com.tss.tssmanager_backend.enums.TarifaSimEnum.POR_SEGUNDO;
+                boolean tieneSaldoSuficiente = saldoActual.compareTo(new BigDecimal("210")) > 0;
+
+                usarSaldo = montoEs50 && esquemaEsPorSegundo && tieneSaldoSuficiente;
             }
 
             if (!usarSaldo) {
@@ -179,7 +189,13 @@ public class ReporteCuentasPorPagarService {
                     }
 
                     BigDecimal saldoActual = simService.obtenerSaldoNumerico(c.getSim().getId());
-                    boolean usarSaldo = saldoActual.compareTo(new BigDecimal("210")) > 0;
+
+                    boolean montoEs50 = c.getMonto().compareTo(new BigDecimal("50")) == 0;
+                    boolean esquemaEsPorSegundo = c.getSim().getTarifa() != null &&
+                            c.getSim().getTarifa() == com.tss.tssmanager_backend.enums.TarifaSimEnum.POR_SEGUNDO;
+                    boolean tieneSaldoSuficiente = saldoActual.compareTo(new BigDecimal("210")) > 0;
+
+                    boolean usarSaldo = montoEs50 && esquemaEsPorSegundo && tieneSaldoSuficiente;
 
                     pagosTelcel.add(new DatosTelcelEnriquecidos(c, numeroPrincipal, usarSaldo, grupoId != null ? grupoId : 9999));
                 } else {
@@ -196,6 +212,22 @@ public class ReporteCuentasPorPagarService {
 
         addSimpleFooter(document, normalFont);
 
+        Paragraph notaAclaratoria = new Paragraph();
+        notaAclaratoria.setSpacingBefore(20);
+        notaAclaratoria.setSpacingAfter(10);
+
+        Chunk asterisco = new Chunk("* ", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, PRIMARY_BLUE));
+        Chunk textoNota = new Chunk(
+                "Las recargas de saldo acumulado implican la activación de un paquete sin límite de $200, " +
+                        "pagando con el saldo que se tiene en la línea.",
+                FontFactory.getFont(FontFactory.HELVETICA, 9, new Color(108, 117, 125))
+        );
+
+        notaAclaratoria.add(asterisco);
+        notaAclaratoria.add(textoNota);
+        document.add(notaAclaratoria);
+
+        addSimpleFooter(document, normalFont);
         document.close();
         return baos.toByteArray();
     }
@@ -550,6 +582,191 @@ public class ReporteCuentasPorPagarService {
 
                 alt = !alt;
             }
+            document.add(table);
+        }
+    }
+
+    public byte[] generarReporteResumidoPDF(LocalDate fechaInicio, LocalDate fechaFin, String filtroEstatus) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4, 30, 30, 40, 40);
+        PdfWriter.getInstance(document, baos);
+        document.open();
+
+        NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("es", "MX"));
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+        Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 24, PRIMARY_BLUE);
+        Font subtitleFont = FontFactory.getFont(FontFactory.HELVETICA, 12, new Color(108, 117, 125));
+        Font sectionTitleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, PRIMARY_BLUE);
+        Font tableHeaderFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, Color.WHITE);
+        Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 9, TEXT_DARK);
+        Font moneyFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, SUCCESS_GREEN);
+
+        List<CuentaPorPagar> cuentas = obtenerCuentasFiltradas(fechaInicio, fechaFin, filtroEstatus);
+        List<FilaResumenDTO> resumen = agruparParaResumen(cuentas);
+        BigDecimal montoTotal = calcularMontoTotal(cuentas);
+
+        addEncabezadoResumido(document, fechaInicio, fechaFin, montoTotal, filtroEstatus,
+                dateFormatter, currencyFormat, titleFont, subtitleFont, moneyFont);
+
+        addTablaResumen(document, resumen, currencyFormat, dateFormatter,
+                sectionTitleFont, tableHeaderFont, normalFont);
+
+        addSimpleFooter(document, normalFont);
+
+        document.close();
+        return baos.toByteArray();
+    }
+
+    private List<FilaResumenDTO> agruparParaResumen(List<CuentaPorPagar> cuentas) {
+        Map<String, FilaResumenDTO> agrupado = new LinkedHashMap<>();
+
+        for (CuentaPorPagar cuenta : cuentas) {
+            LocalDate fecha = cuenta.getFechaPago();
+            String categoria = (cuenta.getTransaccion() != null && cuenta.getTransaccion().getCategoria() != null)
+                    ? cuenta.getTransaccion().getCategoria().getDescripcion() : "Sin categoría";
+            String cliente = cuenta.getCuenta().getNombre();
+
+            String clave = fecha + "|" + categoria + "|" + cliente;
+
+            if (agrupado.containsKey(clave)) {
+                FilaResumenDTO fila = agrupado.get(clave);
+                agrupado.put(clave, new FilaResumenDTO(
+                        fecha,
+                        categoria,
+                        cliente,
+                        fila.getTotalCuentas() + 1,
+                        fila.getMonto().add(cuenta.getMonto())
+                ));
+            } else {
+                agrupado.put(clave, new FilaResumenDTO(fecha, categoria, cliente, 1, cuenta.getMonto()));
+            }
+        }
+
+        return new ArrayList<>(agrupado.values());
+    }
+
+    private BigDecimal calcularMontoTotal(List<CuentaPorPagar> cuentas) {
+        return cuentas.stream()
+                .map(CuentaPorPagar::getMonto)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private void addEncabezadoResumido(Document document, LocalDate fechaInicio, LocalDate fechaFin,
+                                       BigDecimal montoTotal, String filtroEstatus,
+                                       DateTimeFormatter dateFormatter, NumberFormat currencyFormat,
+                                       Font titleFont, Font subtitleFont, Font moneyFont) throws DocumentException {
+        Paragraph title = new Paragraph("Reporte Resumido de Cuentas por Pagar", titleFont);
+        title.setAlignment(Element.ALIGN_CENTER);
+        title.setSpacingAfter(5);
+        document.add(title);
+
+        Paragraph periodo = new Paragraph(String.format("Del %s al %s",
+                fechaInicio.format(dateFormatter), fechaFin.format(dateFormatter)), subtitleFont);
+        periodo.setAlignment(Element.ALIGN_CENTER);
+        periodo.setSpacingAfter(20);
+        document.add(periodo);
+
+        PdfPTable infoCard = new PdfPTable(2);
+        infoCard.setWidthPercentage(100);
+        infoCard.setWidths(new float[]{50, 50});
+        infoCard.setSpacingAfter(25);
+
+        // Total
+        PdfPCell totalCell = new PdfPCell();
+        totalCell.setBorder(Rectangle.BOX);
+        totalCell.setBorderColor(BORDER_GRAY);
+        totalCell.setBackgroundColor(Color.WHITE);
+        totalCell.setPadding(15);
+        Paragraph totalP = new Paragraph();
+        totalP.add(new Phrase("MONTO TOTAL\n", FontFactory.getFont(FontFactory.HELVETICA, 10, new Color(108, 117, 125))));
+        totalP.add(new Phrase(currencyFormat.format(montoTotal), moneyFont));
+        totalP.setAlignment(Element.ALIGN_CENTER);
+        totalCell.addElement(totalP);
+        infoCard.addCell(totalCell);
+
+        // Filtro
+        PdfPCell filtroCell = new PdfPCell();
+        filtroCell.setBorder(Rectangle.BOX);
+        filtroCell.setBorderColor(BORDER_GRAY);
+        filtroCell.setBackgroundColor(LIGHT_GRAY);
+        filtroCell.setPadding(15);
+        Paragraph filtroP = new Paragraph();
+        filtroP.add(new Phrase("FILTRO APLICADO\n", FontFactory.getFont(FontFactory.HELVETICA, 10, new Color(108, 117, 125))));
+        filtroP.add(new Phrase(filtroEstatus, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, TEXT_DARK)));
+        filtroP.setAlignment(Element.ALIGN_CENTER);
+        filtroCell.addElement(filtroP);
+        infoCard.addCell(filtroCell);
+
+        document.add(infoCard);
+    }
+
+    private void addTablaResumen(Document document, List<FilaResumenDTO> resumen,
+                                 NumberFormat currencyFormat, DateTimeFormatter dateFormatter,
+                                 Font sectionTitleFont, Font tableHeaderFont, Font normalFont) throws DocumentException {
+
+        Map<LocalDate, List<FilaResumenDTO>> resumenPorDia = resumen.stream()
+                .collect(Collectors.groupingBy(FilaResumenDTO::getFecha));
+
+        List<LocalDate> fechasOrdenadas = resumenPorDia.keySet().stream()
+                .sorted()
+                .collect(Collectors.toList());
+
+        for (int i = 0; i < fechasOrdenadas.size(); i++) {
+            LocalDate fecha = fechasOrdenadas.get(i);
+            List<FilaResumenDTO> filasDelDia = resumenPorDia.get(fecha);
+
+            BigDecimal totalDia = filasDelDia.stream()
+                    .map(FilaResumenDTO::getMonto)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            PdfPTable dayHeader = new PdfPTable(2);
+            dayHeader.setWidthPercentage(100);
+            dayHeader.setWidths(new float[]{60, 40});
+            dayHeader.setSpacingBefore(i == 0 ? 0 : 20);
+            dayHeader.setSpacingAfter(5);
+
+            PdfPCell fechaCell = new PdfPCell(new Phrase(fecha.format(dateFormatter),
+                    FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, PRIMARY_BLUE)));
+            fechaCell.setBorder(Rectangle.NO_BORDER);
+            fechaCell.setPadding(8);
+            fechaCell.setBackgroundColor(LIGHT_GRAY);
+
+            PdfPCell totalCell = new PdfPCell(new Phrase("Total: " + currencyFormat.format(totalDia),
+                    FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, SUCCESS_GREEN)));
+            totalCell.setBorder(Rectangle.NO_BORDER);
+            totalCell.setPadding(8);
+            totalCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+            totalCell.setBackgroundColor(LIGHT_GRAY);
+
+            dayHeader.addCell(fechaCell);
+            dayHeader.addCell(totalCell);
+            document.add(dayHeader);
+
+            PdfPTable table = new PdfPTable(4);
+            table.setWidthPercentage(100);
+            table.setWidths(new float[]{30, 30, 20, 20});
+            table.setSpacingAfter(10);
+
+            // Headers
+            addCleanHeaderCell(table, "Categoría", tableHeaderFont);
+            addCleanHeaderCell(table, "Cuenta/Cliente", tableHeaderFont);
+            addCleanHeaderCell(table, "Total Cuentas", tableHeaderFont);
+            addCleanHeaderCell(table, "Monto Total", tableHeaderFont);
+
+            // Datos
+            boolean alternate = false;
+            for (FilaResumenDTO fila : filasDelDia) {
+                Color bg = alternate ? LIGHT_GRAY : Color.WHITE;
+
+                addCleanDataCell(table, fila.getCategoria(), normalFont, bg, Element.ALIGN_LEFT);
+                addCleanDataCell(table, fila.getCliente(), normalFont, bg, Element.ALIGN_LEFT);
+                addCleanDataCell(table, String.valueOf(fila.getTotalCuentas()), normalFont, bg, Element.ALIGN_CENTER);
+                addCleanDataCell(table, currencyFormat.format(fila.getMonto()), normalFont, bg, Element.ALIGN_RIGHT);
+
+                alternate = !alternate;
+            }
+
             document.add(table);
         }
     }
