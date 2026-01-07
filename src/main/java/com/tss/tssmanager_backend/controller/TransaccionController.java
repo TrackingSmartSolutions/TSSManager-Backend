@@ -1,11 +1,13 @@
 package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.entity.CategoriaTransacciones;
+import com.tss.tssmanager_backend.entity.CuentaPorPagar;
 import com.tss.tssmanager_backend.entity.CuentasTransacciones;
 import com.tss.tssmanager_backend.entity.Transaccion;
 import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
 import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
 import com.tss.tssmanager_backend.repository.CategoriaTransaccionesRepository;
+import com.tss.tssmanager_backend.repository.CuentaPorPagarRepository;
 import com.tss.tssmanager_backend.repository.CuentasTransaccionesRepository;
 import com.tss.tssmanager_backend.service.TransaccionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,9 +34,11 @@ public class TransaccionController {
     @Autowired
     private CuentasTransaccionesRepository cuentasTransaccionesRepository;
 
+    @Autowired
+    private CuentaPorPagarRepository cuentaPorPagarRepository;
 
     @PostMapping("/transacciones/crear")
-    public ResponseEntity<Transaccion> agregarTransaccion(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> agregarTransaccion(@RequestBody Map<String, Object> request) {
         try {
             Transaccion transaccion = new Transaccion();
 
@@ -83,7 +88,27 @@ public class TransaccionController {
             }
 
             Transaccion savedTransaccion = transaccionService.agregarTransaccion(transaccion);
-            return new ResponseEntity<>(savedTransaccion, HttpStatus.CREATED);
+
+            // Si es GASTO con esquema UNICA, buscar la cuenta por pagar creada
+            Integer cuentaPorPagarId = null;
+            boolean esUnicaGasto = false;
+
+            if ("GASTO".equals(savedTransaccion.getTipo().name()) &&
+                    EsquemaTransaccionEnum.UNICA.equals(savedTransaccion.getEsquema())) {
+                List<CuentaPorPagar> cuentas = cuentaPorPagarRepository.findByTransaccionId(savedTransaccion.getId());
+                if (!cuentas.isEmpty()) {
+                    cuentaPorPagarId = cuentas.get(0).getId();
+                    esUnicaGasto = true;
+                }
+            }
+
+            // Crear response personalizado
+            Map<String, Object> response = new HashMap<>();
+            response.put("transaccion", savedTransaccion);
+            response.put("cuentaPorPagarId", cuentaPorPagarId);
+            response.put("esUnicaGasto", esUnicaGasto);
+
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             return new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
