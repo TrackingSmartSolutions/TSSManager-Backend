@@ -56,6 +56,7 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
             "   AND t.cuenta.nombre = c.cliente.nombre " +
             "   AND t.categoria.id = 1 " +
             "   AND t.tipo = 'INGRESO' " +
+            "   AND t.monto = c.montoPagado " +
             ") " +
             "AND (:anio IS NULL OR YEAR(c.fechaRealPago) = :anio) " +
             "AND (:mes IS NULL OR MONTH(c.fechaRealPago) = :mes) " +
