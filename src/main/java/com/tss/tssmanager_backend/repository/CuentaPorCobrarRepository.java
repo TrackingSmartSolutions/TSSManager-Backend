@@ -41,18 +41,31 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
     List<CuentaPorCobrar> findByEstatus(EstatusPagoEnum estatus);
     List<CuentaPorCobrar> findByFechaPagoAndEstatusIn(LocalDate fechaPago, List<EstatusPagoEnum> estatus);
     List<CuentaPorCobrar> findByEstatusIn(List<EstatusPagoEnum> estatus);
+
     @Query("SELECT new com.tss.tssmanager_backend.dto.BalanceResumenDTO$EquipoVendidoDTO(" +
-            "c.cliente.nombre, c.fechaRealPago, c.noEquipos) " +
+            "c.cliente.nombre, c.fechaRealPago, " +
+            "COALESCE(SUM(CASE WHEN u.unidad = 'Equipos' THEN u.cantidad ELSE 0 END), 0)) " +
             "FROM CuentaPorCobrar c " +
+            "JOIN c.cotizacion cot " +
+            "JOIN cot.unidades u " +
             "WHERE c.estatus = 'PAGADO' " +
-            "AND c.noEquipos > 0 " +
+            "AND u.unidad = 'Equipos' " +
+            "AND EXISTS (" +
+            "   SELECT 1 FROM Transaccion t " +
+            "   WHERE t.fecha = c.fechaRealPago " +
+            "   AND t.cuenta.nombre = c.cliente.nombre " +
+            "   AND t.categoria.descripcion = 'Ventas' " +
+            ") " +
             "AND (:anio IS NULL OR YEAR(c.fechaRealPago) = :anio) " +
             "AND (:mes IS NULL OR MONTH(c.fechaRealPago) = :mes) " +
+            "GROUP BY c.cliente.nombre, c.fechaRealPago " +
+            "HAVING SUM(CASE WHEN u.unidad = 'Equipos' THEN u.cantidad ELSE 0 END) > 0 " +
             "ORDER BY c.fechaRealPago ASC")
     List<com.tss.tssmanager_backend.dto.BalanceResumenDTO.EquipoVendidoDTO> findEquiposVendidosReporte(
             @org.springframework.data.repository.query.Param("anio") Integer anio,
             @org.springframework.data.repository.query.Param("mes") Integer mes
     );
+
     @Query("""
         SELECT c FROM CuentaPorCobrar c 
         JOIN FETCH c.cliente 

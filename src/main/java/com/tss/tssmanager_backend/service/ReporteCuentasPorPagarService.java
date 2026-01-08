@@ -210,8 +210,6 @@ public class ReporteCuentasPorPagarService {
 
         addSeccionRecargasTelcel(document, pagosTelcel, currencyFormat, dateFormatter, sectionTitleFont, tableHeaderFont, normalFont, saldoAcumuladoFont);
 
-        addSimpleFooter(document, normalFont);
-
         Paragraph notaAclaratoria = new Paragraph();
         notaAclaratoria.setSpacingBefore(20);
         notaAclaratoria.setSpacingAfter(10);

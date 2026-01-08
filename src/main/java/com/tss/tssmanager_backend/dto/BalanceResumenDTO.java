@@ -14,7 +14,7 @@ public class BalanceResumenDTO {
     private List<EquipoVendidoDTO> equiposVendidos;
     private List<Integer> aniosDisponibles;
 
-
+    @Data
     public static class GraficoDataDTO {
         public String mes;
         public BigDecimal ingresos;
@@ -26,6 +26,7 @@ public class BalanceResumenDTO {
         }
     }
 
+    @Data
     public static class AcumuladoCuentaDTO {
         public String categoria;
         public String cuenta;
@@ -37,14 +38,15 @@ public class BalanceResumenDTO {
         }
     }
 
+    @Data
     public static class EquipoVendidoDTO {
         public String cliente;
         public java.time.LocalDate fechaPago;
         public Integer numeroEquipos;
-        public EquipoVendidoDTO(String cliente, java.time.LocalDate fechaPago, Integer numeroEquipos) {
+        public EquipoVendidoDTO(String cliente, java.time.LocalDate fechaPago, Long numeroEquipos) {
             this.cliente = cliente;
             this.fechaPago = fechaPago;
-            this.numeroEquipos = numeroEquipos;
+            this.numeroEquipos = numeroEquipos != null ? numeroEquipos.intValue() : 0;
         }
     }
 }

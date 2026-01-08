@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/balance")
@@ -41,8 +42,14 @@ public class BalanceController {
 
         dto.setAcumuladoCuentas(transaccionRepository.findAcumuladoPorCuenta(anio, mes));
 
-        dto.setEquiposVendidos(cuentaPorCobrarRepository.findEquiposVendidosReporte(anio, mes));
+        List<BalanceResumenDTO.EquipoVendidoDTO> equiposVendidos =
+                cuentaPorCobrarRepository.findEquiposVendidosReporte(anio, mes);
 
+        equiposVendidos = equiposVendidos.stream()
+                .filter(e -> e.getNumeroEquipos() != null && e.getNumeroEquipos() > 0)
+                .collect(Collectors.toList());
+
+        dto.setEquiposVendidos(equiposVendidos);
         List<Object[]> rawGrafico = transaccionRepository.findDatosGrafico(anio, mes);
         Map<String, BigDecimal[]> mapaGrafico = new LinkedHashMap<>();
 

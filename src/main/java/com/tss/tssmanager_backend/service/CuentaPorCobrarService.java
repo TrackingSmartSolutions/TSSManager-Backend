@@ -370,6 +370,11 @@ public class CuentaPorCobrarService {
                     cuentaTransaccion.getId(), cuenta.getCliente().getNombre(), categoria.getDescripcion());
         }
 
+        List<String> categoriasExcluidas = Arrays.asList("Revisiones", "Renta Mensual", "Renta Anual");
+        if (categoriasExcluidas.contains(categoria.getDescripcion())) {
+            logger.info("Cuenta por cobrar {} marcada como pagada con categoría {}, no se contará en equipos vendidos",
+                    cuenta.getId(), categoria.getDescripcion());
+        }
 
         // Crear la transacción
         Transaccion transaccion = new Transaccion();
