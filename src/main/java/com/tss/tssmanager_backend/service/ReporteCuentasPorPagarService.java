@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
@@ -418,7 +419,7 @@ public class ReporteCuentasPorPagarService {
 
     private void addSimpleFooter(Document document, Font normalFont) throws DocumentException {
         Paragraph footer = new Paragraph(String.format("Generado el %s",
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))),
+                LocalDateTime.now(ZoneId.of("America/Mexico_City")).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))),
                 FontFactory.getFont(FontFactory.HELVETICA, 8, new Color(108, 117, 125)));
         footer.setAlignment(Element.ALIGN_RIGHT);
         footer.setSpacingBefore(30);
