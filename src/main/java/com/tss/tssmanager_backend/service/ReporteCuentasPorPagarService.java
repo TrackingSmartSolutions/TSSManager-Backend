@@ -299,7 +299,7 @@ public class ReporteCuentasPorPagarService {
         saldoCell.setBackgroundColor(new Color(220, 255, 220));
         saldoCell.setPadding(15);
         Paragraph saldoP = new Paragraph();
-        saldoP.add(new Phrase("SALDO APLICADO\n", FontFactory.getFont(FontFactory.HELVETICA, 10, new Color(108, 117, 125))));
+        saldoP.add(new Phrase(" AHORRO DE EFECTIVO CON SALDO ACUMULADO\n", FontFactory.getFont(FontFactory.HELVETICA, 10, new Color(108, 117, 125))));
         saldoP.add(new Phrase(currencyFormat.format(datosReporte.getMontoSaldoAcumulado()),
                 FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, new Color(34, 139, 34))));
         saldoP.setAlignment(Element.ALIGN_CENTER);
@@ -602,8 +602,8 @@ public class ReporteCuentasPorPagarService {
         Font moneyFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, SUCCESS_GREEN);
 
         List<CuentaPorPagar> cuentas = obtenerCuentasFiltradas(fechaInicio, fechaFin, filtroEstatus);
-        List<FilaResumenDTO> resumen = agruparParaResumen(cuentas);
-        BigDecimal montoTotal = calcularMontoTotal(cuentas);
+        List<FilaResumenDTO> resumen = agruparParaResumen(cuentas, true);
+        BigDecimal montoTotal = calcularMontoTotal(cuentas, true);
 
         addEncabezadoResumido(document, fechaInicio, fechaFin, montoTotal, filtroEstatus,
                 dateFormatter, currencyFormat, titleFont, subtitleFont, moneyFont);
@@ -617,10 +617,32 @@ public class ReporteCuentasPorPagarService {
         return baos.toByteArray();
     }
 
-    private List<FilaResumenDTO> agruparParaResumen(List<CuentaPorPagar> cuentas) {
+    private List<FilaResumenDTO> agruparParaResumen(List<CuentaPorPagar> cuentas, boolean excluirSaldoAcumulado) {
         Map<String, FilaResumenDTO> agrupado = new LinkedHashMap<>();
 
-        for (CuentaPorPagar cuenta : cuentas) {
+        List<CuentaPorPagar> cuentasAgrupar = cuentas;
+        if (excluirSaldoAcumulado) {
+            cuentasAgrupar = cuentas.stream()
+                    .filter(cuenta -> {
+                        if (cuenta.getSim() == null) {
+                            return true;
+                        }
+
+                        BigDecimal saldoActual = simService.obtenerSaldoNumerico(cuenta.getSim().getId());
+                        boolean montoEs50 = cuenta.getMonto().compareTo(new BigDecimal("50")) == 0;
+                        boolean esquemaEsPorSegundo = cuenta.getSim().getTarifa() != null &&
+                                cuenta.getSim().getTarifa() == com.tss.tssmanager_backend.enums.TarifaSimEnum.POR_SEGUNDO;
+                        boolean tieneSaldoSuficiente = saldoActual.compareTo(new BigDecimal("210")) > 0;
+
+                        boolean usarSaldo = montoEs50 && esquemaEsPorSegundo && tieneSaldoSuficiente;
+
+                        return !usarSaldo;
+                    })
+                    .collect(Collectors.toList());
+        }
+
+
+        for (CuentaPorPagar cuenta : cuentasAgrupar) {
             LocalDate fecha = cuenta.getFechaPago();
             String categoria = (cuenta.getTransaccion() != null && cuenta.getTransaccion().getCategoria() != null)
                     ? cuenta.getTransaccion().getCategoria().getDescripcion() : "Sin categoría";
@@ -645,8 +667,28 @@ public class ReporteCuentasPorPagarService {
         return new ArrayList<>(agrupado.values());
     }
 
-    private BigDecimal calcularMontoTotal(List<CuentaPorPagar> cuentas) {
+    private BigDecimal calcularMontoTotal(List<CuentaPorPagar> cuentas, boolean excluirSaldoAcumulado) {
+        if (!excluirSaldoAcumulado) {
+            return cuentas.stream()
+                    .map(CuentaPorPagar::getMonto)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
         return cuentas.stream()
+                .filter(cuenta -> {
+                    if (cuenta.getSim() == null) {
+                        return true;
+                    }
+
+                    BigDecimal saldoActual = simService.obtenerSaldoNumerico(cuenta.getSim().getId());
+                    boolean montoEs50 = cuenta.getMonto().compareTo(new BigDecimal("50")) == 0;
+                    boolean esquemaEsPorSegundo = cuenta.getSim().getTarifa() != null &&
+                            cuenta.getSim().getTarifa() == com.tss.tssmanager_backend.enums.TarifaSimEnum.POR_SEGUNDO;
+                    boolean tieneSaldoSuficiente = saldoActual.compareTo(new BigDecimal("210")) > 0;
+
+                    boolean usarSaldo = montoEs50 && esquemaEsPorSegundo && tieneSaldoSuficiente;
+                    return !usarSaldo;
+                })
                 .map(CuentaPorPagar::getMonto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
