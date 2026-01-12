@@ -105,6 +105,8 @@ public class CuentaPorPagarService {
         transaccionPago.setNotas("Transacción generada desde Cuentas por Pagar - " + (transaccionOriginal.getNotas() != null ? transaccionOriginal.getNotas() : ""));
         transaccionPago.setFechaCreacion(LocalDateTime.now());
         transaccionPago.setFechaModificacion(LocalDateTime.now());
+        transaccionPago.setCuentaPorPagarId(cuenta.getId());
+
         transaccionRepository.save(transaccionPago);
 
         registrarAbonoCreditos(transaccionOriginal, montoPago, cuenta, cantidadCreditos);
@@ -420,5 +422,42 @@ public class CuentaPorPagarService {
     public CuentaPorPagar obtenerPorId(Integer id) {
         return cuentasPorPagarRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
+    }
+
+    @Transactional
+    public void revertirPagoDesdeTransaccion(Transaccion transaccion) {
+        if (transaccion.getCuentaPorPagarId() == null) return;
+
+        CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(transaccion.getCuentaPorPagarId())
+                .orElse(null);
+
+        if (cuenta != null) {
+            BigDecimal montoEliminado = transaccion.getMonto();
+
+            BigDecimal pagadoActual = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+
+            BigDecimal nuevoPagado = pagadoActual.subtract(montoEliminado);
+
+            if (nuevoPagado.compareTo(BigDecimal.ZERO) < 0) {
+                nuevoPagado = BigDecimal.ZERO;
+            }
+            cuenta.setMontoPagado(nuevoPagado);
+
+            BigDecimal nuevoSaldo = cuenta.getMonto().subtract(nuevoPagado);
+            cuenta.setSaldoPendiente(nuevoSaldo);
+
+            if (cuenta.getSaldoPendiente().compareTo(BigDecimal.ZERO) > 0) {
+                if (nuevoPagado.compareTo(BigDecimal.ZERO) > 0) {
+                    cuenta.setEstatus("En proceso");
+                } else {
+                    LocalDate hoy = LocalDate.now();
+                    cuenta.setEstatus(cuenta.getFechaPago().isBefore(hoy) ? "Vencida" : "Pendiente");
+                }
+            } else {
+                cuenta.setEstatus("Pagado");
+            }
+
+            cuentasPorPagarRepository.save(cuenta);
+        }
     }
 }

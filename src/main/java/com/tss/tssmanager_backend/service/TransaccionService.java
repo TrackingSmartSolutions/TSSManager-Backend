@@ -5,10 +5,12 @@ import com.tss.tssmanager_backend.entity.CuentaPorPagar;
 import com.tss.tssmanager_backend.entity.CuentasTransacciones;
 import com.tss.tssmanager_backend.entity.Transaccion;
 import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
+import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
 import com.tss.tssmanager_backend.repository.CategoriaTransaccionesRepository;
 import com.tss.tssmanager_backend.repository.CuentaPorPagarRepository;
 import com.tss.tssmanager_backend.repository.CuentasTransaccionesRepository;
 import com.tss.tssmanager_backend.repository.TransaccionRepository;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,12 @@ public class TransaccionService {
     private CuentasTransaccionesRepository cuentaRepository;
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
+    @Autowired
+    @Lazy
+    private CuentaPorPagarService cuentaPorPagarService;
+    @Autowired
+    @Lazy
+    private CuentaPorCobrarService cuentaPorCobrarService;
 
     public List<Transaccion> obtenerTodas() {
         return transaccionRepository.findAll();
@@ -37,8 +45,13 @@ public class TransaccionService {
 
     @Transactional
     public void eliminarTransaccion(Integer id) {
-        if (!transaccionRepository.existsById(id)) {
-            throw new IllegalArgumentException("La transacción con ID " + id + " no existe.");
+        Transaccion transaccion = transaccionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("La transacción no existe."));
+        if (transaccion.getCuentaPorPagarId() != null) {
+            cuentaPorPagarService.revertirPagoDesdeTransaccion(transaccion);
+        }
+        if (transaccion.getCuentaPorCobrarId() != null) {
+            cuentaPorCobrarService.revertirPagoDesdeTransaccion(transaccion);
         }
         transaccionRepository.deleteById(id);
     }

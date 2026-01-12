@@ -66,4 +66,10 @@ public class Transaccion {
     @Transient
     private String nombreCuenta;
 
+    @Column(name = "cuenta_por_cobrar_id")
+    private Integer cuentaPorCobrarId;
+
+    @Column(name = "cuenta_por_pagar_id")
+    private Integer cuentaPorPagarId;
+
 }

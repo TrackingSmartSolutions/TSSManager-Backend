@@ -74,7 +74,6 @@ public class CuentaPorCobrarService {
 
         logger.info("Total de unidades seleccionadas calculado: {}", totalUnidadesSeleccionadas);
 
-        // Validación para evitar importes en 0
         if (totalUnidadesSeleccionadas.compareTo(BigDecimal.ZERO) == 0) {
             logger.warn("¡ADVERTENCIA! El total de unidades seleccionadas es 0. Esto causará cuentas con cantidadCobrar = 0");
             logger.warn("Verificar que los conceptos seleccionados coincidan con los de la cotización");
@@ -82,8 +81,12 @@ public class CuentaPorCobrarService {
 
         LocalDate fechaBase = fechaInicial;
 
+        int totalEquiposReal = cotizacion.getUnidades().stream()
+                .filter(u -> "Equipos".equals(u.getUnidad()))
+                .mapToInt(UnidadCotizacion::getCantidad)
+                .sum();
+
         if (esquema == EsquemaCobroEnum.ANUAL) {
-            // Para ANUAL: numeroPagos + 1 cuentas
             int totalCuentas = numeroPagos + 1;
 
             for (int i = 0; i < totalCuentas; i++) {
@@ -92,28 +95,26 @@ public class CuentaPorCobrarService {
                 cuenta.setCotizacion(cotizacion);
                 cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
                 cuenta.setEsquema(esquema);
-                cuenta.setNoEquipos(cotizacion.getUnidades().stream()
-                        .filter(u -> "Equipos".equals(u.getUnidad()))
-                        .mapToInt(UnidadCotizacion::getCantidad)
-                        .sum());
 
                 if (i == 0) {
-                    // Primera cuenta: fecha de hoy, monto = subtotal, TODOS los conceptos
+                    cuenta.setNoEquipos(totalEquiposReal);
                     cuenta.setFechaPago(fechaBase);
                     cuenta.setCantidadCobrar(cotizacion.getSubtotal());
-                    // Para la primera cuenta, incluir TODOS los conceptos de la cotización
+
                     String todosLosConceptos = cotizacion.getUnidades().stream()
                             .map(UnidadCotizacion::getConcepto)
                             .distinct()
                             .collect(Collectors.joining(", "));
                     cuenta.setConceptos(todosLosConceptos);
-                    logger.info("Cuenta {} - Fecha: {}, Monto: {} (subtotal completo con todos los conceptos)", i+1, fechaBase, cotizacion.getSubtotal());
+
+                    logger.info("Cuenta {} (Inicial) - Equipos registrados: {}", i + 1, totalEquiposReal);
                 } else {
-                    // Siguientes cuentas: 365 días más, monto = total unidades seleccionadas, solo conceptos seleccionados
+                    cuenta.setNoEquipos(0);
                     cuenta.setFechaPago(fechaBase.plusYears(i));
                     cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
                     cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
-                    logger.info("Cuenta {} - Fecha: {}, Monto: {} (unidades seleccionadas)", i+1, fechaBase.plusYears(i), totalUnidadesSeleccionadas);
+
+                    logger.info("Cuenta {} (Parcialidad) - Equipos registrados: 0", i + 1);
                 }
 
                 cuenta.setFolio(generateFolio(cliente.getNombre(), i + 1));
@@ -121,7 +122,7 @@ public class CuentaPorCobrarService {
             }
 
         } else if (esquema == EsquemaCobroEnum.MENSUAL) {
-            logger.info("Monto por cuenta mensual: {} (cada cuenta tendrá el monto total)", totalUnidadesSeleccionadas);
+            logger.info("Monto por cuenta mensual: {}", totalUnidadesSeleccionadas);
 
             for (int i = 0; i < numeroPagos; i++) {
                 CuentaPorCobrar cuenta = new CuentaPorCobrar();
@@ -129,12 +130,13 @@ public class CuentaPorCobrarService {
                 cuenta.setCotizacion(cotizacion);
                 cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
                 cuenta.setEsquema(esquema);
-                cuenta.setNoEquipos(cotizacion.getUnidades().size());
                 cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
 
                 if (i == 0) {
+                    cuenta.setNoEquipos(totalEquiposReal);
                     cuenta.setFechaPago(fechaBase);
                 } else {
+                    cuenta.setNoEquipos(0);
                     cuenta.setFechaPago(fechaBase.plusMonths(i));
                 }
 
@@ -144,13 +146,14 @@ public class CuentaPorCobrarService {
             }
 
         } else if (esquema == EsquemaCobroEnum.DISTRIBUIDOR || esquema == EsquemaCobroEnum.VITALICIA) {
-            // Para DISTRIBUIDOR y VITALICIA: solo una cuenta
             CuentaPorCobrar cuenta = new CuentaPorCobrar();
             cuenta.setCliente(cliente);
             cuenta.setCotizacion(cotizacion);
             cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
             cuenta.setEsquema(esquema);
-            cuenta.setNoEquipos(cotizacion.getUnidades().size());
+
+            cuenta.setNoEquipos(totalEquiposReal);
+
             cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
             cuenta.setFechaPago(fechaBase);
             cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
@@ -387,6 +390,7 @@ public class CuentaPorCobrarService {
         transaccion.setFechaPago(fechaPago);
         transaccion.setFormaPago(cuenta.getSolicitudesFacturasNotas().get(0).getFormaPago());
         transaccion.setNotas("Transacción generada automáticamente desde Cuentas por Cobrar");
+        transaccion.setCuentaPorCobrarId(cuenta.getId());
 
         transaccionService.agregarTransaccion(transaccion);
 
@@ -579,5 +583,48 @@ public class CuentaPorCobrarService {
                 )
                 .mapToInt(UnidadCotizacion::getCantidad)
                 .sum();
+    }
+
+    @Transactional
+    public void revertirPagoDesdeTransaccion(Transaccion transaccion) {
+        if (transaccion.getCuentaPorCobrarId() == null) return;
+
+        CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(transaccion.getCuentaPorCobrarId())
+                .orElse(null);
+
+        if (cuenta != null) {
+            BigDecimal montoEliminado = transaccion.getMonto();
+
+            BigDecimal pagadoActual = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+
+            BigDecimal nuevoPagado = pagadoActual.subtract(montoEliminado);
+
+            if (nuevoPagado.compareTo(BigDecimal.ZERO) < 0) {
+                nuevoPagado = BigDecimal.ZERO;
+            }
+            cuenta.setMontoPagado(nuevoPagado);
+
+            BigDecimal nuevoSaldo = cuenta.getCantidadCobrar().subtract(nuevoPagado);
+            cuenta.setSaldoPendiente(nuevoSaldo);
+
+            if (cuenta.getSaldoPendiente().compareTo(BigDecimal.ZERO) > 0) {
+                LocalDate hoy = LocalDate.now();
+
+                if (nuevoPagado.compareTo(BigDecimal.ZERO) > 0) {
+                    cuenta.setEstatus(EstatusPagoEnum.EN_PROCESO);
+                } else {
+                    if (cuenta.getFechaPago().isBefore(hoy)) {
+                        cuenta.setEstatus(EstatusPagoEnum.VENCIDA);
+                    } else {
+                        cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
+                    }
+
+                    cuenta.setFechaRealPago(null);
+                    cuenta.setComprobantePagoUrl(null);
+                }
+            }
+
+            cuentaPorCobrarRepository.save(cuenta);
+        }
     }
 }

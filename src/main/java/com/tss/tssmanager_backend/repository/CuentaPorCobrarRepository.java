@@ -50,6 +50,7 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
             "JOIN cot.unidades u " +
             "WHERE c.estatus = 'PAGADO' " +
             "AND u.unidad = 'Equipos' " +
+            "AND c.id = (SELECT MIN(sub.id) FROM CuentaPorCobrar sub WHERE sub.cotizacion.id = cot.id) " +
             "AND EXISTS (" +
             "   SELECT 1 FROM Transaccion t " +
             "   WHERE t.fechaPago = c.fechaRealPago " +
