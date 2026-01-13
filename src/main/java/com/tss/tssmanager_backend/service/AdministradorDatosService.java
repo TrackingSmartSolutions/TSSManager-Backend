@@ -651,7 +651,7 @@ public class AdministradorDatosService {
 
         try {
             long conteoRegistros = contarRegistros(solicitud.getTipoDatos());
-            final int LIMITE_MAXIMO = 1000;
+            final int LIMITE_MAXIMO = 100000;
 
             if (conteoRegistros > LIMITE_MAXIMO) {
                 resultado.setExito(false);
@@ -724,61 +724,50 @@ public class AdministradorDatosService {
     }
 
     private List<Object> obtenerDatosParaExportacion(String tipoDatos, String fechaInicio, String fechaFin) {
-        final int LIMITE_REGISTROS = 500;
-
         List<Object> datos;
         switch (tipoDatos) {
             case "tratos":
                 datos = tratosRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "empresas":
                 datos = empresasRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "contactos":
                 datos = contactosRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "correoContactos":
                 datos = correoContactoRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "modelos":
                 datos = modeloRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "proveedores":
                 datos = proveedorRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "equipos":
                 datos = equipoRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "sims":
                 datos = simRepository.findAllWithEquipo().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
             case "historialSaldos":
                 datos = historialSaldoRepository.findAll().stream()
-                        .limit(LIMITE_REGISTROS)
                         .map(Object.class::cast)
                         .collect(Collectors.toList());
                 break;
@@ -920,6 +909,7 @@ public class AdministradorDatosService {
                 valores.add(trato.getNombre());
                 valores.add(trato.getEmpresaId() != null ? trato.getEmpresaId().toString() : "");
                 valores.add(trato.getContacto() != null ? trato.getContacto().getId().toString() : "");
+                valores.add(trato.getPropietarioId() != null ? trato.getPropietarioId().toString() : ""); // AGREGADO
                 valores.add(trato.getNumeroUnidades() != null ? trato.getNumeroUnidades().toString() : "");
                 valores.add(trato.getIngresosEsperados() != null ? trato.getIngresosEsperados().toString() : "");
                 valores.add(trato.getDescripcion() != null ? trato.getDescripcion() : "");
@@ -933,14 +923,17 @@ public class AdministradorDatosService {
                 Empresa empresa = (Empresa) objeto;
                 valores.add(empresa.getNombre());
                 valores.add(empresa.getEstatus().toString());
+                valores.add(empresa.getDomicilioFisico());
                 valores.add(empresa.getPropietario() != null ? empresa.getPropietario().getId().toString() : "");
+                valores.add(empresa.getCreadoPor() != null ? empresa.getCreadoPor() : "");
+                valores.add(empresa.getFechaCreacion() != null ? empresa.getFechaCreacion().toString() : "");
                 valores.add(empresa.getSitioWeb() != null ? empresa.getSitioWeb() : "");
                 valores.add(empresa.getSector() != null ? empresa.getSector().getNombreSector() : "");
-                valores.add(empresa.getDomicilioFisico());
                 valores.add(empresa.getDomicilioFiscal() != null ? empresa.getDomicilioFiscal() : "");
                 valores.add(empresa.getRfc() != null ? empresa.getRfc() : "");
                 valores.add(empresa.getRazonSocial() != null ? empresa.getRazonSocial() : "");
                 valores.add(empresa.getRegimenFiscal() != null ? empresa.getRegimenFiscal() : "");
+                valores.add(empresa.getModificadoPor() != null ? empresa.getModificadoPor() : "");
                 break;
 
             case "contactos":
@@ -949,6 +942,10 @@ public class AdministradorDatosService {
                 valores.add(contacto.getEmpresa() != null ? contacto.getEmpresa().getId().toString() : "");
                 valores.add(contacto.getRol().toString());
                 valores.add(contacto.getCelular() != null ? contacto.getCelular() : "");
+                valores.add(contacto.getPropietario() != null ? contacto.getPropietario().getId().toString() : "");
+                valores.add(contacto.getCreadoPor() != null ? contacto.getCreadoPor() : "");
+                valores.add(contacto.getFechaCreacion() != null ? contacto.getFechaCreacion().toString() : "");
+                valores.add(contacto.getModificadoPor() != null ? contacto.getModificadoPor() : "");
                 break;
 
             case "correoContactos":
@@ -1011,7 +1008,6 @@ public class AdministradorDatosService {
                 break;
 
             default:
-                // Obtener columnas desde la base de datos para tipos no reconocidos
                 Optional<PlantillaImportacion> plantillaOpt = plantillaRepository.findByTipoDatosAndActivoTrue(tipoDatos);
                 if (plantillaOpt.isPresent()) {
                     String[] columnas = plantillaOpt.get().getCamposCsv().split(",");

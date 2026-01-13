@@ -47,6 +47,7 @@ public class AdministradorDatosController {
             return ResponseEntity.badRequest().build();
         }
     }
+
     @PostMapping("/importar-datos")
     public ResponseEntity<ResultadoImportacionDTO> importarDatos(
             @RequestParam("archivo") MultipartFile archivo,
@@ -64,7 +65,6 @@ public class AdministradorDatosController {
         }
     }
 
-
     @PostMapping("/exportar-datos")
     public ResponseEntity<ResultadoExportacionDTO> exportarDatos(
             @RequestBody SolicitudExportacionDTO solicitud) {
@@ -80,7 +80,6 @@ public class AdministradorDatosController {
         }
     }
 
-
     @GetMapping("/historial-exportaciones/{usuarioId}")
     public ResponseEntity<List<HistorialExportacionDTO>> obtenerHistorialExportaciones(
             @PathVariable Integer usuarioId) {
@@ -92,7 +91,6 @@ public class AdministradorDatosController {
             return ResponseEntity.badRequest().build();
         }
     }
-
 
     @GetMapping("/descargar-exportacion/{exportacionId}")
     public ResponseEntity<Resource> descargarExportacion(
@@ -123,7 +121,6 @@ public class AdministradorDatosController {
             return ResponseEntity.badRequest().build();
         }
     }
-
 
     @DeleteMapping("/eliminar-exportacion/{exportacionId}")
     public ResponseEntity<String> eliminarExportacion(
