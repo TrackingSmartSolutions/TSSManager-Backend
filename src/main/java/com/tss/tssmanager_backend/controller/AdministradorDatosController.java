@@ -55,9 +55,26 @@ public class AdministradorDatosController {
             @RequestParam("usuarioId") Integer usuarioId) {
 
         try {
+            System.out.println("=== SOLICITUD DE IMPORTACIÓN ===");
+            System.out.println("Archivo: " + archivo.getOriginalFilename());
+            System.out.println("Tamaño: " + archivo.getSize() + " bytes");
+            System.out.println("Tipo de datos: " + tipoDatos);
+            System.out.println("Usuario ID: " + usuarioId);
+
             ResultadoImportacionDTO resultado = administradorDatosService.importarDatos(archivo, tipoDatos, usuarioId);
+
+            System.out.println("=== RESPUESTA IMPORTACIÓN ===");
+            System.out.println("Éxito: " + resultado.isExito());
+            System.out.println("Mensaje: " + resultado.getMensaje());
+            System.out.println("Exitosos: " + resultado.getRegistrosExitosos());
+            System.out.println("Fallidos: " + resultado.getRegistrosFallidos());
+
             return ResponseEntity.ok(resultado);
         } catch (Exception e) {
+            System.err.println("=== ERROR EN CONTROLADOR ===");
+            System.err.println("Mensaje: " + e.getMessage());
+            e.printStackTrace();
+
             ResultadoImportacionDTO error = new ResultadoImportacionDTO();
             error.setExito(false);
             error.setMensaje("Error al importar datos: " + e.getMessage());

@@ -177,8 +177,15 @@ public class AdministradorDatosService {
             Files.copy(archivo.getInputStream(), rutaArchivo);
 
             // Parsear CSV
-            try (Reader reader = Files.newBufferedReader(rutaArchivo);
-                 CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
+            String contenidoCSV = new String(Files.readAllBytes(rutaArchivo), java.nio.charset.StandardCharsets.UTF_8);
+            contenidoCSV = limpiarBOM(contenidoCSV);
+
+            try (Reader reader = new StringReader(contenidoCSV);
+                 CSVParser csvParser = new CSVParser(reader,
+                         CSVFormat.DEFAULT
+                                 .withFirstRecordAsHeader()
+                                 .withIgnoreEmptyLines(true)
+                                 .withTrim())) {
 
                 List<CSVRecord> records = csvParser.getRecords();
                 resultado.setRegistrosProcesados(records.size());
@@ -189,14 +196,21 @@ public class AdministradorDatosService {
                     try {
                         // Pasa el usuarioId al método procesarRegistro
                         boolean procesado = procesarRegistro(record, tipoDatos, usuarioId);
+
                         if (procesado) {
                             exitosos++;
                         } else {
                             fallidos++;
+                            String error = "Fila " + record.getRecordNumber() + ": No se pudo procesar\n";
+                            errores.append(error);
+                            System.err.println(error);
                         }
                     } catch (Exception e) {
                         fallidos++;
-                        errores.append("Fila ").append(record.getRecordNumber()).append(": ").append(e.getMessage()).append("\n");
+                        String error = "Fila " + record.getRecordNumber() + ": " + e.getMessage() + "\n";
+                        errores.append(error);
+                        System.err.println("ERROR en fila " + record.getRecordNumber() + ": " + e.getMessage());
+                        e.printStackTrace();
                     }
                 }
 
@@ -204,7 +218,9 @@ public class AdministradorDatosService {
                 resultado.setRegistrosFallidos(fallidos);
                 resultado.setErrores(errores.toString());
                 resultado.setExito(exitosos > 0);
-                resultado.setMensaje(exitosos > 0 ? "Importación completada" : "No se pudo importar ningún registro");
+                resultado.setMensaje(exitosos > 0 ?
+                        "Importación completada: " + exitosos + " exitosos, " + fallidos + " fallidos" :
+                        "No se pudo importar ningún registro");
 
                 // Guardar historial
                 HistorialImportacion historial = new HistorialImportacion();
@@ -223,9 +239,11 @@ public class AdministradorDatosService {
             Files.deleteIfExists(rutaArchivo);
 
         } catch (Exception e) {
+            e.printStackTrace();
             resultado.setExito(false);
             resultado.setMensaje("Error al procesar el archivo: " + e.getMessage());
         }
+
         return resultado;
     }
 
@@ -456,57 +474,74 @@ public class AdministradorDatosService {
     private boolean procesarTrato(CSVRecord record, Integer usuarioId) {
         try {
             Trato trato = new Trato();
-            trato.setNombre(record.get("nombre"));
-            trato.setEmpresaId(Integer.parseInt(record.get("empresa_id")));
-
-            // Buscar contacto por ID
-            Integer contactoId = Integer.parseInt(record.get("contacto_id"));
+            String nombre = record.get("nombre");
+            trato.setNombre(nombre);
+            String empresaIdStr = record.get("empresa_id");
+            trato.setEmpresaId(Integer.parseInt(empresaIdStr));
+            String contactoIdStr = record.get("contacto_id");
+            Integer contactoId = Integer.parseInt(contactoIdStr);
             Optional<Contacto> contactoOpt = contactosRepository.findById(contactoId);
             if (contactoOpt.isEmpty()) {
                 throw new RuntimeException("Contacto no encontrado con ID: " + contactoId);
             }
             trato.setContacto(contactoOpt.get());
-
             Integer propietarioId = usuarioId;
-
             try {
                 String propietarioIdStr = record.get("propietario_id");
                 if (propietarioIdStr != null && !propietarioIdStr.trim().isEmpty()) {
                     propietarioId = Integer.parseInt(propietarioIdStr);
                 }
             } catch (Exception e) {
+                System.out.println("Usando usuarioId por defecto: " + usuarioId);
             }
 
             Optional<Usuario> propietarioOpt = usuarioRepository.findById(propietarioId);
             if (propietarioOpt.isEmpty()) {
                 throw new RuntimeException("Usuario propietario no encontrado con ID: " + propietarioId);
             }
-
             trato.setPropietarioId(propietarioId);
-
             String unidadesStr = record.get("numero_unidades");
-            if (unidadesStr != null && !unidadesStr.isEmpty()) {
-                trato.setNumeroUnidades(Integer.parseInt(unidadesStr));
+            if (unidadesStr != null && !unidadesStr.trim().isEmpty() && !unidadesStr.equalsIgnoreCase("null")) {
+                trato.setNumeroUnidades(Integer.parseInt(unidadesStr.trim()));
             }
-
             String ingresosStr = record.get("ingresos_esperados");
-            if (ingresosStr != null && !ingresosStr.isEmpty()) {
-                trato.setIngresosEsperados(new BigDecimal(ingresosStr));
+            if (ingresosStr != null && !ingresosStr.trim().isEmpty() && !ingresosStr.equalsIgnoreCase("null")) {
+                trato.setIngresosEsperados(new BigDecimal(ingresosStr.trim()));
             }
-
-            trato.setDescripcion(record.get("descripcion"));
-            trato.setFechaCierre(LocalDateTime.parse(record.get("fecha_cierre")));
-            trato.setNoTrato(record.get("no_trato"));
-            trato.setProbabilidad(Integer.parseInt(record.get("probabilidad")));
-            trato.setFase(record.get("fase"));
+            String descripcion = record.get("descripcion");
+            if (descripcion != null && !descripcion.trim().isEmpty() && !descripcion.equalsIgnoreCase("null")) {
+                trato.setDescripcion(descripcion.trim());
+            }
+            String fechaCierreStr = record.get("fecha_cierre");
+            if (fechaCierreStr == null || fechaCierreStr.trim().isEmpty() || fechaCierreStr.equalsIgnoreCase("null")) {
+                trato.setFechaCierre(LocalDateTime.now().plusDays(60));
+            } else {
+                trato.setFechaCierre(LocalDateTime.parse(fechaCierreStr.trim()));
+            }
+            String noTrato = record.get("no_trato");
+            if (noTrato != null && !noTrato.trim().isEmpty() && !noTrato.equalsIgnoreCase("null")) {
+                trato.setNoTrato(noTrato.trim());
+            }
+            String probabilidadStr = record.get("probabilidad");
+            if (probabilidadStr == null || probabilidadStr.trim().isEmpty() || probabilidadStr.equalsIgnoreCase("null")) {
+                trato.setProbabilidad(0);
+            } else {
+                trato.setProbabilidad(Integer.parseInt(probabilidadStr.trim()));
+            }
+            String fase = record.get("fase");
+            if (fase == null || fase.trim().isEmpty() || fase.equalsIgnoreCase("null")) {
+                trato.setFase("PRIMER_CONTACTO");
+            } else {
+                trato.setFase(fase.trim());
+            }
             trato.setFechaCreacion(Instant.now());
             trato.setFechaModificacion(Instant.now());
             trato.setFechaUltimaActividad(Instant.now());
-
             tratosRepository.save(trato);
             return true;
         } catch (Exception e) {
-            return false;
+            e.printStackTrace();
+            throw new RuntimeException("Error al procesar trato en fila " + record.getRecordNumber() + ": " + e.getMessage(), e);
         }
     }
 
@@ -1102,5 +1137,14 @@ public class AdministradorDatosService {
         dto.setErrores(historial.getErrores());
         dto.setFechaCreacion(historial.getFechaCreacion());
         return dto;
+    }
+
+    private String limpiarBOM(String texto) {
+        if (texto == null) return null;
+        // Eliminar BOM UTF-8 (EF BB BF)
+        if (texto.startsWith("\uFEFF")) {
+            return texto.substring(1);
+        }
+        return texto;
     }
 }
