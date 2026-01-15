@@ -57,6 +57,12 @@ public class AuthController {
         return ResponseEntity.ok(users);
     }
 
+    @GetMapping("/users/active")
+    public ResponseEntity<List<UsuarioDTO>> getActiveUsers() {
+        List<UsuarioDTO> users = usuarioService.listarUsuariosActivos();
+        return ResponseEntity.ok(users);
+    }
+
     @GetMapping("/users/{userId}")
     public ResponseEntity<Usuario> getUserById(@PathVariable Integer userId) {
         Usuario usuario = usuarioRepository.findById(userId)

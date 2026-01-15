@@ -70,6 +70,17 @@ public class UsuarioService {
         return result;
     }
 
+    @Transactional(readOnly = true)
+    public List<UsuarioDTO> listarUsuariosActivos() {
+        logger.info("Listando usuarios activos");
+        List<Usuario> usuarios = usuarioRepository.findByEstatusOrderById(EstatusUsuarioEnum.ACTIVO);
+        List<UsuarioDTO> result = usuarios.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+        logger.info("Se encontraron {} usuarios activos", result.size());
+        return result;
+    }
+
     @Transactional
     public Usuario guardarUsuario(Usuario usuario) {
         if (usuario.getId() == null) {

@@ -10,6 +10,7 @@ import com.tss.tssmanager_backend.entity.EmailRecord;
 import com.tss.tssmanager_backend.repository.EmailRecordRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,16 +24,15 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Base64;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class EmailService {
 
     @Autowired
     private Cloudinary cloudinary;
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
 
     private final Resend resendClient;
     private final String fromEmail;
@@ -431,6 +431,16 @@ public class EmailService {
 
             email.setStatus(statusFinal);
             emailRecordRepository.save(email);
+
+            // **NUEVO**: Enviar notificación por WebSocket
+            Map<String, Object> notification = new HashMap<>();
+            notification.put("emailId", email.getId());
+            notification.put("resendEmailId", resendEmailId);
+            notification.put("status", statusFinal);
+            notification.put("tratoId", email.getTratoId());
+
+            messagingTemplate.convertAndSend("/topic/email-status", notification);
+
             System.out.println("Estado actualizado para ID " + resendEmailId + ": " + statusFinal);
         } else {
             System.out.println("No se encontró correo con ID Resend: " + resendEmailId);

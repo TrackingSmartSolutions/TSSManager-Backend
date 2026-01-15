@@ -20,7 +20,4 @@ public interface CotizacionRepository extends JpaRepository<Cotizacion, Integer>
 
     @Query("SELECT c FROM Cotizacion c WHERE c.cliente.id = :clienteId AND c.tratoId IS NULL ORDER BY c.fechaCreacion DESC")
     List<Cotizacion> findByClienteIdAndTratoIdIsNull(@Param("clienteId") Integer clienteId);
-
-    @Query("SELECT DISTINCT t FROM Trato t WHERE t.empresaId = :empresaId AND t.fase NOT IN ('CERRADO_PERDIDO') AND t.fase IN ('COTIZACION_PROPUESTA_PRACTICA', 'NEGOCIACION_REVISION', 'CERRADO_GANADO')")
-    List<Trato> findTratosDisponiblesParaCotizacion(@Param("empresaId") Integer empresaId);
 }
