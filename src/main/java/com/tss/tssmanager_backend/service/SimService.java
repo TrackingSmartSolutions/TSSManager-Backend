@@ -50,6 +50,9 @@ public class SimService {
     @Autowired
     private CuentaPorPagarRepository cuentaPorPagarRepository;
 
+    @Autowired
+    private CuentaPorPagarService cuentaPorPagarService;
+
     @Transactional
     public Sim guardarSim(Sim sim) {
 
@@ -530,11 +533,20 @@ public class SimService {
     public void eliminarSim(Integer id) {
         Sim sim = simRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada."));
+
         if (sim.getEquipo() != null) {
             throw new IllegalStateException("No se puede eliminar la SIM porque está vinculada a un equipo.");
         }
+        try {
+            cuentaPorPagarService.eliminarCuentasPendientesPorSim(id);
+            System.out.println("Cuentas por pagar pendientes eliminadas para SIM: " + sim.getNumero());
+        } catch (Exception e) {
+            System.err.println("Error al eliminar cuentas por pagar para SIM " + sim.getNumero() + ": " + e.getMessage());
+        }
         historialSaldosSimRepository.deleteBySimNumero(sim.getNumero());
         simRepository.delete(sim);
+
+        System.out.println("SIM eliminada exitosamente: " + sim.getNumero());
     }
 
     @Cacheable(value = "simsDisponibles", unless = "#result.isEmpty()")

@@ -339,6 +339,13 @@ public class TratoService {
     }
 
     @Transactional
+    public void eliminarTrato(Integer id) {
+        Trato trato = tratoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Trato no encontrado con id: " + id));
+        tratoRepository.delete(trato);
+    }
+
+    @Transactional
     public TratoDTO moverFase(Integer id, String nuevaFase) {
         Trato trato = tratoRepository.findTratoWithContacto(id)
                 .orElseThrow(() -> new RuntimeException("Trato no encontrado"));
@@ -1782,13 +1789,7 @@ public class TratoService {
                     }
                     LocalTime horaFinExistente = calcularHoraFin(horaInicioExistente, duracionExistente);
 
-                    // Verificar solapamiento con debug
-                    System.out.println("Verificando conflicto:");
-                    System.out.println("  Nueva: " + horaInicioNueva + " - " + horaFinNueva + " (duración: " + duracion + ")");
-                    System.out.println("  Existente: " + horaInicioExistente + " - " + horaFinExistente + " (duración: " + duracionExistente + ")");
-
                     if (hayConflicto(horaInicioNueva, horaFinNueva, horaInicioExistente, horaFinExistente)) {
-                        System.out.println("  ¡CONFLICTO DETECTADO!");
                         return true;
                     }
                 }

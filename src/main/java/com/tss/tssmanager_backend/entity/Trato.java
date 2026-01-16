@@ -61,8 +61,20 @@ public class Trato {
     @Column(name = "fecha_ultima_actividad", nullable = false)
     private Instant fechaUltimaActividad;
 
-    @OneToMany(mappedBy = "tratoId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "tratoId", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Actividad> actividades;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "trato_id")
+    private List<NotaTrato> notas;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "trato_id")
+    private List<EmailRecord> emailRecords;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "trato_id")
+    private List<Cotizacion> cotizaciones;
 
     @Column(name = "correos_seguimiento_activo")
     private Boolean correosSeguimientoActivo = false;

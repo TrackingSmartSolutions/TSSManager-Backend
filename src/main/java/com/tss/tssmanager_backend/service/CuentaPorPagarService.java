@@ -460,4 +460,15 @@ public class CuentaPorPagarService {
             cuentasPorPagarRepository.save(cuenta);
         }
     }
+
+    @Transactional
+    public void eliminarCuentasPendientesPorSim(Integer simId) {
+        try {
+            cuentasPorPagarRepository.deleteBySimIdAndEstatusPendiente(simId);
+            System.out.println("Cuentas por pagar pendientes eliminadas para SIM ID: " + simId);
+        } catch (Exception e) {
+            System.err.println("Error al eliminar cuentas por pagar pendientes: " + e.getMessage());
+            throw new RuntimeException("Error al eliminar cuentas por pagar asociadas a la SIM", e);
+        }
+    }
 }

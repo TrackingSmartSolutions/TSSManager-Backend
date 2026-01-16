@@ -1264,7 +1264,8 @@ public class NotificacionService {
 
                 if (actividad.getHoraInicio() != null) {
                     LocalTime horaActividad = actividad.getHoraInicio().toLocalTime();
-                    long minutosRestantes = ChronoUnit.MINUTES.between(horaActual, horaActividad);
+                    long segundosRestantes = ChronoUnit.SECONDS.between(horaActual, horaActividad);
+                    long minutosRestantes = (segundosRestantes + 59) / 60;
 
                     boolean mostrarNotificacion = false;
 

@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.repository;
 
 import com.tss.tssmanager_backend.entity.CuentaPorPagar;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -40,4 +41,8 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
         ORDER BY c.fechaPago ASC
         """)
     List<CuentaPorPagar> findAllWithRelationsFiltered(@Param("estatus") String estatus);
+
+    @Modifying
+    @Query("DELETE FROM CuentaPorPagar c WHERE c.sim.id = :simId AND c.estatus = 'Pendiente'")
+    void deleteBySimIdAndEstatusPendiente(@Param("simId") Integer simId);
 }
