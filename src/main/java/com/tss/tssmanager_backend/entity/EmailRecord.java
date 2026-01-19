@@ -1,9 +1,12 @@
 package com.tss.tssmanager_backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Data
@@ -42,4 +45,8 @@ public class EmailRecord {
 
     @Column(name = "tipo_correo_consolidado")
     private String tipoCorreoConsolidado;
+
+    @OneToMany(mappedBy = "emailRecord", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private List<EmailDestinarioEstado> estadosDestinatarios = new ArrayList<>();
 }

@@ -4,6 +4,8 @@ import com.tss.tssmanager_backend.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -21,7 +23,13 @@ public class WebhookController {
 
             if (data != null && type != null) {
                 String emailId = (String) data.get("email_id");
-                emailService.actualizarEstadoDesdeWebhook(emailId, type);
+
+                List<String> toList = (List<String>) data.get("to");
+                String emailDestinatario = (toList != null && !toList.isEmpty())
+                        ? toList.get(0)
+                        : null;
+
+                emailService.actualizarEstadoDesdeWebhook(emailId, type, emailDestinatario);
             }
 
             return ResponseEntity.ok("Webhook recibido");

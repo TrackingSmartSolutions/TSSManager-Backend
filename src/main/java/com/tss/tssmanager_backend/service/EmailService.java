@@ -6,8 +6,12 @@ import com.resend.Resend;
 import com.resend.core.exception.ResendException;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.resend.services.emails.model.CreateEmailResponse;
+import com.tss.tssmanager_backend.entity.EmailDestinarioEstado;
 import com.tss.tssmanager_backend.entity.EmailRecord;
+import com.tss.tssmanager_backend.repository.EmailDestinarioEstadoRepository;
 import com.tss.tssmanager_backend.repository.EmailRecordRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -33,10 +37,13 @@ public class EmailService {
     private Cloudinary cloudinary;
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
+    @Autowired
+    private EmailDestinarioEstadoRepository destinatarioEstadoRepository;
 
     private final Resend resendClient;
     private final String fromEmail;
     private final EmailRecordRepository emailRecordRepository;
+    private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
 
     public EmailService(@Value("${resend.api.key}") String resendApiKey,
                         @Value("${resend.email.from}") String fromEmail,
@@ -184,6 +191,18 @@ public class EmailService {
         emailRecord.setResendEmailId(resendEmailId);
         emailRecord.setStatus(exito ? "sent" : "failed");
         emailRecord.setTipoCorreoConsolidado(tipoCorreoConsolidado);
+
+        emailRecord = emailRecordRepository.save(emailRecord);
+
+        String[] emails = destinatario.split(",");
+        for (String email : emails) {
+            EmailDestinarioEstado estado = new EmailDestinarioEstado();
+            estado.setEmailRecord(emailRecord);
+            estado.setEmail(normalizarEmail(email));
+            estado.setStatus(exito ? "sent" : "failed");
+            estado.setUpdatedAt(ZonedDateTime.now(ZoneId.of("America/Mexico_City")));
+            emailRecord.getEstadosDestinatarios().add(estado);
+        }
 
         return emailRecordRepository.save(emailRecord);
     }
@@ -377,8 +396,23 @@ public class EmailService {
         return null;
     }
 
+    @Transactional(readOnly = true)
     public List<EmailRecord> obtenerCorreosPorTratoId(Integer tratoId) {
-        return emailRecordRepository.findByTratoId(tratoId);
+        try {
+            List<EmailRecord> correos = emailRecordRepository.findByTratoId(tratoId);
+            // Forzar la carga de los estados antes de cerrar la sesión
+            for (EmailRecord email : correos) {
+                email.getEstadosDestinatarios().size(); // Esto fuerza la carga
+                logger.debug("Email ID {}: tiene {} estados cargados",
+                        email.getId(),
+                        email.getEstadosDestinatarios().size()
+                );
+            }
+            return correos;
+        } catch (Exception e) {
+            logger.error("SERVICE - Error al obtener correos del trato {}", tratoId, e);
+            throw e;
+        }
     }
 
     private String procesarImagenesEmbebidas(String cuerpoHtml) {
@@ -414,7 +448,7 @@ public class EmailService {
     }
 
     @Transactional
-    public void actualizarEstadoDesdeWebhook(String resendEmailId, String nuevoEstado) {
+    public void actualizarEstadoDesdeWebhook(String resendEmailId, String nuevoEstado, String emailDestinatario) {
         if (resendEmailId == null) return;
 
         EmailRecord email = emailRecordRepository.findByResendEmailId(resendEmailId);
@@ -429,21 +463,47 @@ public class EmailService {
                 statusFinal = "sent";
             }
 
-            email.setStatus(statusFinal);
-            emailRecordRepository.save(email);
+            EmailDestinarioEstado estadoDestinatario =
+                    destinatarioEstadoRepository.findByEmailRecordResendEmailIdAndEmail(
+                            resendEmailId,
+                            normalizarEmail(emailDestinatario)
+                    );
 
-            // **NUEVO**: Enviar notificación por WebSocket
+            if (estadoDestinatario != null) {
+                estadoDestinatario.setStatus(statusFinal);
+                estadoDestinatario.setUpdatedAt(ZonedDateTime.now(ZoneId.of("America/Mexico_City")));
+                destinatarioEstadoRepository.save(estadoDestinatario);
+            }
+
+            actualizarEstadoGeneral(email);
+
             Map<String, Object> notification = new HashMap<>();
             notification.put("emailId", email.getId());
             notification.put("resendEmailId", resendEmailId);
+            notification.put("emailDestinatario", emailDestinatario);
             notification.put("status", statusFinal);
             notification.put("tratoId", email.getTratoId());
 
             messagingTemplate.convertAndSend("/topic/email-status", notification);
 
-            System.out.println("Estado actualizado para ID " + resendEmailId + ": " + statusFinal);
-        } else {
-            System.out.println("No se encontró correo con ID Resend: " + resendEmailId);
+            System.out.println("Estado actualizado para " + emailDestinatario + ": " + statusFinal);
         }
+    }
+
+    private void actualizarEstadoGeneral(EmailRecord email) {
+        List<EmailDestinarioEstado> estados = email.getEstadosDestinatarios();
+
+        boolean algunoRebotado = estados.stream().anyMatch(e -> "bounced".equals(e.getStatus()));
+        if (algunoRebotado) {
+            email.setStatus("bounced");
+        }
+        else if (estados.stream().allMatch(e -> "delivered".equals(e.getStatus()))) {
+            email.setStatus("delivered");
+        }
+        else {
+            email.setStatus("sent");
+        }
+
+        emailRecordRepository.save(email);
     }
 }
