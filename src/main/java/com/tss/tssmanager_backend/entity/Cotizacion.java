@@ -53,6 +53,9 @@ public class Cotizacion {
     @OneToMany(mappedBy = "cotizacion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UnidadCotizacion> unidades;
 
+    @OneToMany(mappedBy = "cotizacion", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CuentaPorCobrar> cuentasPorCobrar;
+
     @Column(name = "notas_comerciales_nombre")
     private String notasComercialesNombre;
 

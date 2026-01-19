@@ -65,15 +65,15 @@ public class Trato {
     private List<Actividad> actividades;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "trato_id")
+    @JoinColumn(name = "trato_id", insertable = false, updatable = false)
     private List<NotaTrato> notas;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "trato_id")
+    @JoinColumn(name = "trato_id", insertable = false, updatable = false)
     private List<EmailRecord> emailRecords;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "trato_id")
+    @JoinColumn(name = "trato_id", insertable = false, updatable = false)
     private List<Cotizacion> cotizaciones;
 
     @Column(name = "correos_seguimiento_activo")
