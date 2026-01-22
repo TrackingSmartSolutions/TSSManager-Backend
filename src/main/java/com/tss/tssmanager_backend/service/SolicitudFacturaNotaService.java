@@ -1062,59 +1062,55 @@ public class SolicitudFacturaNotaService {
 
             BigDecimal precioUnitarioFinal = BigDecimal.ZERO;
             BigDecimal importeFinal = BigDecimal.ZERO;
+            BigDecimal descuentoMonto = BigDecimal.ZERO;
             BigDecimal cantidad = BigDecimal.ONE;
             String unidadMedida = "Servicio";
 
-            if (conceptos.length == 1) {
-                precioUnitarioFinal = subtotalSolicitud;
-                importeFinal = subtotalSolicitud;
-                if (!unidadesOriginales.isEmpty()) {
-                    UnidadCotizacion first = unidadesOriginales.values().iterator().next();
-                    unidadMedida = first.getUnidad();
-                    cantidad = new BigDecimal(first.getCantidad());
-                }
-                logger.info("Unico concepto detectado, asignando subtotal completo: {}", subtotalSolicitud);
-            }
-            else {
-                UnidadCotizacion unidadMatch = null;
-                String conceptoBuscar = conceptoLimpio.toLowerCase();
+            UnidadCotizacion unidadMatch = unidadesOriginales.get(conceptoLimpio.toLowerCase());
 
-                unidadMatch = unidadesOriginales.get(conceptoBuscar);
-
-                if (unidadMatch == null) {
-                    for (Map.Entry<String, UnidadCotizacion> entry : unidadesOriginales.entrySet()) {
-                        String keyBD = entry.getKey();
-                        if (keyBD.contains(conceptoBuscar) || conceptoBuscar.contains(keyBD)) {
-                            unidadMatch = entry.getValue();
-                            break;
-                        }
-                    }
-                }
-
-                if (unidadMatch != null) {
-                    cantidad = new BigDecimal(unidadMatch.getCantidad());
-                    unidadMedida = unidadMatch.getUnidad();
-
-                    BigDecimal descuento = unidadMatch.getDescuento() != null ? unidadMatch.getDescuento() : BigDecimal.ZERO;
-                    BigDecimal factor = BigDecimal.ONE.subtract(descuento.divide(BigDecimal.valueOf(100)));
-
-                    importeFinal = unidadMatch.getImporteTotal();
-                    precioUnitarioFinal = unidadMatch.getPrecioUnitario().multiply(factor);
-
-                    dineroAsignado = dineroAsignado.add(importeFinal);
-                } else {
-                    if (i == conceptos.length - 1) {
-                        BigDecimal restante = subtotalSolicitud.subtract(dineroAsignado);
-                        if (restante.compareTo(BigDecimal.ZERO) > 0) {
-                            precioUnitarioFinal = restante;
-                            importeFinal = restante;
-                            logger.info("Asignando saldo restante al ultimo concepto sin match: {}", restante);
-                        }
-                    } else {
-                        logger.warn("No se encontró match para '{}' en multi-concepto. Asignando 0 temporales.", conceptoLimpio);
+            if (unidadMatch == null) {
+                for (Map.Entry<String, UnidadCotizacion> entry : unidadesOriginales.entrySet()) {
+                    String keyBD = entry.getKey();
+                    if (keyBD.contains(conceptoLimpio.toLowerCase()) || conceptoLimpio.toLowerCase().contains(keyBD)) {
+                        unidadMatch = entry.getValue();
+                        break;
                     }
                 }
             }
+
+            if (unidadMatch == null && conceptos.length == 1 && !unidadesOriginales.isEmpty()) {
+                unidadMatch = unidadesOriginales.values().iterator().next();
+            }
+
+            if (unidadMatch != null) {
+                cantidad = new BigDecimal(unidadMatch.getCantidad());
+                unidadMedida = unidadMatch.getUnidad();
+                precioUnitarioFinal = unidadMatch.getPrecioUnitario();
+
+                BigDecimal porcentajeDescuento = unidadMatch.getDescuento() != null ? unidadMatch.getDescuento() : BigDecimal.ZERO;
+
+                BigDecimal importeBruto = precioUnitarioFinal.multiply(cantidad);
+
+                if (porcentajeDescuento.compareTo(BigDecimal.ZERO) > 0) {
+                    descuentoMonto = importeBruto.multiply(porcentajeDescuento.divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
+                }
+
+                importeFinal = unidadMatch.getImporteTotal();
+
+            } else {
+                if (conceptos.length == 1) {
+                    precioUnitarioFinal = subtotalSolicitud;
+                    importeFinal = subtotalSolicitud;
+                } else if (i == conceptos.length - 1) {
+                    BigDecimal restante = subtotalSolicitud.subtract(dineroAsignado);
+                    if (restante.compareTo(BigDecimal.ZERO) > 0) {
+                        precioUnitarioFinal = restante;
+                        importeFinal = restante;
+                    }
+                }
+            }
+
+            dineroAsignado = dineroAsignado.add(importeFinal);
 
             conceptosTable.addCell(createStyledTableCell(
                     String.valueOf(cantidad), Element.ALIGN_CENTER, normalFont, rowColor));
@@ -1136,7 +1132,7 @@ public class SolicitudFacturaNotaService {
                     formatCurrency(precioUnitarioFinal), Element.ALIGN_RIGHT, normalFont, rowColor));
 
             conceptosTable.addCell(createStyledTableCell(
-                    "$0.00", Element.ALIGN_RIGHT, normalFont, rowColor));
+                    formatCurrency(descuentoMonto), Element.ALIGN_RIGHT, normalFont, rowColor));
 
             conceptosTable.addCell(createStyledTableCell(
                     formatCurrency(importeFinal), Element.ALIGN_RIGHT, boldFont, rowColor));
