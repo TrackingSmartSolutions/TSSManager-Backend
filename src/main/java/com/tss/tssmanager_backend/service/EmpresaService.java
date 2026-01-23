@@ -103,10 +103,22 @@ public class EmpresaService {
         empresa.setFechaUltimaActividad(Instant.now());
 
         validateEmpresa(empresa);
+
         Empresa savedEmpresa = empresaRepository.save(empresa);
 
         if (contactosDTO != null && !contactosDTO.isEmpty()) {
             for (ContactoDTO contactoDTO : contactosDTO) {
+
+                boolean tieneCorreo = contactoDTO.getCorreos() != null && contactoDTO.getCorreos().stream()
+                        .anyMatch(c -> c.getCorreo() != null && !c.getCorreo().trim().isEmpty());
+
+                boolean tieneTelefono = contactoDTO.getTelefonos() != null && contactoDTO.getTelefonos().stream()
+                        .anyMatch(t -> t.getTelefono() != null && !t.getTelefono().trim().isEmpty());
+
+                if (!tieneCorreo && !tieneTelefono) {
+                    throw new IllegalArgumentException("El contacto " + contactoDTO.getNombre() + " debe tener al menos un teléfono o un correo electrónico.");
+                }
+
                 Contacto contacto = new Contacto();
                 contacto.setEmpresa(savedEmpresa);
                 contacto.setPropietario(savedEmpresa.getPropietario());
@@ -127,13 +139,14 @@ public class EmpresaService {
                     List<CorreoContacto> correos = contactoDTO.getCorreos().stream()
                             .map(dto -> {
                                 if (dto.getCorreo() == null || dto.getCorreo().trim().isEmpty()) {
-                                    throw new IllegalArgumentException("El correo no puede estar vacío");
+                                    return null;
                                 }
                                 CorreoContacto correo = new CorreoContacto();
                                 correo.setCorreo(dto.getCorreo());
                                 correo.setContacto(contacto);
                                 return correo;
                             })
+                            .filter(java.util.Objects::nonNull)
                             .collect(Collectors.toList());
                     contacto.setCorreos(correos);
                 }
@@ -142,13 +155,14 @@ public class EmpresaService {
                     List<TelefonoContacto> telefonos = contactoDTO.getTelefonos().stream()
                             .map(dto -> {
                                 if (dto.getTelefono() == null || dto.getTelefono().trim().isEmpty()) {
-                                    throw new IllegalArgumentException("El teléfono no puede estar vacío");
+                                    return null;
                                 }
                                 TelefonoContacto telefono = new TelefonoContacto();
                                 telefono.setTelefono(dto.getTelefono());
                                 telefono.setContacto(contacto);
                                 return telefono;
                             })
+                            .filter(java.util.Objects::nonNull)
                             .collect(Collectors.toList());
                     contacto.setTelefonos(telefonos);
                 }
@@ -267,6 +281,16 @@ public class EmpresaService {
             throw new SecurityException("Usuario no autenticado");
         }
 
+        boolean tieneCorreo = contactoDTO.getCorreos() != null && contactoDTO.getCorreos().stream()
+                .anyMatch(c -> c.getCorreo() != null && !c.getCorreo().trim().isEmpty());
+
+        boolean tieneTelefono = contactoDTO.getTelefonos() != null && contactoDTO.getTelefonos().stream()
+                .anyMatch(t -> t.getTelefono() != null && !t.getTelefono().trim().isEmpty());
+
+        if (!tieneCorreo && !tieneTelefono) {
+            throw new IllegalArgumentException("Debe proporcionar al menos un teléfono o un correo electrónico.");
+        }
+
         validarDuplicados(empresaId, contactoDTO, null);
 
         Contacto contacto = new Contacto();
@@ -333,6 +357,15 @@ public class EmpresaService {
                         logger.error("Contacto no encontrado con ID: {}", id);
                         return new ResourceNotFoundException("Contacto no encontrado con id: " + id);
                     });
+            boolean tieneCorreo = contactoDTO.getCorreos() != null && contactoDTO.getCorreos().stream()
+                    .anyMatch(c -> c.getCorreo() != null && !c.getCorreo().trim().isEmpty());
+
+            boolean tieneTelefono = contactoDTO.getTelefonos() != null && contactoDTO.getTelefonos().stream()
+                    .anyMatch(t -> t.getTelefono() != null && !t.getTelefono().trim().isEmpty());
+
+            if (!tieneCorreo && !tieneTelefono) {
+                throw new IllegalArgumentException("Debe proporcionar al menos un teléfono o un correo electrónico.");
+            }
 
             validarDuplicados(contacto.getEmpresa().getId(), contactoDTO, id);
             // Actualizar campos básicos
@@ -479,6 +512,31 @@ public class EmpresaService {
         }
         dto.setLatitud(empresa.getLatitud());
         dto.setLongitud(empresa.getLongitud());
+        String datoOriginal = empresa.getCreadoPor();
+        String nombreParaMostrar = "Desconocido";
+
+        if (datoOriginal != null) {
+            Usuario usuarioEncontrado = null;
+
+            if (datoOriginal.matches("\\d+")) {
+                try {
+                    Integer idUsuario = Integer.parseInt(datoOriginal);
+                    usuarioEncontrado = usuarioRepository.findById(idUsuario).orElse(null);
+                } catch (NumberFormatException e) {
+                }
+            }
+            else {
+                usuarioEncontrado = usuarioRepository.findByNombreUsuario(datoOriginal);
+            }
+
+            if (usuarioEncontrado != null) {
+                nombreParaMostrar = usuarioEncontrado.getNombre();
+            } else {
+                nombreParaMostrar = datoOriginal;
+            }
+        }
+
+        dto.setCreadoPor(nombreParaMostrar);
         return dto;
     }
 

@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -47,8 +48,7 @@ public class ModeloEquipoService {
         return repository.save(modelo);
     }
 
-    @CachePut(value = "modelos", key = "#id")
-    @CacheEvict(value = "equipos", allEntries = true)
+    @CacheEvict(value = {"modelos", "equipos"}, allEntries = true)
     public ModeloEquipo actualizarModelo(Integer id, ModeloEquipo modelo, MultipartFile imagen) throws IOException {
         ModeloEquipo existingModelo = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Modelo no encontrado"));
@@ -78,7 +78,12 @@ public class ModeloEquipoService {
     public void eliminarModelo(Integer id) {
         ModeloEquipo modelo = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Modelo no encontrado"));
-        repository.delete(modelo);
+
+        try {
+            repository.delete(modelo);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalStateException("No se puede eliminar el modelo porque tiene equipos asociados. Elimine o reasigne los equipos primero.");
+        }
     }
 
     @Cacheable(value = "modelos", key = "#id")
@@ -112,6 +117,11 @@ public class ModeloEquipoService {
                     modeloMap.put("imagenUrl", modelo.getImagenUrl());
                     modeloMap.put("cantidad", conteoMap.getOrDefault(modelo.getId(), 0L));
                     return modeloMap;
+                })
+                .sorted((a, b) -> {
+                    Long cantidadA = (Long) a.get("cantidad");
+                    Long cantidadB = (Long) b.get("cantidad");
+                    return cantidadB.compareTo(cantidadA);
                 })
                 .collect(Collectors.toList());
 

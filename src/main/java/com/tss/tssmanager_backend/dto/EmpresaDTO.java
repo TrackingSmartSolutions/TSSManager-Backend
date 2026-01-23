@@ -24,5 +24,5 @@ public class EmpresaDTO {
     private Integer propietarioId;
     private Double latitud;
     private Double longitud;
-
+    private String creadoPor;
 }

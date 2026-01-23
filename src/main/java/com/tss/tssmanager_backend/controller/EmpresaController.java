@@ -8,6 +8,7 @@ import com.tss.tssmanager_backend.entity.Sector;
 import com.tss.tssmanager_backend.entity.Usuario;
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
+import com.tss.tssmanager_backend.repository.EmpresaRepository;
 import com.tss.tssmanager_backend.service.EmpresaService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,8 @@ public class EmpresaController {
 
     @Autowired
     private EmpresaService empresaService;
+    @Autowired
+    private EmpresaRepository empresaRepository;
 
     @PostMapping
     public ResponseEntity<EmpresaDTO> agregarEmpresa(@RequestBody EmpresaDTO empresaDTO) {
@@ -314,6 +317,22 @@ public class EmpresaController {
             return ResponseEntity.ok(empresas);
         } catch (Exception e) {
             logger.error("Error interno al obtener empresas con coordenadas: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @GetMapping("/por-fases-trato")
+    public ResponseEntity<List<EmpresaDTO>> listarEmpresasPorFasesTrato(
+            @RequestParam List<String> fases) {
+        try {
+            List<Empresa> empresas = empresaRepository.findEmpresasConTratosEnFases(fases);
+
+            List<EmpresaDTO> empresasDTO = empresas.stream()
+                    .map(empresa -> empresaService.convertToEmpresaDTO(empresa))
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(empresasDTO);
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }

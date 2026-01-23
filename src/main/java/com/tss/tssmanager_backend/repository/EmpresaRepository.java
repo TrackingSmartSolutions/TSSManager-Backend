@@ -58,4 +58,8 @@ ORDER BY e.nombre
     ORDER BY e.nombre
     """, nativeQuery = true)
     List<Empresa> findEmpresasConEquipos();
+
+    @Query("SELECT DISTINCT e FROM Empresa e WHERE e.id IN " +
+            "(SELECT t.empresaId FROM Trato t WHERE t.fase IN :fases)")
+    List<Empresa> findEmpresasConTratosEnFases(@Param("fases") List<String> fases);
 }
