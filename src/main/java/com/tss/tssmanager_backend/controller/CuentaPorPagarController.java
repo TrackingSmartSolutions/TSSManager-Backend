@@ -81,12 +81,14 @@ public class CuentaPorPagarController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarCuentaPorPagar(@PathVariable Integer id, @RequestParam Integer usuarioId) {
+    public ResponseEntity<Object> eliminarCuentaPorPagar(@PathVariable Integer id, @RequestParam Integer usuarioId) {
         try {
             cuentasPorPagarService.eliminarCuentaPorPagar(id, usuarioId);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }

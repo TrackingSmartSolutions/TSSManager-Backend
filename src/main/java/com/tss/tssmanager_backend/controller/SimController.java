@@ -355,4 +355,31 @@ public class SimController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    @DeleteMapping("/historial/{id}")
+    public ResponseEntity<Void> eliminarHistorialSaldo(@PathVariable Integer id) {
+        try {
+            simService.eliminarHistorialSaldo(id);
+            return ResponseEntity.ok().build();
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PutMapping("/historial/{id}")
+    public ResponseEntity<Map<String, Object>> actualizarHistorialSaldo(
+            @PathVariable Integer id,
+            @RequestParam(required = false) BigDecimal saldoActual,
+            @RequestParam(required = false) BigDecimal datos,
+            @RequestParam(required = false) String fecha) {
+        try {
+            Date fechaDate = fecha != null ? Date.valueOf(LocalDate.parse(fecha)) : null;
+            simService.actualizarHistorialSaldo(id, saldoActual, datos, fechaDate);
+            return ResponseEntity.ok(Map.of("message", "Historial actualizado correctamente"));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
 }

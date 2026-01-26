@@ -18,7 +18,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.sql.Date;
@@ -165,10 +166,13 @@ public class EquipoService {
 
         // Manejar cambio de estatus
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
-            equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
-            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
+            if (equipoDetails.getFechaActivacion() != null) {
+                equipo.setFechaActivacion(equipoDetails.getFechaActivacion());
+            } else if (equipo.getFechaActivacion() == null) {
+                equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
+            }
+            equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), equipo.getFechaActivacion()));
 
-            // Verificar si debe registrar cargo
             if (estatusAnterior != EstatusEquipoEnum.ACTIVO &&
                     equipo.getCreditosUsados() != null &&
                     equipo.getCreditosUsados() > 0 &&
@@ -178,7 +182,6 @@ public class EquipoService {
                 debeRegistrarCargo = true;
                 creditosARegistrar = equipo.getCreditosUsados();
             }
-// Verificar si cambió la cantidad de créditos (sin cambiar estatus)
             else if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO &&
                     estatusAnterior == EstatusEquipoEnum.ACTIVO &&
                     creditosAnteriores != null &&
@@ -200,11 +203,8 @@ public class EquipoService {
         if (equipo.getClienteDefault() != null) {
             System.out.println("Actualizando equipo con cliente default: " + equipo.getClienteDefault());
         }
-
-        // PRIMERO guardar el equipo actualizado
         Equipo equipoActualizado = repository.save(equipo);
 
-        // DESPUÉS registrar el cargo de CRÉDITOS si es necesario
         if (debeRegistrarCargo) {
             String subtipo = null;
             if (equipoActualizado.getPlataforma() != null && equipo.getPlataforma().getId().equals(2)) {
@@ -302,6 +302,7 @@ public class EquipoService {
             equipo.setEstatus(EstatusEquipoEnum.ACTIVO);
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
+            equipo.setUsuarioActivacion(obtenerUsuarioActual());
             repository.save(equipo);
         }
     }
@@ -321,6 +322,7 @@ public class EquipoService {
             }
 
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), fechaBase));
+            equipo.setUsuarioRenovacion(obtenerUsuarioActual());
             repository.save(equipo);
         }
     }
@@ -525,6 +527,7 @@ public class EquipoService {
             equipo.setFechaActivacion(Date.valueOf(LocalDate.now()));
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
             equipo.setCreditosUsados(creditosUsados != null ? creditosUsados : 0);
+            equipo.setUsuarioActivacion(obtenerUsuarioActual());
             repository.save(equipo);
 
             // Registrar cargo en créditos plataforma
@@ -565,6 +568,7 @@ public class EquipoService {
 
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), fechaBase));
             equipo.setCreditosUsados(creditosUsados != null ? creditosUsados : 0);
+            equipo.setUsuarioRenovacion(obtenerUsuarioActual());
             repository.save(equipo);
 
             if (creditosUsados != null && creditosUsados > 0 &&
@@ -618,5 +622,14 @@ public class EquipoService {
     public List<Equipo> obtenerEquiposProximosAExpirar() {
         logger.info("Obteniendo equipos próximos a expirar dentro de 30 días");
         return repository.findEquiposProximosAExpirar();
+    }
+
+    // Método auxiliar para obtener el nombre del usuario logueado
+    private String obtenerUsuarioActual() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated()) {
+            return authentication.getName();
+        }
+        return "SISTEMA";
     }
 }

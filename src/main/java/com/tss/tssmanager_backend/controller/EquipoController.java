@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -64,12 +65,14 @@ public class EquipoController {
     }
 
     @PostMapping("/{id}/activar")
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
     public ResponseEntity<Void> activarEquipo(@PathVariable Integer id) {
         service.activarEquipo(id);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{id}/renovar")
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
     public ResponseEntity<Void> renovarEquipo(@PathVariable Integer id) {
         service.renovarEquipo(id);
         return ResponseEntity.ok().build();
@@ -206,6 +209,14 @@ public class EquipoController {
             }
         } else {
             equipo.setCreditosUsados(0);
+        }
+        Object fechaActivacionObj = equipoMap.get("fechaActivacion");
+        if (fechaActivacionObj != null && !fechaActivacionObj.toString().isEmpty()) {
+            try {
+                equipo.setFechaActivacion(java.sql.Date.valueOf(fechaActivacionObj.toString()));
+            } catch (IllegalArgumentException e) {
+                equipo.setFechaActivacion(null);
+            }
         }
         return equipo;
     }

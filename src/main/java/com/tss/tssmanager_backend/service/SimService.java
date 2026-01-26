@@ -738,4 +738,25 @@ public class SimService {
             throw new EntityNotFoundException("No hay historial para aprobar.");
         }
     }
+
+    @Transactional
+    public void eliminarHistorialSaldo(Integer id) {
+        if (!historialSaldosSimRepository.existsById(id)) {
+            throw new EntityNotFoundException("Registro de historial no encontrado.");
+        }
+        historialSaldosSimRepository.deleteById(id);
+    }
+
+    @Transactional
+    public void actualizarHistorialSaldo(Integer id, BigDecimal saldoActual, BigDecimal datos, Date fecha) {
+        HistorialSaldosSim historial = historialSaldosSimRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Registro de historial no encontrado."));
+
+        if (saldoActual != null) historial.setSaldoActual(saldoActual);
+        if (datos != null) historial.setDatos(datos);
+        if (fecha != null) historial.setFecha(fecha);
+        historial.setRevisado(false);
+
+        historialSaldosSimRepository.save(historial);
+    }
 }

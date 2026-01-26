@@ -65,4 +65,10 @@ public class Equipo {
     @Column(name = "creditos_usados", nullable = false)
     private Integer creditosUsados = 0;
 
+    @Column(name = "usuario_activacion")
+    private String usuarioActivacion;
+
+    @Column(name = "usuario_renovacion")
+    private String usuarioRenovacion;
+
 }

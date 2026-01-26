@@ -866,6 +866,7 @@ public class NotificacionService {
     private String construirCuerpoAlertaExpiracion(List<Equipo> equipos) {
         LocalDate hoy = LocalDate.now(ZONE_ID);
 
+        // 1. Lógica del Resumen por Plataforma (Sin cambios mayores)
         Map<String, List<Equipo>> equiposPorPlataforma = equipos.stream()
                 .collect(Collectors.groupingBy(
                         e -> e.getPlataforma() != null ? e.getPlataforma().getNombrePlataforma() : "Sin Plataforma"
@@ -880,7 +881,6 @@ public class NotificacionService {
                     .map(e -> new BigDecimal(e.getCreditosUsados() != null ? e.getCreditosUsados() : 0))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-            // Obtener saldo actual de la plataforma
             BigDecimal saldoActual = obtenerSaldoPlataforma(plataforma);
             BigDecimal creditosFaltantes = saldoActual.subtract(creditosRequeridos);
 
@@ -904,25 +904,44 @@ public class NotificacionService {
             ));
         }
 
-        // Construir tabla detallada de equipos
         StringBuilder tablaEquipos = new StringBuilder();
+
         for (Equipo equipo : equipos) {
             long diasRestantes = ChronoUnit.DAYS.between(hoy, equipo.getFechaExpiracion().toLocalDate());
             String plataforma = equipo.getPlataforma() != null ? equipo.getPlataforma().getNombrePlataforma() : "N/A";
 
+            boolean esExpirado = diasRestantes < 0 || "EXPIRADO".equals(equipo.getEstatus().name());
+
+            String textoColumnaDias;
+            String estiloTextoDias;
+            String estiloFila;
+
+            if (esExpirado) {
+                textoColumnaDias = "EXPIRADO";
+                estiloTextoDias = "color: #d32f2f; font-weight: bold;";
+                estiloFila = "background-color: #fff5f5;";
+            } else {
+                textoColumnaDias = diasRestantes + " días";
+                estiloTextoDias = "color: #333; font-weight: bold;"; // Color normal
+                estiloFila = "";
+            }
+
             tablaEquipos.append(String.format(
-                    "<tr>" +
+                    "<tr style=\"%s\">" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%d</td>" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
-                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\"><strong>%d días</strong></td>" +
+                            // Aquí inyectamos el estilo y el texto condicional
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center; %s\">%s</td>" +
                             "</tr>",
+                    estiloFila,
                     equipo.getNombre(),
                     plataforma,
                     equipo.getCreditosUsados() != null ? equipo.getCreditosUsados() : 0,
                     equipo.getFechaExpiracion(),
-                    diasRestantes
+                    estiloTextoDias,
+                    textoColumnaDias
             ));
         }
 
@@ -983,7 +1002,7 @@ public class NotificacionService {
                 <h2 style="color: #e74c3c;">⚠️ Alerta de Expiración de Equipos</h2>
                 
                 <div class="alert-box">
-                    <strong>Atención:</strong> Existen %d equipos cuya licencia vencerá en los próximos 30 días.
+                    <strong>Atención:</strong> Existen %d equipos que requieren atención (Vencidos o próximos a vencer).
                     Por favor, revise la información a continuación y planifique las renovaciones necesarias.
                 </div>
 
@@ -1011,7 +1030,7 @@ public class NotificacionService {
                             <th>Plataforma</th>
                             <th style="text-align: center;">Créditos Requeridos</th>
                             <th style="text-align: center;">Fecha de Expiración</th>
-                            <th style="text-align: center;">Días Restantes</th>
+                            <th style="text-align: center;">Días Restantes / Estatus</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1402,44 +1421,49 @@ public class NotificacionService {
                     ? formatter.format(t.getFechaUltimaActividad())
                     : "Sin actividad registrada";
 
+            String etapa = formatearNombreFase(t.getFase());
+
             filasTabla.append(String.format(
                     "<tr>" +
-                            "<td style='padding: 8px; border-bottom: 1px solid #ddd;'>%s</td>" +
-                            "<td style='padding: 8px; border-bottom: 1px solid #ddd;'>%s</td>" +
-                            "<td style='padding: 8px; border-bottom: 1px solid #ddd; text-align: center;'>%s</td>" +
+                            "<td style='padding: 8px; border-bottom: 1px solid #ddd;'>%s</td>" + // Nombre Trato
+                            "<td style='padding: 8px; border-bottom: 1px solid #ddd;'>%s</td>" + // Cliente
+                            "<td style='padding: 8px; border-bottom: 1px solid #ddd;'>%s</td>" + // Etapa (NUEVO)
+                            "<td style='padding: 8px; border-bottom: 1px solid #ddd; text-align: center;'>%s</td>" + // Fecha
                             "</tr>",
                     t.getNombre(),
                     nombreCliente,
+                    etapa,
                     fechaUltima
             ));
         }
 
         return String.format("""
-            <html>
-            <body style="font-family: Arial, sans-serif; color: #333;">
-                <h2 style="color: #d32f2f;">⚠️ Tratos Desatendidos</h2>
-                <p>Hola <strong>%s</strong>,</p>
-                <p>Los siguientes tratos no han tenido una interacción programada en los últimos 7 días. Te recomendamos revisarlos para no perder el seguimiento.</p>
-                
-                <table style="width: 100%%; border-collapse: collapse; margin-top: 15px;">
-                    <thead>
-                        <tr style="background-color: #f5f5f5;">
-                            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Nombre del Trato</th>
-                            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Cliente / Contacto</th>
-                            <th style="padding: 10px; text-align: center; border-bottom: 2px solid #ddd;">Última Actividad</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        %s
-                    </tbody>
-                </table>
-                
-                <p style="margin-top: 20px; font-size: 12px; color: #777;">
-                    Este es un reporte automático generado por TSS Manager.
-                </p>
-            </body>
-            </html>
-            """, nombreUsuario, filasTabla.toString());
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333;">
+        <h2 style="color: #d32f2f;">⚠️ Tratos Desatendidos</h2>
+        <p>Hola <strong>%s</strong>,</p>
+        <p>Los siguientes tratos no han tenido una interacción programada en los últimos 7 días. Te recomendamos revisarlos para no perder el seguimiento.</p>
+        
+        <table style="width: 100%%; border-collapse: collapse; margin-top: 15px;">
+            <thead>
+                <tr style="background-color: #f5f5f5;">
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Nombre del Trato</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Cliente / Contacto</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Etapa</th>
+                    <th style="padding: 10px; text-align: center; border-bottom: 2px solid #ddd;">Última Actividad</th>
+                </tr>
+            </thead>
+            <tbody>
+                %s
+            </tbody>
+        </table>
+        
+        <p style="margin-top: 20px; font-size: 12px; color: #777;">
+            Este es un reporte automático generado por TSS Manager.
+        </p>
+    </body>
+    </html>
+    """, nombreUsuario, filasTabla.toString());
     }
 
     private String formatearEstatus(String estatus) {
@@ -1482,6 +1506,23 @@ public class NotificacionService {
                 return "#1976d2";
             default:
                 return "#666666";
+        }
+    }
+
+    private String formatearNombreFase(String fase) {
+        if (fase == null) return "Sin etapa";
+        switch (fase) {
+            case "CLASIFICACION": return "Clasificación";
+            case "PRIMER_CONTACTO": return "Primer Contacto";
+            case "ENVIO_DE_INFORMACION": return "Envío de Información";
+            case "REUNION": return "Reunión";
+            case "COTIZACION_PROPUESTA_PRACTICA": return "Cotización";
+            case "NEGOCIACION_REVISION": return "Negociación";
+            case "CERRADO_GANADO": return "Cerrado Ganado";
+            case "RESPUESTA_POR_CORREO": return "Respuesta por Correo";
+            case "INTERES_FUTURO": return "Interés Futuro";
+            case "CERRADO_PERDIDO": return "Cerrado Perdido";
+            default: return fase;
         }
     }
 }

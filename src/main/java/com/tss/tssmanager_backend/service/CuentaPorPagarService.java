@@ -272,10 +272,13 @@ public class CuentaPorPagarService {
 
     @Transactional
     public void eliminarCuentaPorPagar(Integer id, Integer usuarioId) {
-        if (!cuentasPorPagarRepository.existsById(id)) {
-            throw new IllegalArgumentException("La cuenta por pagar con ID " + id + " no existe.");
+        CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("La cuenta por pagar con ID " + id + " no existe."));
+
+        if (cuenta.getSim() != null) {
+            throw new IllegalStateException("No es posible eliminar esta cuenta porque está vinculada a la SIM número: " + cuenta.getSim().getNumero());
         }
-        cuentasPorPagarRepository.deleteById(id);
+        cuentasPorPagarRepository.delete(cuenta);
     }
 
     private void actualizarVigenciaSim(CuentaPorPagar cuenta, LocalDate fechaPago) {
