@@ -385,7 +385,7 @@ public class CuentaPorCobrarService {
         transaccion.setTipo(TipoTransaccionEnum.INGRESO);
         transaccion.setCategoria(categoria);
         transaccion.setCuenta(cuentaTransaccion);
-        transaccion.setMonto(cuenta.getCantidadCobrar());
+        transaccion.setMonto(montoPago);
         transaccion.setEsquema(EsquemaTransaccionEnum.UNICA);
         transaccion.setFechaPago(fechaPago);
         transaccion.setFormaPago(cuenta.getSolicitudesFacturasNotas().get(0).getFormaPago());
