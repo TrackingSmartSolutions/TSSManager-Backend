@@ -169,8 +169,9 @@ public class NotificacionService {
     public void generarNotificacionTratoGanado(Trato trato) {
         if ("CERRADO_GANADO".equals(trato.getFase())) {
             List<Usuario> admins = usuarioRepository.findByRolAndEstatusOrderById(RolUsuarioEnum.ADMINISTRADOR, EstatusUsuarioEnum.ACTIVO);
-            String mensaje = String.format("Trato ganado: %s, Empresa: %s",
+            String mensaje = String.format("Trato ganado: %s (ID: %d), Empresa: %s",
                     trato.getNombre(),
+                    trato.getId(),
                     trato.getEmpresaId() != null ?
                             empresaRepository.findById(trato.getEmpresaId()).map(Empresa::getNombre).orElse("Sin empresa") :
                             "Sin empresa");
@@ -190,8 +191,9 @@ public class NotificacionService {
         try {
             Usuario admin = usuarioRepository.findById(adminId)
                     .orElseThrow(() -> new RuntimeException("Administrador no encontrado"));
-            String mensaje = String.format("Escalamiento de trato: %s, Empresa: %s, Fase: %s",
+            String mensaje = String.format("Escalamiento de trato: %s (ID: %d), Empresa: %s, Fase: %s",
                     trato.getNombre(),
+                    trato.getId(),
                     trato.getEmpresaId() != null ?
                             empresaRepository.findById(trato.getEmpresaId()).map(Empresa::getNombre).orElse("Sin empresa") :
                             "Sin empresa",
