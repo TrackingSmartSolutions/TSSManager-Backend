@@ -1,5 +1,6 @@
 package com.tss.tssmanager_backend.controller;
 
+import com.tss.tssmanager_backend.dto.EmailRecordDTO;
 import com.tss.tssmanager_backend.entity.Adjunto;
 import com.tss.tssmanager_backend.entity.EmailRecord;
 import com.tss.tssmanager_backend.entity.PlantillaCorreo;
@@ -20,6 +21,15 @@ public class EmailController {
 
     private final EmailService emailService;
     private final PlantillaCorreoService plantillaService;
+
+    @GetMapping
+    public ResponseEntity<List<EmailRecordDTO>> obtenerTodosLosCorreos() {
+        List<EmailRecordDTO> correos = emailService.obtenerTodosLosCorreos();
+        if (correos.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(correos);
+    }
 
     public EmailController(EmailService emailService, PlantillaCorreoService plantillaService) {
         this.emailService = emailService;

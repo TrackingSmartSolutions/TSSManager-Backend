@@ -265,7 +265,8 @@ public class CuentaPorCobrarService {
                 BigDecimal isrFederal = BigDecimal.ZERO;
 
                 if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
-                        solicitud.getCliente().getRegimenFiscal().equals("601")) {
+                        (solicitud.getCliente().getRegimenFiscal().equals("601") ||
+                                solicitud.getCliente().getRegimenFiscal().equals("627"))) {
 
                     String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
                     boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");

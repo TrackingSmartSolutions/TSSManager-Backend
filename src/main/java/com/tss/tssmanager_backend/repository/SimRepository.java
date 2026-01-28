@@ -93,7 +93,6 @@ public interface SimRepository extends JpaRepository<Sim, Integer> {
     @Query(value = "SELECT COUNT(*) FROM \"SIMs\"", nativeQuery = true)
     Long countAllSims();
 
-
     @Query(value = """
     SELECT DISTINCT s.grupo 
     FROM "SIMs" s 

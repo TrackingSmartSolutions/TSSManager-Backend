@@ -6,6 +6,7 @@ import com.resend.Resend;
 import com.resend.core.exception.ResendException;
 import com.resend.services.emails.model.CreateEmailOptions;
 import com.resend.services.emails.model.CreateEmailResponse;
+import com.tss.tssmanager_backend.dto.EmailRecordDTO;
 import com.tss.tssmanager_backend.entity.EmailDestinarioEstado;
 import com.tss.tssmanager_backend.entity.EmailRecord;
 import com.tss.tssmanager_backend.repository.EmailDestinarioEstadoRepository;
@@ -14,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +46,38 @@ public class EmailService {
     private final String fromEmail;
     private final EmailRecordRepository emailRecordRepository;
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
+
+    @Transactional(readOnly = true)
+    public List<EmailRecordDTO> obtenerTodosLosCorreos() {
+        List<EmailRecord> correos = emailRecordRepository.findAll(Sort.by(Sort.Direction.DESC, "fechaEnvio"));
+
+        return correos.stream().map(correo -> {
+            EmailRecordDTO dto = new EmailRecordDTO();
+            dto.setId(correo.getId());
+            dto.setDestinatario(correo.getDestinatario());
+            dto.setAsunto(correo.getAsunto());
+            dto.setCuerpo(correo.getCuerpo());
+            dto.setFechaEnvio(correo.getFechaEnvio());
+            dto.setTratoId(correo.getTratoId());
+            dto.setExito(correo.isExito());
+            dto.setStatus(correo.getStatus());
+
+            List<EmailRecordDTO.EstadoDestinatarioDTO> estados = correo.getEstadosDestinatarios()
+                    .stream()
+                    .map(estado -> {
+                        EmailRecordDTO.EstadoDestinatarioDTO estadoDTO = new EmailRecordDTO.EstadoDestinatarioDTO();
+                        estadoDTO.setId(estado.getId());
+                        estadoDTO.setEmail(estado.getEmail());
+                        estadoDTO.setStatus(estado.getStatus());
+                        estadoDTO.setUpdatedAt(estado.getUpdatedAt());
+                        return estadoDTO;
+                    })
+                    .toList();
+            dto.setEstadosDestinatarios(estados);
+
+            return dto;
+        }).toList();
+    }
 
     public EmailService(@Value("${resend.api.key}") String resendApiKey,
                         @Value("${resend.email.from}") String fromEmail,

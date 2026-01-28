@@ -2,10 +2,7 @@ package com.tss.tssmanager_backend.service;
 
 import com.tss.tssmanager_backend.dto.SimDTO;
 import com.tss.tssmanager_backend.entity.*;
-import com.tss.tssmanager_backend.enums.EsquemaTransaccionEnum;
-import com.tss.tssmanager_backend.enums.PrincipalSimEnum;
-import com.tss.tssmanager_backend.enums.ResponsableSimEnum;
-import com.tss.tssmanager_backend.enums.TarifaSimEnum;
+import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.repository.*;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -159,6 +156,43 @@ public class SimService {
         }
 
         Sim savedSim = simRepository.save(sim);
+
+        if (savedSim.getResponsable() == ResponsableSimEnum.TSS &&
+                savedSim.getTarifa() == TarifaSimEnum.POR_SEGUNDO &&
+                savedSim.getEquipo() != null) {
+
+            Equipo equipoVinculado = savedSim.getEquipo();
+            BigDecimal recargaActual = savedSim.getRecarga();
+
+            if (equipoVinculado.getEstatus() == EstatusEquipoEnum.EXPIRADO) {
+                if (recargaActual == null || recargaActual.compareTo(new BigDecimal("10.00")) != 0) {
+                    System.out.println("SIM vinculada a equipo EXPIRADO. Forzando recarga a $10.00");
+                    // Guardamos directamente para evitar recursión infinita o llamadas circulares complejas
+                    savedSim.setRecarga(new BigDecimal("10.00"));
+                    savedSim = simRepository.save(savedSim);
+
+                    try {
+                        cuentaPorPagarRepository.actualizarMontoPorSim(savedSim.getId(), new BigDecimal("10.00"));
+                    } catch (Exception e) {
+                        System.err.println("Error actualizando cuentas por pagar: " + e.getMessage());
+                    }
+                }
+            }
+            else if (equipoVinculado.getEstatus() == EstatusEquipoEnum.ACTIVO ||
+                    equipoVinculado.getEstatus() == EstatusEquipoEnum.INACTIVO) {
+                if (recargaActual == null || recargaActual.compareTo(new BigDecimal("50.00")) != 0) {
+                    System.out.println("SIM vinculada a equipo NO EXPIRADO. Forzando recarga a $50.00");
+                    savedSim.setRecarga(new BigDecimal("50.00"));
+                    savedSim = simRepository.save(savedSim);
+
+                    try {
+                        cuentaPorPagarRepository.actualizarMontoPorSim(savedSim.getId(), new BigDecimal("50.00"));
+                    } catch (Exception e) {
+                        System.err.println("Error actualizando cuentas por pagar: " + e.getMessage());
+                    }
+                }
+            }
+        }
 
         if (savedSim.getEquipo() != null) {
             System.out.println("Vinculando equipo con IMEI: " + savedSim.getEquipo().getImei() + " a SIM con ID: " + savedSim.getId());
@@ -758,5 +792,38 @@ public class SimService {
         historial.setRevisado(false);
 
         historialSaldosSimRepository.save(historial);
+    }
+
+    @Transactional
+    public void actualizarRecargaPorCambioEstatusEquipo(Integer simId, BigDecimal nuevaRecarga) {
+        System.out.println("Actualizando recarga de SIM " + simId + " a " + nuevaRecarga);
+
+        Sim sim = simRepository.findById(simId)
+                .orElseThrow(() -> new EntityNotFoundException("SIM no encontrada"));
+
+        BigDecimal recargaAnterior = sim.getRecarga();
+        sim.setRecarga(nuevaRecarga);
+        simRepository.save(sim);
+
+        System.out.println("Recarga actualizada de " + recargaAnterior + " a " + nuevaRecarga);
+
+        List<CuentaPorPagar> cuentasPendientes = cuentaPorPagarRepository.findCuentasPendientesPorSim(simId);
+
+        for (CuentaPorPagar cuenta : cuentasPendientes) {
+            BigDecimal montoPagado = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+            BigDecimal nuevoSaldo = nuevaRecarga.subtract(montoPagado);
+
+            cuenta.setMonto(nuevaRecarga);
+            cuenta.setSaldoPendiente(nuevoSaldo);
+
+            if (nuevoSaldo.compareTo(BigDecimal.ZERO) <= 0) {
+                cuenta.setEstatus("Pagado");
+            } else if (montoPagado.compareTo(BigDecimal.ZERO) > 0) {
+                cuenta.setEstatus("En proceso");
+            }
+
+            cuentaPorPagarRepository.save(cuenta);
+            System.out.println("Cuenta " + cuenta.getId() + " actualizada: Monto=" + nuevaRecarga + ", Saldo=" + nuevoSaldo);
+        }
     }
 }

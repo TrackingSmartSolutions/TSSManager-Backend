@@ -155,7 +155,8 @@ public class SolicitudFacturaNotaService {
         put("616", "Sin obligaciones fiscales");
         put("621", "Incorporación Fiscal");
         put("622", "Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras");
-        put("626", "Régimen Simplificado de Confianza (RESICO)");
+        put("626", "Régimen Simplificado de Confianza (Persona Fisica)");
+        put("627", "Régimen Simplificado de Confianza (Persona Moral)");
         put("629", "De los Regímenes Fiscales Preferentes y de las Empresas Multinacionales");
         put("630", "Enajenación de acciones en bolsa de valores");
         put("601", "General de Ley Personas Morales");
@@ -253,8 +254,10 @@ public class SolicitudFacturaNotaService {
         BigDecimal isrEstatal = BigDecimal.ZERO;
         BigDecimal isrFederal = BigDecimal.ZERO;
 
+        // Aplicar retenciones si el régimen es 601 o 627
         if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
-                solicitud.getCliente().getRegimenFiscal().equals("601")) {
+                (solicitud.getCliente().getRegimenFiscal().equals("601") ||
+                        solicitud.getCliente().getRegimenFiscal().equals("627"))) {
 
             String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
             boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
@@ -327,8 +330,10 @@ public class SolicitudFacturaNotaService {
             BigDecimal isrEstatal = BigDecimal.ZERO;
             BigDecimal isrFederal = BigDecimal.ZERO;
 
+            // Aplicar retenciones si el régimen es 601 o 627
             if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
-                    existingSolicitud.getCliente().getRegimenFiscal().equals("601")) {
+                    (existingSolicitud.getCliente().getRegimenFiscal().equals("601") ||
+                            existingSolicitud.getCliente().getRegimenFiscal().equals("627"))) {
 
                 String domicilioFiscal = existingSolicitud.getCliente().getDomicilioFiscal().toLowerCase();
                 boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
@@ -744,7 +749,7 @@ public class SolicitudFacturaNotaService {
         return "Razón Social|" + cliente.getRazonSocial() + "|" +
                 "Domicilio Fiscal|" + cliente.getDomicilioFiscal() + "|" +
                 "RFC|" + cliente.getRfc() + "|" +
-                "Régimen Fiscal|" + cliente.getRegimenFiscal() + " - " + regimenFiscalDescripcion + "|" +
+                "Régimen Fiscal|" + regimenFiscalDescripcion + "|" +
                 "Método de Pago|" + METODOS_PAGO.getOrDefault(solicitud.getMetodoPago(), solicitud.getMetodoPago()) + "|" +
                 "Forma de Pago|" + FORMAS_PAGO.getOrDefault(solicitud.getFormaPago(), solicitud.getFormaPago()) + "|" +
                 "Uso CFDI|" + USOS_CFDI.getOrDefault(solicitud.getUsoCfdi(), solicitud.getUsoCfdi()) + "|" +
@@ -842,38 +847,38 @@ public class SolicitudFacturaNotaService {
             addTotalRow(rightTable, "IVA (16%):", formatCurrency(solicitud.getIva()),
                     normalFont, boldFont, Color.WHITE);
 
-            if (cotizacion != null) {
-                // Recalcular ISR basado en el subtotal de la solicitud, no de la cotización
-                if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
-                        solicitud.getCliente().getRegimenFiscal().equals("601")) {
+            // Aplicar retenciones si el régimen es 601 o 627
+            if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
+                    (solicitud.getCliente().getRegimenFiscal().equals("601") ||
+                            solicitud.getCliente().getRegimenFiscal().equals("627"))) {
 
-                    String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
-                    boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
-                    boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
+                String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
+                boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
+                boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
 
-                    if (cpMatch || hasGuanajuato) {
-                        BigDecimal isrEstatal = solicitud.getSubtotal().multiply(new BigDecimal("0.02"));
-                        BigDecimal isrFederal = solicitud.getSubtotal().multiply(new BigDecimal("0.0125"));
+                if (cpMatch || hasGuanajuato) {
+                    BigDecimal isrEstatal = solicitud.getSubtotal().multiply(new BigDecimal("0.02"));
+                    BigDecimal isrFederal = solicitud.getSubtotal().multiply(new BigDecimal("0.0125"));
 
-                        if (isrFederal.compareTo(BigDecimal.ZERO) > 0) {
-                            addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(isrFederal),
-                                    normalFont, boldFont, Color.WHITE);
-                        }
+                    if (isrFederal.compareTo(BigDecimal.ZERO) > 0) {
+                        addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(isrFederal),
+                                normalFont, boldFont, Color.WHITE);
+                    }
 
-                        if (isrEstatal.compareTo(BigDecimal.ZERO) > 0) {
-                            addTotalRow(rightTable, "ISR Estatal (2%):", formatCurrency(isrEstatal),
-                                    normalFont, boldFont, Color.WHITE);
-                        }
-                    } else if (!cpMatch && !hasGuanajuato) {
-                        BigDecimal isrFederal = solicitud.getSubtotal().multiply(new BigDecimal("0.0125"));
+                    if (isrEstatal.compareTo(BigDecimal.ZERO) > 0) {
+                        addTotalRow(rightTable, "ISR Estatal (2%):", formatCurrency(isrEstatal),
+                                normalFont, boldFont, Color.WHITE);
+                    }
+                } else if (!cpMatch && !hasGuanajuato) {
+                    BigDecimal isrFederal = solicitud.getSubtotal().multiply(new BigDecimal("0.0125"));
 
-                        if (isrFederal.compareTo(BigDecimal.ZERO) > 0) {
-                            addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(isrFederal),
-                                    normalFont, boldFont, Color.WHITE);
-                        }
+                    if (isrFederal.compareTo(BigDecimal.ZERO) > 0) {
+                        addTotalRow(rightTable, "ISR Federal (1.25%):", formatCurrency(isrFederal),
+                                normalFont, boldFont, Color.WHITE);
                     }
                 }
             }
+
 
             PdfPCell separatorCell = new PdfPCell();
             separatorCell.setColspan(2);
@@ -1151,9 +1156,10 @@ public class SolicitudFacturaNotaService {
         BigDecimal isrEstatal = BigDecimal.ZERO;
         BigDecimal isrFederal = BigDecimal.ZERO;
 
-        // Aplicar retenciones si corresponde
+        // Aplicar retenciones si el régimen es 601 o 627
         if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
-                solicitud.getCliente().getRegimenFiscal().equals("601")) {
+                (solicitud.getCliente().getRegimenFiscal().equals("601") ||
+                        solicitud.getCliente().getRegimenFiscal().equals("627"))) {
 
             String domicilioFiscal = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
             boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");

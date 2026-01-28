@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -45,4 +46,11 @@ public interface CuentaPorPagarRepository extends JpaRepository<CuentaPorPagar, 
     @Modifying
     @Query("DELETE FROM CuentaPorPagar c WHERE c.sim.id = :simId AND c.estatus = 'Pendiente'")
     void deleteBySimIdAndEstatusPendiente(@Param("simId") Integer simId);
+
+    @Modifying
+    @Query("UPDATE CuentaPorPagar c SET c.monto = :nuevoMonto, c.saldoPendiente = :nuevoMonto - COALESCE(c.montoPagado, 0) WHERE c.sim.id = :simId AND c.estatus IN ('Pendiente', 'En proceso')")
+    void actualizarMontoPorSim(@Param("simId") Integer simId, @Param("nuevoMonto") BigDecimal nuevoMonto);
+
+    @Query("SELECT c FROM CuentaPorPagar c WHERE c.sim.id = :simId AND c.estatus IN ('Pendiente', 'En proceso')")
+    List<CuentaPorPagar> findCuentasPendientesPorSim(@Param("simId") Integer simId);
 }

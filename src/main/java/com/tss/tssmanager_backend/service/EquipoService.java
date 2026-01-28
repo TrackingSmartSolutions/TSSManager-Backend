@@ -4,6 +4,7 @@ import com.tss.tssmanager_backend.dto.EquiposEstatusDTO;
 import com.tss.tssmanager_backend.entity.Equipo;
 import com.tss.tssmanager_backend.entity.EquiposEstatus;
 import com.tss.tssmanager_backend.entity.Plataforma;
+import com.tss.tssmanager_backend.entity.Sim;
 import com.tss.tssmanager_backend.enums.*;
 import com.tss.tssmanager_backend.repository.EquipoRepository;
 import com.tss.tssmanager_backend.repository.EquiposEstatusRepository;
@@ -16,6 +17,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.Authentication;
@@ -40,6 +42,9 @@ public class EquipoService {
 
     @Autowired
     private CreditoPlataformaService creditoPlataformaService;
+
+    @Autowired
+    private SimService simService;
 
     private static final Logger logger = LoggerFactory.getLogger(EquipoService.class);
     public Iterable<Equipo> obtenerTodosLosEquipos() {
@@ -142,29 +147,29 @@ public class EquipoService {
     public Equipo actualizarEquipo(Integer id, Equipo equipoDetails) {
         Equipo equipo = obtenerEquipo(id);
 
-        // Guardar el estado anterior
         EstatusEquipoEnum estatusAnterior = equipo.getEstatus();
         Integer creditosAnteriores = equipo.getCreditosUsados();
+        Sim simAnterior = equipo.getSimReferenciada();
 
-        // Preparar flag para cargo
         boolean debeRegistrarCargo = false;
         Integer creditosARegistrar = 0;
 
-        // Actualizar todos los campos
+        // Actualizar campos básicos
         equipo.setImei(equipoDetails.getImei());
         equipo.setNombre(equipoDetails.getNombre());
         equipo.setModeloId(equipoDetails.getModeloId());
         equipo.setClienteId(equipoDetails.getClienteId());
         equipo.setProveedorId(equipoDetails.getProveedorId());
         equipo.setTipo(equipoDetails.getTipo());
+
         equipo.setEstatus(equipoDetails.getEstatus());
+
         equipo.setTipoActivacion(equipoDetails.getTipoActivacion());
         equipo.setPlataforma(equipoDetails.getPlataforma());
         equipo.setSimReferenciada(equipoDetails.getSimReferenciada());
         equipo.setClienteDefault(equipoDetails.getClienteDefault());
         equipo.setCreditosUsados(equipoDetails.getCreditosUsados() != null ? equipoDetails.getCreditosUsados() : 0);
 
-        // Manejar cambio de estatus
         if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
             if (equipoDetails.getFechaActivacion() != null) {
                 equipo.setFechaActivacion(equipoDetails.getFechaActivacion());
@@ -173,37 +178,72 @@ public class EquipoService {
             }
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), equipo.getFechaActivacion()));
 
-            if (estatusAnterior != EstatusEquipoEnum.ACTIVO &&
-                    equipo.getCreditosUsados() != null &&
-                    equipo.getCreditosUsados() > 0 &&
-                    (creditosAnteriores == null || creditosAnteriores == 0) &&
-                    (equipo.getPlataforma() != null &&
-                            (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
-                debeRegistrarCargo = true;
-                creditosARegistrar = equipo.getCreditosUsados();
+            if (isExpired(equipo)) {
+                equipo.setEstatus(EstatusEquipoEnum.EXPIRADO);
             }
-            else if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO &&
-                    estatusAnterior == EstatusEquipoEnum.ACTIVO &&
-                    creditosAnteriores != null &&
-                    equipo.getCreditosUsados() != null &&
-                    !equipo.getCreditosUsados().equals(creditosAnteriores) &&
-                    equipo.getCreditosUsados() > creditosAnteriores &&
-                    (equipo.getPlataforma() != null &&
-                            (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
-                debeRegistrarCargo = true;
-                creditosARegistrar = equipo.getCreditosUsados() - creditosAnteriores;
+
+            if (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
+                if (estatusAnterior != EstatusEquipoEnum.ACTIVO &&
+                        equipo.getCreditosUsados() != null &&
+                        equipo.getCreditosUsados() > 0 &&
+                        (creditosAnteriores == null || creditosAnteriores == 0) &&
+                        (equipo.getPlataforma() != null &&
+                                (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
+                    debeRegistrarCargo = true;
+                    creditosARegistrar = equipo.getCreditosUsados();
+                } else if (estatusAnterior == EstatusEquipoEnum.ACTIVO &&
+                        creditosAnteriores != null &&
+                        equipo.getCreditosUsados() != null &&
+                        !equipo.getCreditosUsados().equals(creditosAnteriores) &&
+                        equipo.getCreditosUsados() > creditosAnteriores &&
+                        (equipo.getPlataforma() != null &&
+                                (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
+                    debeRegistrarCargo = true;
+                    creditosARegistrar = equipo.getCreditosUsados() - creditosAnteriores;
+                }
             }
         } else if (equipo.getEstatus() == EstatusEquipoEnum.INACTIVO) {
             equipo.setFechaActivacion(null);
             equipo.setFechaExpiracion(null);
-        } else if (isExpired(equipo)) {
-            equipo.setEstatus(EstatusEquipoEnum.EXPIRADO);
+        } else if (equipo.getEstatus() == EstatusEquipoEnum.EXPIRADO) {
         }
 
         if (equipo.getClienteDefault() != null) {
             System.out.println("Actualizando equipo con cliente default: " + equipo.getClienteDefault());
         }
+
         Equipo equipoActualizado = repository.save(equipo);
+
+        Sim simParaValidar = equipoActualizado.getSimReferenciada();
+        if (simParaValidar == null) {
+            simParaValidar = simAnterior;
+        }
+
+        if (simParaValidar != null && simParaValidar.getTarifa() == TarifaSimEnum.POR_SEGUNDO) {
+            BigDecimal recargaActual = simParaValidar.getRecarga();
+            BigDecimal recargaDiez = new BigDecimal("10.00");
+            BigDecimal recargaCincuenta = new BigDecimal("50.00");
+
+            if (equipoActualizado.getEstatus() == EstatusEquipoEnum.EXPIRADO) {
+                if (recargaActual == null || recargaActual.compareTo(recargaDiez) != 0) {
+                    try {
+                        simService.actualizarRecargaPorCambioEstatusEquipo(simParaValidar.getId(), recargaDiez);
+                    } catch (Exception e) {
+                        System.err.println("Error actualizando SIM: " + e.getMessage());
+                    }
+                }
+            }
+            else if (equipoActualizado.getEstatus() == EstatusEquipoEnum.ACTIVO ||
+                    equipoActualizado.getEstatus() == EstatusEquipoEnum.INACTIVO) {
+                if (recargaActual == null || recargaActual.compareTo(recargaCincuenta) != 0) {
+                    try {
+                        simService.actualizarRecargaPorCambioEstatusEquipo(simParaValidar.getId(), recargaCincuenta);
+                    } catch (Exception e) {
+                        System.err.println("Error actualizando SIM: " + e.getMessage());
+                    }
+                }
+            }
+        }
 
         if (debeRegistrarCargo) {
             String subtipo = null;
@@ -304,6 +344,14 @@ public class EquipoService {
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), null));
             equipo.setUsuarioActivacion(obtenerUsuarioActual());
             repository.save(equipo);
+
+            if (equipo.getSimReferenciada() != null &&
+                    equipo.getSimReferenciada().getTarifa() == TarifaSimEnum.POR_SEGUNDO) {
+                simService.actualizarRecargaPorCambioEstatusEquipo(
+                        equipo.getSimReferenciada().getId(),
+                        new BigDecimal("50.00")
+                );
+            }
         }
     }
 
@@ -324,6 +372,13 @@ public class EquipoService {
             equipo.setFechaExpiracion(calculateExpirationDate(equipo.getTipoActivacion(), fechaBase));
             equipo.setUsuarioRenovacion(obtenerUsuarioActual());
             repository.save(equipo);
+            if (equipo.getSimReferenciada() != null &&
+                    equipo.getSimReferenciada().getTarifa() == TarifaSimEnum.POR_SEGUNDO) {
+                simService.actualizarRecargaPorCambioEstatusEquipo(
+                        equipo.getSimReferenciada().getId(),
+                        new BigDecimal("50.00")
+                );
+            }
         }
     }
 
@@ -340,8 +395,7 @@ public class EquipoService {
     private boolean isExpired(Equipo equipo) {
         if (equipo.getFechaExpiracion() == null) return false;
         LocalDate today = LocalDate.now();
-        return equipo.getFechaExpiracion().toLocalDate().isBefore(today) &&
-                (equipo.getEstatus() == EstatusEquipoEnum.ACTIVO || equipo.getEstatus() == EstatusEquipoEnum.EXPIRADO);
+        return equipo.getFechaExpiracion().toLocalDate().isBefore(today);
     }
 
     public void checkExpiredEquipos() {
@@ -571,6 +625,14 @@ public class EquipoService {
             equipo.setUsuarioRenovacion(obtenerUsuarioActual());
             repository.save(equipo);
 
+            if (equipo.getSimReferenciada() != null &&
+                    equipo.getSimReferenciada().getTarifa() == TarifaSimEnum.POR_SEGUNDO) {
+                simService.actualizarRecargaPorCambioEstatusEquipo(
+                        equipo.getSimReferenciada().getId(),
+                        new BigDecimal("50.00")
+                );
+            }
+
             if (creditosUsados != null && creditosUsados > 0 &&
                     (equipo.getPlataforma() != null &&
                             (equipo.getPlataforma().getId().equals(1) || equipo.getPlataforma().getId().equals(2)))) {
@@ -603,9 +665,11 @@ public class EquipoService {
         }
     }
 
+    @Scheduled(cron = "0 0 0 * * ?")
+    @Transactional
     @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
     public void actualizarEquiposExpirados() {
-        List<Equipo> equipos = repository.findAll();
+        List<Equipo> equipos = repository.findAllWithSims();
         LocalDate today = LocalDate.now();
 
         for (Equipo equipo : equipos) {
@@ -614,6 +678,26 @@ public class EquipoService {
                     equipo.getEstatus() == EstatusEquipoEnum.ACTIVO) {
                 equipo.setEstatus(EstatusEquipoEnum.EXPIRADO);
                 repository.save(equipo);
+            }
+        }
+
+        for (Equipo equipo : equipos) {
+            if (equipo.getEstatus() == EstatusEquipoEnum.EXPIRADO &&
+                    equipo.getSimReferenciada() != null &&
+                    equipo.getSimReferenciada().getTarifa() == TarifaSimEnum.POR_SEGUNDO) {
+
+                BigDecimal precioActual = equipo.getSimReferenciada().getRecarga();
+
+                if (precioActual == null || precioActual.compareTo(new BigDecimal("10.00")) != 0) {
+                    try {
+                        simService.actualizarRecargaPorCambioEstatusEquipo(
+                                equipo.getSimReferenciada().getId(),
+                                new BigDecimal("10.00")
+                        );
+                    } catch (Exception e) {
+                        System.err.println("Error al actualizar recarga de SIM: " + e.getMessage());
+                    }
+                }
             }
         }
     }
