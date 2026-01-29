@@ -1,6 +1,9 @@
 package com.tss.tssmanager_backend.dto;
 import com.tss.tssmanager_backend.entity.Factura;
+import com.tss.tssmanager_backend.entity.ConceptoCuenta;
 import lombok.Data;
+
+import java.util.stream.Collectors;
 
 @Data
 public class FacturaDTO {
@@ -36,7 +39,10 @@ public class FacturaDTO {
                 dto.setEmisorNombre(factura.getSolicitud().getEmisor().getNombre());
             }
             if (factura.getSolicitud().getCuentaPorCobrar() != null) {
-                dto.setConceptos(factura.getSolicitud().getCuentaPorCobrar().getConceptos());
+                String conceptosTexto = factura.getSolicitud().getCuentaPorCobrar().getConceptos().stream()
+                        .map(ConceptoCuenta::getConcepto)
+                        .collect(Collectors.joining(", "));
+                dto.setConceptos(conceptosTexto);
             }
         }
         return dto;

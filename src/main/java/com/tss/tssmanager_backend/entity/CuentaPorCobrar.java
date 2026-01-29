@@ -52,8 +52,8 @@ public class CuentaPorCobrar {
     @Column(name = "no_equipos", nullable = false)
     private Integer noEquipos;
 
-    @Column(name = "conceptos", nullable = false, columnDefinition = "TEXT")
-    private String conceptos;
+    @OneToMany(mappedBy = "cuentaPorCobrar", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ConceptoCuenta> conceptos;
 
     @Column(name = "comprobante_pago_url", length = 255)
     private String comprobantePagoUrl;

@@ -1155,7 +1155,7 @@ public class NotificacionService {
 
         cuentas.forEach(c -> {
             if (c.getConceptos() != null) {
-                c.getConceptos().length();
+                c.getConceptos().size();
             }
             if (c.getCliente() != null) {
                 c.getCliente().getNombre();
@@ -1203,7 +1203,7 @@ public class NotificacionService {
 
         filtradas.forEach(c -> {
             if (c.getConceptos() != null) {
-                c.getConceptos().length();
+                c.getConceptos().size();
             }
             if (c.getCliente() != null) {
                 c.getCliente().getNombre();

@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.service;
 
 import com.cloudinary.Cloudinary;
 import com.tss.tssmanager_backend.config.CloudinaryConfig;
+import com.tss.tssmanager_backend.dto.ConceptoCuentaDTO;
 import com.tss.tssmanager_backend.dto.CuentaPorCobrarDTO;
 import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.*;
@@ -50,121 +51,91 @@ public class CuentaPorCobrarService {
 
     @Transactional
     public List<CuentaPorCobrarDTO> crearCuentasPorCobrarFromCotizacion(Integer cotizacionId, EsquemaCobroEnum esquema, List<String> conceptosSeleccionados, Integer numeroPagos, LocalDate fechaInicial) {
-        logger.info("Creando cuentas por cobrar desde cotización ID: {} with esquema: {} and numeroPagos: {}", cotizacionId, esquema, numeroPagos);
+        logger.info("Creando cuentas por cobrar desde cotización ID: {} con esquema: {} y numeroPagos: {}", cotizacionId, esquema, numeroPagos);
 
         Cotizacion cotizacion = cotizacionRepository.findById(cotizacionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada"));
 
         Empresa cliente = cotizacion.getCliente();
         List<CuentaPorCobrar> cuentas = new ArrayList<>();
-
-        logger.info("Conceptos seleccionados: {}", conceptosSeleccionados);
-        logger.info("Conceptos disponibles en cotización:");
-        cotizacion.getUnidades().forEach(u ->
-                logger.info("  - Concepto: '{}', Importe: {}", u.getConcepto(), u.getImporteTotal())
-        );
-
-        BigDecimal totalUnidadesSeleccionadas = cotizacion.getUnidades().stream()
-                .filter(u -> conceptosSeleccionados.stream()
-                        .anyMatch(conceptoSeleccionado ->
-                                u.getConcepto().trim().equalsIgnoreCase(conceptoSeleccionado.trim())
-                        ))
-                .map(UnidadCotizacion::getImporteTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        logger.info("Total de unidades seleccionadas calculado: {}", totalUnidadesSeleccionadas);
-
-        if (totalUnidadesSeleccionadas.compareTo(BigDecimal.ZERO) == 0) {
-            logger.warn("¡ADVERTENCIA! El total de unidades seleccionadas es 0. Esto causará cuentas con cantidadCobrar = 0");
-            logger.warn("Verificar que los conceptos seleccionados coincidan con los de la cotización");
-        }
-
         LocalDate fechaBase = fechaInicial;
 
+        // Obtener el total de equipos reales de la cotización original
         int totalEquiposReal = cotizacion.getUnidades().stream()
-                .filter(u -> "Equipos".equals(u.getUnidad()))
+                .filter(u -> "Equipos".equalsIgnoreCase(u.getUnidad()))
                 .mapToInt(UnidadCotizacion::getCantidad)
                 .sum();
 
-        if (esquema == EsquemaCobroEnum.ANUAL) {
-            int totalCuentas = numeroPagos + 1;
+        // Determinar cuántas cuentas crear
+        int totalIteraciones = 1;
+        if (esquema == EsquemaCobroEnum.ANUAL) totalIteraciones = numeroPagos + 1;
+        else if (esquema == EsquemaCobroEnum.MENSUAL) totalIteraciones = numeroPagos;
 
-            for (int i = 0; i < totalCuentas; i++) {
-                CuentaPorCobrar cuenta = new CuentaPorCobrar();
-                cuenta.setCliente(cliente);
-                cuenta.setCotizacion(cotizacion);
-                cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
-                cuenta.setEsquema(esquema);
-
-                if (i == 0) {
-                    cuenta.setNoEquipos(totalEquiposReal);
-                    cuenta.setFechaPago(fechaBase);
-                    cuenta.setCantidadCobrar(cotizacion.getSubtotal());
-
-                    String todosLosConceptos = cotizacion.getUnidades().stream()
-                            .map(UnidadCotizacion::getConcepto)
-                            .distinct()
-                            .collect(Collectors.joining(", "));
-                    cuenta.setConceptos(todosLosConceptos);
-
-                    logger.info("Cuenta {} (Inicial) - Equipos registrados: {}", i + 1, totalEquiposReal);
-                } else {
-                    cuenta.setNoEquipos(0);
-                    cuenta.setFechaPago(fechaBase.plusYears(i));
-                    cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
-                    cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
-
-                    logger.info("Cuenta {} (Parcialidad) - Equipos registrados: 0", i + 1);
-                }
-
-                cuenta.setFolio(generateFolio(cliente.getNombre(), i + 1));
-                cuentas.add(cuenta);
-            }
-
-        } else if (esquema == EsquemaCobroEnum.MENSUAL) {
-            logger.info("Monto por cuenta mensual: {}", totalUnidadesSeleccionadas);
-
-            for (int i = 0; i < numeroPagos; i++) {
-                CuentaPorCobrar cuenta = new CuentaPorCobrar();
-                cuenta.setCliente(cliente);
-                cuenta.setCotizacion(cotizacion);
-                cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
-                cuenta.setEsquema(esquema);
-                cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
-
-                if (i == 0) {
-                    cuenta.setNoEquipos(totalEquiposReal);
-                    cuenta.setFechaPago(fechaBase);
-                } else {
-                    cuenta.setNoEquipos(0);
-                    cuenta.setFechaPago(fechaBase.plusMonths(i));
-                }
-
-                cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
-                cuenta.setFolio(generateFolio(cliente.getNombre(), i + 1));
-                cuentas.add(cuenta);
-            }
-
-        } else if (esquema == EsquemaCobroEnum.DISTRIBUIDOR || esquema == EsquemaCobroEnum.VITALICIA) {
+        for (int i = 0; i < totalIteraciones; i++) {
             CuentaPorCobrar cuenta = new CuentaPorCobrar();
             cuenta.setCliente(cliente);
             cuenta.setCotizacion(cotizacion);
             cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
             cuenta.setEsquema(esquema);
+            cuenta.setMontoPagado(BigDecimal.ZERO);
 
-            cuenta.setNoEquipos(totalEquiposReal);
+            // Manejo de fechas según esquema
+            if (i == 0) {
+                cuenta.setFechaPago(fechaBase);
+                cuenta.setNoEquipos(totalEquiposReal);
+            } else {
+                cuenta.setFechaPago(esquema == EsquemaCobroEnum.ANUAL ? fechaBase.plusYears(i) : fechaBase.plusMonths(i));
+                cuenta.setNoEquipos(0);
+            }
 
-            cuenta.setConceptos(String.join(", ", conceptosSeleccionados));
-            cuenta.setFechaPago(fechaBase);
-            cuenta.setCantidadCobrar(totalUnidadesSeleccionadas);
-            cuenta.setFolio(generateFolio(cliente.getNombre(), 1));
+            List<ConceptoCuenta> listaConceptos = new ArrayList<>();
+
+            if ((esquema == EsquemaCobroEnum.ANUAL && i == 0)) {
+                listaConceptos = cotizacion.getUnidades().stream().map(u -> {
+                    ConceptoCuenta c = new ConceptoCuenta();
+                    c.setCuentaPorCobrar(cuenta);
+                    c.setCantidad(u.getCantidad());
+                    c.setUnidad(u.getUnidad());
+                    c.setConcepto(u.getConcepto());
+                    c.setPrecioUnitario(u.getPrecioUnitario());
+                    c.setDescuento(u.getDescuento());
+                    c.setImporteTotal(u.getImporteTotal());
+                    return c;
+                }).collect(Collectors.toList());
+                cuenta.setCantidadCobrar(cotizacion.getSubtotal());
+            } else {
+                // Caso parcialidades o esquemas filtrados: Solo conceptos seleccionados
+                listaConceptos = cotizacion.getUnidades().stream()
+                        .filter(u -> conceptosSeleccionados.stream().anyMatch(sel -> sel.trim().equalsIgnoreCase(u.getConcepto().trim())))
+                        .map(u -> {
+                            ConceptoCuenta c = new ConceptoCuenta();
+                            c.setCuentaPorCobrar(cuenta);
+                            c.setCantidad(u.getCantidad());
+                            c.setUnidad(u.getUnidad());
+                            c.setConcepto(u.getConcepto());
+                            c.setPrecioUnitario(u.getPrecioUnitario());
+                            c.setDescuento(u.getDescuento());
+                            c.setImporteTotal(u.getImporteTotal());
+                            return c;
+                        }).collect(Collectors.toList());
+
+                BigDecimal totalCuenta = listaConceptos.stream()
+                        .map(ConceptoCuenta::getImporteTotal)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                cuenta.setCantidadCobrar(totalCuenta);
+            }
+
+            cuenta.setConceptos(listaConceptos);
+            cuenta.setSaldoPendiente(cuenta.getCantidadCobrar());
+            cuenta.setFolio(generateFolio(cliente.getNombre(), i + 1));
             cuentas.add(cuenta);
         }
 
         List<CuentaPorCobrar> savedCuentas = cuentaPorCobrarRepository.saveAll(cuentas);
         cotizacion.setEstatus(EstatusCotizacionEnum.ACEPTADA);
         cotizacionRepository.save(cotizacion);
-        return savedCuentas.stream().map(this::convertToDTOWithFolio).collect(Collectors.toList());
+
+        return savedCuentas.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
 
     private CuentaPorCobrarDTO convertToDTOWithFolio(CuentaPorCobrar cuenta) {
@@ -178,9 +149,28 @@ public class CuentaPorCobrarService {
         dto.setEsquema(cuenta.getEsquema());
         dto.setNoEquipos(cuenta.getNoEquipos());
         dto.setCantidadCobrar(cuenta.getCantidadCobrar());
-        dto.setConceptos(cuenta.getConceptos() != null ? List.of(cuenta.getConceptos().split(", ")) : List.of());
         dto.setComprobantePagoUrl(cuenta.getComprobantePagoUrl());
         dto.setFechaRealPago(cuenta.getFechaRealPago());
+        dto.setMontoPagado(cuenta.getMontoPagado());
+        dto.setSaldoPendiente(cuenta.getSaldoPendiente());
+        dto.setCotizacionId(cuenta.getCotizacion() != null ? cuenta.getCotizacion().getId() : null);
+
+        // Mapeo de la lista de objetos detallados
+        if (cuenta.getConceptos() != null) {
+            dto.setConceptos(cuenta.getConceptos().stream().map(c -> {
+                ConceptoCuentaDTO cDto = new ConceptoCuentaDTO();
+                cDto.setId(c.getId());
+                cDto.setCantidad(c.getCantidad());
+                cDto.setUnidad(c.getUnidad());
+                cDto.setConcepto(c.getConcepto());
+                cDto.setPrecioUnitario(c.getPrecioUnitario());
+                cDto.setDescuento(c.getDescuento());
+                cDto.setImporteTotal(c.getImporteTotal());
+                return cDto;
+            }).collect(Collectors.toList()));
+        }
+
+        dto.setNumeroEquipos(calcularEquiposEnCuentaOptimized(cuenta));
         return dto;
     }
 
@@ -190,72 +180,99 @@ public class CuentaPorCobrarService {
 
     private CuentaPorCobrar convertToEntity(CuentaPorCobrarDTO dto, int numeroPago) {
         CuentaPorCobrar cuenta = new CuentaPorCobrar();
+
+        // Generar folio temporal único
         String folioTemporal = String.format("TEMP-%s-%d-%d",
                 dto.getClienteNombre().toUpperCase(),
                 numeroPago,
                 System.currentTimeMillis() % 1000);
+
         cuenta.setFolio(folioTemporal);
         cuenta.setFechaPago(dto.getFechaPago());
+
         cuenta.setCliente(empresaRepository.findByNombreContainingIgnoreCase(dto.getClienteNombre())
-                .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado")));
+                .stream()
+                .filter(e -> e.getNombre().equalsIgnoreCase(dto.getClienteNombre()))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado")));
+
         cuenta.setEstatus(dto.getEstatus());
         cuenta.setEsquema(dto.getEsquema());
         cuenta.setNoEquipos(dto.getNoEquipos());
-        cuenta.setConceptos(dto.getConceptos() != null ? String.join(", ", dto.getConceptos()) : "");
+        cuenta.setCantidadCobrar(dto.getCantidadCobrar());
+        cuenta.setMontoPagado(BigDecimal.ZERO);
+        cuenta.setSaldoPendiente(dto.getCantidadCobrar());
+
+        // Convertir la lista de DTOs a Entidades relacionadas
+        if (dto.getConceptos() != null) {
+            List<ConceptoCuenta> conceptos = dto.getConceptos().stream().map(cDto -> {
+                ConceptoCuenta c = new ConceptoCuenta();
+                c.setCuentaPorCobrar(cuenta); // Vinculación bidireccional
+                c.setCantidad(cDto.getCantidad());
+                c.setUnidad(cDto.getUnidad());
+                c.setConcepto(cDto.getConcepto());
+                c.setPrecioUnitario(cDto.getPrecioUnitario());
+                c.setImporteTotal(cDto.getImporteTotal());
+                return c;
+            }).collect(Collectors.toList());
+            cuenta.setConceptos(conceptos);
+        }
+
         return cuenta;
     }
 
     @Transactional
     public CuentaPorCobrarDTO actualizarCuentaPorCobrar(Integer id, CuentaPorCobrarDTO dto) {
-        logger.info("Actualizando cuenta por cobrar con ID: {}", id);
-
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada con id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("No encontrada"));
 
-        // Verificar que no esté pagada
         if (cuenta.getEstatus() == EstatusPagoEnum.PAGADO) {
-            throw new IllegalStateException("No se puede editar una cuenta que ya está pagada");
+            throw new IllegalStateException("No se puede editar una cuenta pagada");
         }
 
-        if (dto.getFechaPago() != null) {
-            cuenta.setFechaPago(dto.getFechaPago());
+        cuenta.setFechaPago(dto.getFechaPago());
 
-            // Recalcular el estatus basado en la nueva fecha
-            LocalDate hoy = LocalDate.now();
-            if (cuenta.getEstatus() != EstatusPagoEnum.PAGADO && cuenta.getEstatus() != EstatusPagoEnum.EN_PROCESO) {
-                if (dto.getFechaPago().isBefore(hoy)) {
-                    cuenta.setEstatus(EstatusPagoEnum.VENCIDA);
-                } else {
-                    cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
-                }
-            }
+        if (cuenta.getConceptos() != null) {
+            cuenta.getConceptos().clear();
+        } else {
+            cuenta.setConceptos(new ArrayList<>());
         }
 
-        boolean montoModificado = false;
-        if (dto.getCantidadCobrar() != null && !dto.getCantidadCobrar().equals(cuenta.getCantidadCobrar())) {
-            cuenta.setCantidadCobrar(dto.getCantidadCobrar());
-            montoModificado = true;
-        }
+        List<ConceptoCuenta> nuevosConceptos = dto.getConceptos().stream().map(c -> {
+            ConceptoCuenta concepto = new ConceptoCuenta();
+            concepto.setCuentaPorCobrar(cuenta);
+            concepto.setCantidad(c.getCantidad());
+            concepto.setUnidad(c.getUnidad());
+            concepto.setConcepto(c.getConcepto());
+            concepto.setPrecioUnitario(c.getPrecioUnitario());
+            concepto.setDescuento(c.getDescuento() != null ? c.getDescuento() : BigDecimal.ZERO);
+            concepto.setImporteTotal(c.getImporteTotal());
+            return concepto;
+        }).collect(Collectors.toList());
 
-        if (dto.getConceptos() != null && !dto.getConceptos().isEmpty()) {
-            cuenta.setConceptos(String.join(", ", dto.getConceptos()));
-        }
+        cuenta.getConceptos().addAll(nuevosConceptos);
 
-        CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
+        BigDecimal nuevoTotal = nuevosConceptos.stream()
+                .map(ConceptoCuenta::getImporteTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        if (montoModificado) {
-            actualizarSolicitudesVinculadas(savedCuenta);
-        }
+        cuenta.setCantidadCobrar(nuevoTotal);
+        CuentaPorCobrar saved = cuentaPorCobrarRepository.save(cuenta);
+        actualizarSolicitudesVinculadas(saved);
 
-        return convertToDTO(savedCuenta);
+        return convertToDTO(saved);
     }
 
     private void actualizarSolicitudesVinculadas(CuentaPorCobrar cuenta) {
         if (cuenta.getSolicitudesFacturasNotas() != null && !cuenta.getSolicitudesFacturasNotas().isEmpty()) {
+
+            String nuevosConceptosTexto = cuenta.getConceptos().stream()
+                    .map(ConceptoCuenta::getConcepto)
+                    .collect(Collectors.joining(", "));
             for (SolicitudFacturaNota solicitud : cuenta.getSolicitudesFacturasNotas()) {
                 // Actualizar el subtotal con el nuevo monto de la cuenta
                 solicitud.setSubtotal(cuenta.getCantidadCobrar());
-
+                solicitud.setConceptosSeleccionados(nuevosConceptosTexto);
                 // Recalcular IVA (16%)
                 BigDecimal iva = cuenta.getCantidadCobrar().multiply(new BigDecimal("0.16"));
                 solicitud.setIva(iva);
@@ -441,47 +458,45 @@ public class CuentaPorCobrarService {
         dto.setId(cuenta.getId());
         dto.setFolio(cuenta.getFolio());
         dto.setFechaPago(cuenta.getFechaPago());
-
         dto.setClienteNombre(cuenta.getCliente().getNombre());
         dto.setClienteId(cuenta.getCliente().getId());
-
         dto.setEstatus(cuenta.getEstatus());
         dto.setEsquema(cuenta.getEsquema());
         dto.setNoEquipos(cuenta.getNoEquipos());
         dto.setCantidadCobrar(cuenta.getCantidadCobrar());
-        dto.setConceptos(cuenta.getConceptos() != null ? List.of(cuenta.getConceptos().split(", ")) : List.of());
         dto.setComprobantePagoUrl(cuenta.getComprobantePagoUrl());
         dto.setFechaRealPago(cuenta.getFechaRealPago());
         dto.setMontoPagado(cuenta.getMontoPagado());
         dto.setSaldoPendiente(cuenta.getSaldoPendiente());
-        dto.setCotizacionId(cuenta.getCotizacion().getId());
+        dto.setCotizacionId(cuenta.getCotizacion() != null ? cuenta.getCotizacion().getId() : null);
 
-        int equiposEnEstaCuenta = calcularEquiposEnCuentaOptimized(cuenta);
-        dto.setNumeroEquipos(equiposEnEstaCuenta);
+        // Mapeo de conceptos detallados
+        if (cuenta.getConceptos() != null) {
+            dto.setConceptos(cuenta.getConceptos().stream().map(c -> {
+                ConceptoCuentaDTO cDto = new ConceptoCuentaDTO();
+                cDto.setId(c.getId());
+                cDto.setCantidad(c.getCantidad());
+                cDto.setUnidad(c.getUnidad());
+                cDto.setConcepto(c.getConcepto());
+                cDto.setPrecioUnitario(c.getPrecioUnitario());
+                cDto.setDescuento(c.getDescuento());
+                cDto.setImporteTotal(c.getImporteTotal());
+                return cDto;
+            }).collect(Collectors.toList()));
+        }
 
+        dto.setNumeroEquipos(calcularEquiposEnCuentaOptimized(cuenta));
         return dto;
     }
 
     private int calcularEquiposEnCuentaOptimized(CuentaPorCobrar cuenta) {
-        if (cuenta.getCotizacion() == null || cuenta.getConceptos() == null) {
+        if (cuenta.getConceptos() == null || cuenta.getConceptos().isEmpty()) {
             return 0;
         }
-
-        List<String> conceptosCuenta = List.of(cuenta.getConceptos().split(", "));
-
-        if (cuenta.getCotizacion().getUnidades() != null && !cuenta.getCotizacion().getUnidades().isEmpty()) {
-            return cuenta.getCotizacion().getUnidades().stream()
-                    .filter(unidad ->
-                            "Equipos".equals(unidad.getUnidad()) &&
-                                    conceptosCuenta.stream().anyMatch(concepto ->
-                                            concepto.trim().equalsIgnoreCase(unidad.getConcepto().trim())
-                                    )
-                    )
-                    .mapToInt(UnidadCotizacion::getCantidad)
-                    .sum();
-        }
-
-        return 0;
+        return cuenta.getConceptos().stream()
+                .filter(c -> "Equipos".equalsIgnoreCase(c.getUnidad()))
+                .mapToInt(ConceptoCuenta::getCantidad)
+                .sum();
     }
 
     private CuentaPorCobrarDTO convertToDTO(CuentaPorCobrar cuenta) {
@@ -495,14 +510,33 @@ public class CuentaPorCobrarService {
         dto.setEsquema(cuenta.getEsquema());
         dto.setNoEquipos(cuenta.getNoEquipos());
         dto.setCantidadCobrar(cuenta.getCantidadCobrar());
-        dto.setConceptos(cuenta.getConceptos() != null ? List.of(cuenta.getConceptos().split(", ")) : List.of());
         dto.setComprobantePagoUrl(cuenta.getComprobantePagoUrl());
         dto.setFechaRealPago(cuenta.getFechaRealPago());
         dto.setMontoPagado(cuenta.getMontoPagado());
         dto.setSaldoPendiente(cuenta.getSaldoPendiente());
         dto.setCotizacionId(cuenta.getCotizacion() != null ? cuenta.getCotizacion().getId() : null);
         int equiposEnEstaCuenta = calcularEquiposEnCuenta(cuenta);
-        dto.setNumeroEquipos(equiposEnEstaCuenta);
+        int equipos = 0;
+        if (cuenta.getConceptos() != null) {
+            equipos = cuenta.getConceptos().stream()
+                    .filter(c -> "Equipos".equalsIgnoreCase(c.getUnidad()))
+                    .mapToInt(ConceptoCuenta::getCantidad)
+                    .sum();
+        }
+        dto.setNumeroEquipos(equipos);
+        if (cuenta.getConceptos() != null) {
+            dto.setConceptos(cuenta.getConceptos().stream().map(c -> {
+                ConceptoCuentaDTO cDto = new ConceptoCuentaDTO();
+                cDto.setId(c.getId());
+                cDto.setCantidad(c.getCantidad());
+                cDto.setUnidad(c.getUnidad());
+                cDto.setConcepto(c.getConcepto());
+                cDto.setPrecioUnitario(c.getPrecioUnitario());
+                cDto.setDescuento(c.getDescuento());
+                cDto.setImporteTotal(c.getImporteTotal());
+                return cDto;
+            }).collect(Collectors.toList()));
+        }
         return dto;
     }
 
@@ -515,7 +549,21 @@ public class CuentaPorCobrarService {
         cuenta.setEsquema(dto.getEsquema());
         cuenta.setNoEquipos(dto.getNoEquipos());
         cuenta.setCantidadCobrar(dto.getCantidadCobrar());
-        cuenta.setConceptos(dto.getConceptos() != null ? String.join(", ", dto.getConceptos()) : "");
+
+        if (dto.getConceptos() != null) {
+            List<ConceptoCuenta> conceptos = dto.getConceptos().stream().map(cDto -> {
+                ConceptoCuenta c = new ConceptoCuenta();
+                c.setCuentaPorCobrar(cuenta);
+                c.setCantidad(cDto.getCantidad());
+                c.setUnidad(cDto.getUnidad());
+                c.setConcepto(cDto.getConcepto());
+                c.setPrecioUnitario(cDto.getPrecioUnitario());
+                c.setImporteTotal(cDto.getImporteTotal());
+                return c;
+            }).collect(Collectors.toList());
+            cuenta.setConceptos(conceptos);
+        }
+
         return cuenta;
     }
 
@@ -570,19 +618,10 @@ public class CuentaPorCobrarService {
     }
 
     private int calcularEquiposEnCuenta(CuentaPorCobrar cuenta) {
-        if (cuenta.getCotizacion() == null || cuenta.getConceptos() == null) {
-            return 0;
-        }
-        List<String> conceptosCuenta = List.of(cuenta.getConceptos().split(", "));
-
-        return cuenta.getCotizacion().getUnidades().stream()
-                .filter(unidad ->
-                        "Equipos".equals(unidad.getUnidad()) &&
-                                conceptosCuenta.stream().anyMatch(concepto ->
-                                        concepto.trim().equalsIgnoreCase(unidad.getConcepto().trim())
-                                )
-                )
-                .mapToInt(UnidadCotizacion::getCantidad)
+        if (cuenta.getConceptos() == null) return 0;
+        return cuenta.getConceptos().stream()
+                .filter(c -> "Equipos".equalsIgnoreCase(c.getUnidad()))
+                .mapToInt(ConceptoCuenta::getCantidad)
                 .sum();
     }
 

@@ -19,7 +19,7 @@ public class CuentaPorCobrarDTO {
     private BigDecimal cantidadCobrar;
     private EsquemaCobroEnum esquema;
     private Integer noEquipos;
-    private List<String> conceptos;
+    private List<ConceptoCuentaDTO> conceptos;
     private String comprobantePagoUrl;
     private LocalDate fechaRealPago;
     private Integer cotizacionId;

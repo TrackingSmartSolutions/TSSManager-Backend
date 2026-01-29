@@ -8,6 +8,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Data
 public class SolicitudFacturaNotaDTO {
@@ -57,8 +58,13 @@ public class SolicitudFacturaNotaDTO {
         // Asignar valores dinámicos de las entidades relacionadas
         if (solicitud.getCuentaPorCobrar() != null) {
             dto.setReceptor(solicitud.getCuentaPorCobrar().getCliente() != null ? solicitud.getCuentaPorCobrar().getCliente().getNombre() : "N/A");
-            dto.setConcepto(solicitud.getCuentaPorCobrar().getConceptos() != null ? solicitud.getCuentaPorCobrar().getConceptos() : "N/A");
-            dto.setFolio(solicitud.getCuentaPorCobrar().getFolio() != null ? solicitud.getCuentaPorCobrar().getFolio() : "N/A");
+            dto.setConcepto(
+                    solicitud.getCuentaPorCobrar().getConceptos() != null && !solicitud.getCuentaPorCobrar().getConceptos().isEmpty()
+                            ? solicitud.getCuentaPorCobrar().getConceptos().stream()
+                            .map(c -> c.getConcepto())
+                            .collect(Collectors.joining(", "))
+                            : "N/A"
+            );            dto.setFolio(solicitud.getCuentaPorCobrar().getFolio() != null ? solicitud.getCuentaPorCobrar().getFolio() : "N/A");
 
             dto.setEstatusCuentaPorCobrar(solicitud.getCuentaPorCobrar().getEstatus() != null
                     ? solicitud.getCuentaPorCobrar().getEstatus()
