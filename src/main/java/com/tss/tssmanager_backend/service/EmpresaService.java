@@ -7,8 +7,10 @@ import com.tss.tssmanager_backend.dto.PropietarioDTO;
 import com.tss.tssmanager_backend.dto.TelefonoDTO;
 import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
+import org.springframework.context.annotation.Lazy;
 import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
 import com.tss.tssmanager_backend.enums.RolContactoEnum;
+import com.tss.tssmanager_backend.enums.TipoDocumentoSolicitudEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.*;
 import org.slf4j.Logger;
@@ -21,7 +23,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -50,6 +54,13 @@ public class EmpresaService {
 
     @Autowired
     private SectorRepository sectorRepository;
+
+    @Autowired
+    private SolicitudFacturaNotaRepository solicitudRepository;
+
+    @Autowired
+    @Lazy
+    private CotizacionService cotizacionService;
 
     @Cacheable(value = "empresas", key = "#id")
     public Empresa findById(Integer id) {
@@ -230,8 +241,64 @@ public class EmpresaService {
 
         validateEmpresa(empresa);
         Empresa savedEmpresa = empresaRepository.save(empresa);
+        recalcularSolicitudesPorCambioFiscal(savedEmpresa);
         logger.info("Empresa con ID: {} editada exitosamente", id);
         return convertToEmpresaDTO(savedEmpresa);
+    }
+
+    private void recalcularSolicitudesPorCambioFiscal(Empresa cliente) {
+        try {
+            List<SolicitudFacturaNota> solicitudes = solicitudRepository.findByClienteId(cliente.getId());
+
+            if (solicitudes == null || solicitudes.isEmpty()) {
+                return;
+            }
+
+            logger.info("Recalculando impuestos para {} solicitudes del cliente {}", solicitudes.size(), cliente.getNombre());
+
+            for (SolicitudFacturaNota solicitud : solicitudes) {
+
+                BigDecimal subtotal = solicitud.getSubtotal();
+
+                BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
+                solicitud.setIva(iva);
+
+                BigDecimal isrEstatal = BigDecimal.ZERO;
+                BigDecimal isrFederal = BigDecimal.ZERO;
+
+                if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
+                        (cliente.getRegimenFiscal().equals("601") ||
+                                cliente.getRegimenFiscal().equals("627"))) {
+
+                    String domicilioFiscal = cliente.getDomicilioFiscal() != null ? cliente.getDomicilioFiscal().toLowerCase() : "";
+                    boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
+                    boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
+
+                    isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
+
+                    if (cpMatch || hasGuanajuato) {
+                        isrEstatal = subtotal.multiply(new BigDecimal("0.02"));
+                    }
+                }
+
+                BigDecimal total = subtotal.add(iva).subtract(isrEstatal).subtract(isrFederal);
+
+                solicitud.setTotal(total);
+
+                try {
+                    solicitud.setImporteLetra(cotizacionService.convertToLetter(total));
+                } catch (Exception e) {
+                    logger.error("Error al convertir numero a letra en recálculo: {}", e.getMessage());
+                }
+
+                solicitud.setFechaModificacion(LocalDateTime.now());
+            }
+
+           solicitudRepository.saveAll(solicitudes);
+
+        } catch (Exception e) {
+            logger.error("Error al recalcular solicitudes vinculadas: {}", e.getMessage());
+        }
     }
 
     @Transactional

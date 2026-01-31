@@ -22,4 +22,5 @@ public interface SolicitudFacturaNotaRepository extends JpaRepository<SolicitudF
     ORDER BY s.fechaEmision DESC
     """)
     List<SolicitudFacturaNota> findAllWithRelations();
+    List<SolicitudFacturaNota> findByClienteId(Integer clienteId);
 }

@@ -293,50 +293,48 @@ public class SolicitudFacturaNotaService {
     @Transactional
     public SolicitudFacturaNotaDTO actualizarSolicitud(Integer id, SolicitudFacturaNota solicitud) throws Exception {
         logger.info("Actualizando solicitud con ID: {}", id);
+
         SolicitudFacturaNota existingSolicitud = solicitudRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Solicitud no encontrada con id: " + id));
 
-        // Actualizar campos básicos
         existingSolicitud.setMetodoPago(solicitud.getMetodoPago());
         existingSolicitud.setFormaPago(solicitud.getFormaPago());
         existingSolicitud.setTipo(solicitud.getTipo());
         existingSolicitud.setClaveProductoServicio(solicitud.getClaveProductoServicio());
         existingSolicitud.setClaveUnidad(solicitud.getClaveUnidad());
-        existingSolicitud.setFechaEmision(Date.valueOf(DateUtils.nowInMexico().toLocalDate()));        existingSolicitud.setFechaModificacion(LocalDateTime.now());
         existingSolicitud.setUsoCfdi(solicitud.getUsoCfdi());
+        existingSolicitud.setFechaEmision(Date.valueOf(DateUtils.nowInMexico().toLocalDate()));
+        existingSolicitud.setFechaModificacion(LocalDateTime.now());
 
-        // Validar usoCfdi si el tipo es SOLICITUD_DE_FACTURA
         if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA) {
             if (solicitud.getUsoCfdi() == null || solicitud.getUsoCfdi().trim().isEmpty()) {
                 throw new IllegalArgumentException("El uso de CFDI es obligatorio para solicitudes de factura.");
             }
         }
 
-        // Actualizar relaciones basadas en IDs
         if (solicitud.getEmisor() != null && solicitud.getEmisor().getId() != null) {
             existingSolicitud.setEmisor(emisorRepository.findById(solicitud.getEmisor().getId())
                     .orElseThrow(() -> new ResourceNotFoundException("Emisor no encontrado")));
         }
-        if (solicitud.getCuentaPorCobrar() != null && solicitud.getCuentaPorCobrar().getId() != null) {
-            existingSolicitud.setCuentaPorCobrar(cuentaPorCobrarRepository.findById(solicitud.getCuentaPorCobrar().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada")));
-            if (solicitud.getCliente() == null || solicitud.getCliente().getId() == null) {
-                existingSolicitud.setCliente(existingSolicitud.getCuentaPorCobrar().getCliente());
-            }
+
+        if (solicitud.getCliente() != null && solicitud.getCliente().getId() != null) {
+            Empresa clienteActualizado = empresaRepository.findById(solicitud.getCliente().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado en la base de datos"));
+            existingSolicitud.setCliente(clienteActualizado);
         }
-        if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getId() != null) {
-            existingSolicitud.setCotizacion(cotizacionRepository.findById(solicitud.getCotizacion().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada")));
 
-            // Usar valores de la cuenta por cobrar actualizada
-            BigDecimal subtotal = existingSolicitud.getCuentaPorCobrar().getCantidadCobrar();
+        if (solicitud.getCuentaPorCobrar() != null && solicitud.getCuentaPorCobrar().getId() != null) {
+            CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(solicitud.getCuentaPorCobrar().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada"));
+            existingSolicitud.setCuentaPorCobrar(cuenta);
+
+            BigDecimal subtotal = cuenta.getCantidadCobrar();
             BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
-
             BigDecimal isrEstatal = BigDecimal.ZERO;
             BigDecimal isrFederal = BigDecimal.ZERO;
 
-            // Aplicar retenciones si el régimen es 601 o 627
-            if (solicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
+
+            if (existingSolicitud.getTipo() == TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA &&
                     (existingSolicitud.getCliente().getRegimenFiscal().equals("601") ||
                             existingSolicitud.getCliente().getRegimenFiscal().equals("627"))) {
 
@@ -344,11 +342,10 @@ public class SolicitudFacturaNotaService {
                 boolean hasGuanajuato = domicilioFiscal.contains("gto") || domicilioFiscal.contains("guanajuato");
                 boolean cpMatch = domicilioFiscal.matches(".*\\b(36|37|38)\\d{4}\\b.*");
 
+                isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
+
                 if (cpMatch || hasGuanajuato) {
                     isrEstatal = subtotal.multiply(new BigDecimal("0.02"));
-                    isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
-                } else if (!cpMatch && !hasGuanajuato) {
-                    isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
                 }
             }
 
@@ -358,15 +355,11 @@ public class SolicitudFacturaNotaService {
             existingSolicitud.setIva(iva);
             existingSolicitud.setTotal(total);
             existingSolicitud.setImporteLetra(cotizacionService.convertToLetter(total));
-        } else {
-            existingSolicitud.setSubtotal(BigDecimal.ZERO);
-            existingSolicitud.setIva(BigDecimal.ZERO);
-            existingSolicitud.setTotal(BigDecimal.ZERO);
-            existingSolicitud.setImporteLetra("");
-        }
-        if (solicitud.getCliente() != null && solicitud.getCliente().getId() != null) {
-            existingSolicitud.setCliente(empresaRepository.findById(solicitud.getCliente().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Cliente no encontrado")));
+
+            if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getId() != null) {
+                existingSolicitud.setCotizacion(cotizacionRepository.findById(solicitud.getCotizacion().getId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Cotización no encontrada")));
+            }
         }
 
         SolicitudFacturaNota savedSolicitud = solicitudRepository.save(existingSolicitud);
