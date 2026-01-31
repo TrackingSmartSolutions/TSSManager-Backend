@@ -646,62 +646,67 @@ public class SolicitudFacturaNotaService {
             conceptosTable.addCell(headerCell);
         }
 
-        CuentaPorCobrar cuentaReal = solicitud.getCuentaPorCobrar();
-        org.hibernate.Hibernate.initialize(cuentaReal.getConceptos());
-        List<ConceptoCuenta> conceptosAMostrar = cuentaReal.getConceptos();
+        String conceptosPersonalizados = solicitud.getConceptosPersonalizados();
 
-        boolean isEvenRow = false;
+        if (conceptosPersonalizados != null && !conceptosPersonalizados.trim().isEmpty()) {
+            addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio, conceptosPersonalizados);
+        } else {
+            CuentaPorCobrar cuentaReal = solicitud.getCuentaPorCobrar();
+            org.hibernate.Hibernate.initialize(cuentaReal.getConceptos());
+            List<ConceptoCuenta> conceptosAMostrar = cuentaReal.getConceptos();
 
-        if (conceptosAMostrar != null && !conceptosAMostrar.isEmpty()) {
-            for (ConceptoCuenta concepto : conceptosAMostrar) {
-                Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
+            boolean isEvenRow = false;
 
-                // Celda: Cantidad
-                conceptosTable.addCell(createStyledTableCell(
-                        String.valueOf(concepto.getCantidad()),
-                        Element.ALIGN_CENTER, normalFont, rowColor));
+            if (conceptosAMostrar != null && !conceptosAMostrar.isEmpty()) {
+                for (ConceptoCuenta concepto : conceptosAMostrar) {
+                    Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
-                // Celda: Unidad
-                conceptosTable.addCell(createStyledTableCell(
-                        concepto.getUnidad(),
-                        Element.ALIGN_CENTER, normalFont, rowColor));
+                    // Celda: Cantidad
+                    conceptosTable.addCell(createStyledTableCell(
+                            String.valueOf(concepto.getCantidad()),
+                            Element.ALIGN_CENTER, normalFont, rowColor));
 
-                // Celda: Concepto (Nombre del servicio/producto)
-                PdfPCell conceptoCell = new PdfPCell(new Phrase(concepto.getConcepto(), normalFont));
-                conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                conceptoCell.setPadding(8);
-                conceptoCell.setBackgroundColor(rowColor);
-                conceptoCell.setBorder(Rectangle.BOX);
-                conceptoCell.setBorderColor(grisMedio);
-                conceptoCell.setBorderWidth(0.5f);
-                conceptosTable.addCell(conceptoCell);
+                    // Celda: Unidad
+                    conceptosTable.addCell(createStyledTableCell(
+                            concepto.getUnidad(),
+                            Element.ALIGN_CENTER, normalFont, rowColor));
 
-                // Celda: Precio Unitario
-                conceptosTable.addCell(createStyledTableCell(
-                        formatCurrency(concepto.getPrecioUnitario()),
-                        Element.ALIGN_RIGHT, normalFont, rowColor));
+                    // Celda: Concepto
+                    PdfPCell conceptoCell = new PdfPCell(new Phrase(concepto.getConcepto(), normalFont));
+                    conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+                    conceptoCell.setPadding(8);
+                    conceptoCell.setBackgroundColor(rowColor);
+                    conceptoCell.setBorder(Rectangle.BOX);
+                    conceptoCell.setBorderColor(grisMedio);
+                    conceptoCell.setBorderWidth(0.5f);
+                    conceptosTable.addCell(conceptoCell);
 
-                // Celda: Descuento (Calculado en base al porcentaje guardado)
-                BigDecimal descPorcentaje = concepto.getDescuento() != null ? concepto.getDescuento() : BigDecimal.ZERO;
-                BigDecimal montoDescuentoTotal = concepto.getPrecioUnitario()
-                        .multiply(new BigDecimal(concepto.getCantidad()))
-                        .multiply(descPorcentaje.divide(new BigDecimal(100), 4, RoundingMode.HALF_UP));
+                    // Celda: Precio Unitario
+                    conceptosTable.addCell(createStyledTableCell(
+                            formatCurrency(concepto.getPrecioUnitario()),
+                            Element.ALIGN_RIGHT, normalFont, rowColor));
 
-                conceptosTable.addCell(createStyledTableCell(
-                        formatCurrency(montoDescuentoTotal),
-                        Element.ALIGN_RIGHT, normalFont, rowColor));
+                    // Celda: Descuento
+                    BigDecimal descPorcentaje = concepto.getDescuento() != null ? concepto.getDescuento() : BigDecimal.ZERO;
+                    BigDecimal montoDescuentoTotal = concepto.getPrecioUnitario()
+                            .multiply(new BigDecimal(concepto.getCantidad()))
+                            .multiply(descPorcentaje.divide(new BigDecimal(100), 4, RoundingMode.HALF_UP));
 
-                // Celda: Importe (Total del renglón)
-                conceptosTable.addCell(createStyledTableCell(
-                        formatCurrency(concepto.getImporteTotal()),
-                        Element.ALIGN_RIGHT, boldFont, rowColor));
+                    conceptosTable.addCell(createStyledTableCell(
+                            formatCurrency(montoDescuentoTotal),
+                            Element.ALIGN_RIGHT, normalFont, rowColor));
 
-                isEvenRow = !isEvenRow;
+                    // Celda: Importe
+                    conceptosTable.addCell(createStyledTableCell(
+                            formatCurrency(concepto.getImporteTotal()),
+                            Element.ALIGN_RIGHT, boldFont, rowColor));
+
+                    isEvenRow = !isEvenRow;
+                }
             }
         }
 
         document.add(conceptosTable);
-
         createTotalsSection(document, solicitud, solicitud.getCotizacion(), azulCorporativo, azulClaro, blancoHueso,
                 normalFont, boldFont, totalFont, headerTableFont, rojoDestacado);
 
@@ -1017,48 +1022,57 @@ public class SolicitudFacturaNotaService {
                                             String conceptosTexto) {
         if (conceptosTexto == null || conceptosTexto.trim().isEmpty()) return;
 
-        String[] conceptos = conceptosTexto.split(",\\s*");
-        logger.info("Procesando {} conceptos personalizados", conceptos.length);
+        String[] conceptosEditados = conceptosTexto.split(",\\s*");
+        logger.info("Procesando {} conceptos personalizados", conceptosEditados.length);
 
-        Map<String, UnidadCotizacion> unidadesOriginales = new HashMap<>();
-        if (solicitud.getCotizacion() != null && solicitud.getCotizacion().getUnidades() != null) {
-            for (UnidadCotizacion unidad : solicitud.getCotizacion().getUnidades()) {
-                String key = unidad.getConcepto().toLowerCase().trim();
-                unidadesOriginales.put(key, unidad);
-            }
+        List<ConceptoCuenta> poolUnidades = new ArrayList<>();
+        if (solicitud.getCuentaPorCobrar() != null && solicitud.getCuentaPorCobrar().getConceptos() != null) {
+            org.hibernate.Hibernate.initialize(solicitud.getCuentaPorCobrar().getConceptos());
+            poolUnidades.addAll(solicitud.getCuentaPorCobrar().getConceptos());
         }
 
         BigDecimal subtotalSolicitud = solicitud.getSubtotal();
         BigDecimal dineroAsignado = BigDecimal.ZERO;
-
         boolean isEvenRow = false;
 
-        for (int i = 0; i < conceptos.length; i++) {
-            String conceptoLimpio = conceptos[i].trim();
+        for (int i = 0; i < conceptosEditados.length; i++) {
+            String conceptoLimpio = conceptosEditados[i].trim();
             if (conceptoLimpio.isEmpty()) continue;
 
             Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
+            BigDecimal cantidad = BigDecimal.ONE;
+            String unidadMedida = "Servicio";
             BigDecimal precioUnitarioFinal = BigDecimal.ZERO;
             BigDecimal importeFinal = BigDecimal.ZERO;
             BigDecimal descuentoMonto = BigDecimal.ZERO;
-            BigDecimal cantidad = BigDecimal.ONE;
-            String unidadMedida = "Servicio";
 
-            UnidadCotizacion unidadMatch = unidadesOriginales.get(conceptoLimpio.toLowerCase());
+            ConceptoCuenta unidadMatch = null;
+            int matchIndex = -1;
+
+            for (int k = 0; k < poolUnidades.size(); k++) {
+                if (poolUnidades.get(k).getConcepto().trim().equalsIgnoreCase(conceptoLimpio)) {
+                    unidadMatch = poolUnidades.get(k);
+                    matchIndex = k;
+                    break;
+                }
+            }
 
             if (unidadMatch == null) {
-                for (Map.Entry<String, UnidadCotizacion> entry : unidadesOriginales.entrySet()) {
-                    String keyBD = entry.getKey();
-                    if (keyBD.contains(conceptoLimpio.toLowerCase()) || conceptoLimpio.toLowerCase().contains(keyBD)) {
-                        unidadMatch = entry.getValue();
+                for (int k = 0; k < poolUnidades.size(); k++) {
+                    String original = poolUnidades.get(k).getConcepto().toLowerCase();
+                    String editado = conceptoLimpio.toLowerCase();
+                    if (original.contains(editado) || editado.contains(original)) {
+                        unidadMatch = poolUnidades.get(k);
+                        matchIndex = k;
                         break;
                     }
                 }
             }
 
-            if (unidadMatch == null && conceptos.length == 1 && !unidadesOriginales.isEmpty()) {
-                unidadMatch = unidadesOriginales.values().iterator().next();
+            if (unidadMatch == null && !poolUnidades.isEmpty()) {
+                unidadMatch = poolUnidades.get(0);
+                matchIndex = 0;
             }
 
             if (unidadMatch != null) {
@@ -1067,7 +1081,6 @@ public class SolicitudFacturaNotaService {
                 precioUnitarioFinal = unidadMatch.getPrecioUnitario();
 
                 BigDecimal porcentajeDescuento = unidadMatch.getDescuento() != null ? unidadMatch.getDescuento() : BigDecimal.ZERO;
-
                 BigDecimal importeBruto = precioUnitarioFinal.multiply(cantidad);
 
                 if (porcentajeDescuento.compareTo(BigDecimal.ZERO) > 0) {
@@ -1075,12 +1088,9 @@ public class SolicitudFacturaNotaService {
                 }
 
                 importeFinal = unidadMatch.getImporteTotal();
-
+                poolUnidades.remove(matchIndex);
             } else {
-                if (conceptos.length == 1) {
-                    precioUnitarioFinal = subtotalSolicitud;
-                    importeFinal = subtotalSolicitud;
-                } else if (i == conceptos.length - 1) {
+                if (i == conceptosEditados.length - 1) {
                     BigDecimal restante = subtotalSolicitud.subtract(dineroAsignado);
                     if (restante.compareTo(BigDecimal.ZERO) > 0) {
                         precioUnitarioFinal = restante;
