@@ -438,9 +438,10 @@ public class CuentaPorCobrarService {
         return convertToDTO(savedCuenta);
     }
 
-    @Transactional(readOnly = true)
-    // Aceptamos el estatus como parámetro (puede ser null para traer todas)
+    @Transactional
     public List<CuentaPorCobrarDTO> listarCuentasPorCobrar(EstatusPagoEnum estatus) {
+        verificarYActualizarVencidas();
+
         logger.info("Listando cuentas por cobrar con estatus: {}", estatus);
 
         List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository.findByEstatusWithRelations(estatus);
@@ -452,6 +453,24 @@ public class CuentaPorCobrarService {
                 .map(cuenta -> convertToDTOOptimized(cuenta, vinculadasSet.contains(cuenta.getId())))
                 .collect(Collectors.toList());
     }
+
+    private void verificarYActualizarVencidas() {
+        LocalDate hoy = LocalDate.now();
+        List<CuentaPorCobrar> cuentasVencidas = cuentaPorCobrarRepository.findByFechaPagoBeforeAndEstatus(
+                hoy,
+                EstatusPagoEnum.PENDIENTE
+        );
+
+        if (!cuentasVencidas.isEmpty()) {
+            logger.info("Se detectaron {} cuentas vencidas. Actualizando estatus...", cuentasVencidas.size());
+
+            for (CuentaPorCobrar cuenta : cuentasVencidas) {
+                cuenta.setEstatus(EstatusPagoEnum.VENCIDA);
+            }
+            cuentaPorCobrarRepository.saveAll(cuentasVencidas);
+        }
+    }
+
 
     private CuentaPorCobrarDTO convertToDTOOptimized(CuentaPorCobrar cuenta, boolean isVinculada) {
         CuentaPorCobrarDTO dto = new CuentaPorCobrarDTO();

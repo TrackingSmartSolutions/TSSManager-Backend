@@ -642,63 +642,57 @@ public class SolicitudFacturaNotaService {
             conceptosTable.addCell(headerCell);
         }
 
-        String conceptosPersonalizados = solicitud.getConceptosPersonalizados();
+        CuentaPorCobrar cuentaReal = solicitud.getCuentaPorCobrar();
+        Hibernate.initialize(cuentaReal.getConceptos());
+        List<ConceptoCuenta> conceptosAMostrar = cuentaReal.getConceptos();
 
-        if (conceptosPersonalizados != null && !conceptosPersonalizados.trim().isEmpty()) {
-            addConceptosPersonalizados(conceptosTable, solicitud, blancoHueso, normalFont, boldFont, grisMedio, conceptosPersonalizados);
-        } else {
-            CuentaPorCobrar cuentaReal = solicitud.getCuentaPorCobrar();
-            org.hibernate.Hibernate.initialize(cuentaReal.getConceptos());
-            List<ConceptoCuenta> conceptosAMostrar = cuentaReal.getConceptos();
+        boolean isEvenRow = false;
 
-            boolean isEvenRow = false;
+        if (conceptosAMostrar != null && !conceptosAMostrar.isEmpty()) {
+            for (ConceptoCuenta concepto : conceptosAMostrar) {
+                Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
 
-            if (conceptosAMostrar != null && !conceptosAMostrar.isEmpty()) {
-                for (ConceptoCuenta concepto : conceptosAMostrar) {
-                    Color rowColor = isEvenRow ? blancoHueso : Color.WHITE;
+                // Celda: Cantidad
+                conceptosTable.addCell(createStyledTableCell(
+                        String.valueOf(concepto.getCantidad()),
+                        Element.ALIGN_CENTER, normalFont, rowColor));
 
-                    // Celda: Cantidad
-                    conceptosTable.addCell(createStyledTableCell(
-                            String.valueOf(concepto.getCantidad()),
-                            Element.ALIGN_CENTER, normalFont, rowColor));
+                // Celda: Unidad
+                conceptosTable.addCell(createStyledTableCell(
+                        concepto.getUnidad(),
+                        Element.ALIGN_CENTER, normalFont, rowColor));
 
-                    // Celda: Unidad
-                    conceptosTable.addCell(createStyledTableCell(
-                            concepto.getUnidad(),
-                            Element.ALIGN_CENTER, normalFont, rowColor));
+                // Celda: Concepto
+                PdfPCell conceptoCell = new PdfPCell(new Phrase(concepto.getConcepto(), normalFont));
+                conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+                conceptoCell.setPadding(8);
+                conceptoCell.setBackgroundColor(rowColor);
+                conceptoCell.setBorder(Rectangle.BOX);
+                conceptoCell.setBorderColor(grisMedio);
+                conceptoCell.setBorderWidth(0.5f);
+                conceptosTable.addCell(conceptoCell);
 
-                    // Celda: Concepto
-                    PdfPCell conceptoCell = new PdfPCell(new Phrase(concepto.getConcepto(), normalFont));
-                    conceptoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                    conceptoCell.setPadding(8);
-                    conceptoCell.setBackgroundColor(rowColor);
-                    conceptoCell.setBorder(Rectangle.BOX);
-                    conceptoCell.setBorderColor(grisMedio);
-                    conceptoCell.setBorderWidth(0.5f);
-                    conceptosTable.addCell(conceptoCell);
+                // Celda: Precio Unitario
+                conceptosTable.addCell(createStyledTableCell(
+                        formatCurrency(concepto.getPrecioUnitario()),
+                        Element.ALIGN_RIGHT, normalFont, rowColor));
 
-                    // Celda: Precio Unitario
-                    conceptosTable.addCell(createStyledTableCell(
-                            formatCurrency(concepto.getPrecioUnitario()),
-                            Element.ALIGN_RIGHT, normalFont, rowColor));
+                // Celda: Descuento
+                BigDecimal descPorcentaje = concepto.getDescuento() != null ? concepto.getDescuento() : BigDecimal.ZERO;
+                BigDecimal montoDescuentoTotal = concepto.getPrecioUnitario()
+                        .multiply(new BigDecimal(concepto.getCantidad()))
+                        .multiply(descPorcentaje.divide(new BigDecimal(100), 4, RoundingMode.HALF_UP));
 
-                    // Celda: Descuento
-                    BigDecimal descPorcentaje = concepto.getDescuento() != null ? concepto.getDescuento() : BigDecimal.ZERO;
-                    BigDecimal montoDescuentoTotal = concepto.getPrecioUnitario()
-                            .multiply(new BigDecimal(concepto.getCantidad()))
-                            .multiply(descPorcentaje.divide(new BigDecimal(100), 4, RoundingMode.HALF_UP));
+                conceptosTable.addCell(createStyledTableCell(
+                        formatCurrency(montoDescuentoTotal),
+                        Element.ALIGN_RIGHT, normalFont, rowColor));
 
-                    conceptosTable.addCell(createStyledTableCell(
-                            formatCurrency(montoDescuentoTotal),
-                            Element.ALIGN_RIGHT, normalFont, rowColor));
+                // Celda: Importe
+                conceptosTable.addCell(createStyledTableCell(
+                        formatCurrency(concepto.getImporteTotal()),
+                        Element.ALIGN_RIGHT, boldFont, rowColor));
 
-                    // Celda: Importe
-                    conceptosTable.addCell(createStyledTableCell(
-                            formatCurrency(concepto.getImporteTotal()),
-                            Element.ALIGN_RIGHT, boldFont, rowColor));
-
-                    isEvenRow = !isEvenRow;
-                }
+                isEvenRow = !isEvenRow;
             }
         }
 
@@ -1013,7 +1007,7 @@ public class SolicitudFacturaNotaService {
         return unidadesFiltradas;
     }
 
-    private void addConceptosPersonalizados(PdfPTable conceptosTable, SolicitudFacturaNota solicitud,
+    /*private void addConceptosPersonalizados(PdfPTable conceptosTable, SolicitudFacturaNota solicitud,
                                             Color blancoHueso, Font normalFont, Font boldFont, Color grisMedio,
                                             String conceptosTexto) {
         if (conceptosTexto == null || conceptosTexto.trim().isEmpty()) return;
@@ -1163,8 +1157,9 @@ public class SolicitudFacturaNotaService {
         solicitud.setTotal(total);
         solicitud.setImporteLetra(cotizacionService.convertToLetter(total));
     }
+     */
 
-    @Transactional
+    /*@Transactional
     public void actualizarConceptosPersonalizados(Integer id, String conceptosPersonalizados) {
         logger.info("Actualizando conceptos personalizados para solicitud con ID: {}", id);
         SolicitudFacturaNota solicitud = solicitudRepository.findById(id)
@@ -1202,5 +1197,5 @@ public class SolicitudFacturaNotaService {
         response.put("conceptosPersonalizados", solicitud.getConceptosPersonalizados());
 
         return response;
-    }
+    }*/
 }

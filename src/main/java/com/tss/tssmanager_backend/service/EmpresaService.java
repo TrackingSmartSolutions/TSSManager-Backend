@@ -6,11 +6,8 @@ import com.tss.tssmanager_backend.dto.CorreoDTO;
 import com.tss.tssmanager_backend.dto.PropietarioDTO;
 import com.tss.tssmanager_backend.dto.TelefonoDTO;
 import com.tss.tssmanager_backend.entity.*;
-import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
+import com.tss.tssmanager_backend.enums.*;
 import org.springframework.context.annotation.Lazy;
-import com.tss.tssmanager_backend.enums.EstatusEmpresaEnum;
-import com.tss.tssmanager_backend.enums.RolContactoEnum;
-import com.tss.tssmanager_backend.enums.TipoDocumentoSolicitudEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.*;
 import org.slf4j.Logger;
@@ -48,6 +45,9 @@ public class EmpresaService {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private FacturaRepository facturaRepository;
 
     @Autowired
     private TratoRepository tratoRepository;
@@ -258,6 +258,16 @@ public class EmpresaService {
 
             for (SolicitudFacturaNota solicitud : solicitudes) {
 
+                boolean cuentaPagada = solicitud.getCuentaPorCobrar() != null
+                        && solicitud.getCuentaPorCobrar().getEstatus() == EstatusPagoEnum.PAGADO;
+
+                boolean yaTimbrada = facturaRepository.findByNoSolicitud(solicitud.getIdentificador()).isPresent();
+
+                if (cuentaPagada || yaTimbrada) {
+                    logger.info("Saltando recálculo para solicitud {} porque está pagada o timbrada.", solicitud.getIdentificador());
+                    continue;
+                }
+
                 BigDecimal subtotal = solicitud.getSubtotal();
 
                 BigDecimal iva = subtotal.multiply(new BigDecimal("0.16"));
@@ -294,7 +304,7 @@ public class EmpresaService {
                 solicitud.setFechaModificacion(LocalDateTime.now());
             }
 
-           solicitudRepository.saveAll(solicitudes);
+            solicitudRepository.saveAll(solicitudes);
 
         } catch (Exception e) {
             logger.error("Error al recalcular solicitudes vinculadas: {}", e.getMessage());

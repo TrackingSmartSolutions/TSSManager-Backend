@@ -38,7 +38,6 @@ public class SolicitudFacturaNotaController {
     @Autowired
     private FacturaRepository facturaRepository;
 
-
     // Endpoints para Emisor
     @PostMapping("/emisores")
     public ResponseEntity<Emisor> crearEmisor(@RequestPart Emisor emisor, @RequestPart(required = false) MultipartFile constanciaRegimen) throws Exception {
@@ -176,7 +175,7 @@ public class SolicitudFacturaNotaController {
         return new ResponseEntity<>(fileContent, headers, HttpStatus.OK);
     }
 
-    @GetMapping("/solicitudes/{id}/conceptos")
+    /*@GetMapping("/solicitudes/{id}/conceptos")
     public ResponseEntity<Map<String, Object>> obtenerConceptosSolicitud(@PathVariable Integer id) {
         try {
             logger.info("Obteniendo conceptos para solicitud con ID: {}", id);
@@ -203,6 +202,6 @@ public class SolicitudFacturaNotaController {
             logger.error("Error al actualizar conceptos para solicitud con ID {}: {}", id, e.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
-    }
+    }*/
 
 }
