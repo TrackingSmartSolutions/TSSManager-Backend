@@ -751,4 +751,12 @@ public class EmpresaService {
             throw new IllegalArgumentException("Ya existe un contacto registrado en esta empresa con el mismo Nombre, Correo o Teléfono.");
         }
     }
+
+    @Transactional(readOnly = true)
+    public List<EmpresaDTO> obtenerEmpresasClientes() {
+        List<Empresa> empresas = empresaRepository.findAllClientes();
+        return empresas.stream()
+                .map(this::convertToEmpresaDTO)
+                .collect(Collectors.toList());
+    }
 }

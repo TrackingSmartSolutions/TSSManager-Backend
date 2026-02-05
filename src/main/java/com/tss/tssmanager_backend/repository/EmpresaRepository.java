@@ -62,4 +62,7 @@ ORDER BY e.nombre
     @Query("SELECT DISTINCT e FROM Empresa e WHERE e.id IN " +
             "(SELECT t.empresaId FROM Trato t WHERE t.fase IN :fases)")
     List<Empresa> findEmpresasConTratosEnFases(@Param("fases") List<String> fases);
+
+    @Query("SELECT e FROM Empresa e WHERE e.estatus = 'CLIENTE'")
+    List<Empresa> findAllClientes();
 }

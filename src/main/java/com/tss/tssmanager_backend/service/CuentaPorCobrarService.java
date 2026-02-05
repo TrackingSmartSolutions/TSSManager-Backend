@@ -38,6 +38,9 @@ public class CuentaPorCobrarService {
     private TransaccionService transaccionService;
 
     @Autowired
+    private ComisionService comisionService;
+
+    @Autowired
     private CategoriaTransaccionesRepository categoriaTransaccionesRepository;
 
     @Autowired
@@ -365,6 +368,14 @@ public class CuentaPorCobrarService {
         cuenta.setComprobantePagoUrl("UPLOADING");
         CuentaPorCobrar savedCuenta = cuentaPorCobrarRepository.save(cuenta);
 
+        if (comisionService.existeComisionParaCuenta(cuenta.getId())) {
+            try {
+                comisionService.actualizarComisionesPorPagoParcial(cuenta.getId(), montoPago);
+            } catch (Exception e) {
+                System.err.println("Error al actualizar comisiones por pago parcial: " + e.getMessage());
+            }
+        }
+
         if (categoriaId == null) {
             throw new IllegalArgumentException("La categoría es obligatoria");
         }
@@ -469,6 +480,11 @@ public class CuentaPorCobrarService {
             }
             cuentaPorCobrarRepository.saveAll(cuentasVencidas);
         }
+    }
+
+    public CuentaPorCobrar obtenerPorId(Integer id) {
+        return cuentaPorCobrarRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Cuenta por cobrar no encontrada"));
     }
 
 

@@ -83,4 +83,16 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
             "JOIN c.solicitudesFacturasNotas s " +
             "WHERE s.id = :solicitudId")
     Optional<EstatusPagoEnum> findEstatusBySolicitudId(@Param("solicitudId") Integer solicitudId);
+
+    @Query("""
+    SELECT c FROM CuentaPorCobrar c 
+    JOIN FETCH c.cotizacion cot
+    WHERE cot.tratoId = :tratoId 
+    AND c.estatus IN :estatus
+    ORDER BY c.fechaPago DESC
+    """)
+    List<CuentaPorCobrar> findByCotizacionTratoIdAndEstatusIn(
+            @Param("tratoId") Integer tratoId,
+            @Param("estatus") List<EstatusPagoEnum> estatus
+    );
 }

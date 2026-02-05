@@ -43,6 +43,9 @@ public class CuentaPorPagarService {
     @Autowired
     private PlataformaService plataformaService;
 
+    @Autowired
+    private ComisionService comisionService;
+
     public List<CuentaPorPagar> obtenerTodas(String estatus) {
 
         if ("Todas".equals(estatus) || estatus == null) {
@@ -108,6 +111,15 @@ public class CuentaPorPagarService {
         transaccionPago.setCuentaPorPagarId(cuenta.getId());
 
         transaccionRepository.save(transaccionPago);
+
+        if (transaccionOriginal.getCategoria() != null &&
+                transaccionOriginal.getCategoria().getId() == 17) {
+            try {
+                comisionService.aplicarPagoComisiones(cuenta.getCuenta().getId(), montoPago);
+            } catch (Exception e) {
+                System.err.println("Error al aplicar pago de comisiones: " + e.getMessage());
+            }
+        }
 
         registrarAbonoCreditos(transaccionOriginal, montoPago, cuenta, cantidadCreditos);
 

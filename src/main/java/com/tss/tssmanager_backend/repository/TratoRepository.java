@@ -411,4 +411,7 @@ ORDER BY a.fecha_limite ASC, n.fecha_creacion DESC
             "AND t.propietarioId IS NOT NULL " +
             "ORDER BY t.propietarioId")
     List<Trato> findTratosDesatendidos(@Param("fechaLimite") Instant fechaLimite);
+
+    @Query("SELECT t FROM Trato t WHERE t.empresaId = :empresaId AND t.fase NOT IN ('CERRADO_PERDIDO')")
+    List<Trato> findByEmpresaIdExcludingCerradoPerdido(@Param("empresaId") Integer empresaId);
 }

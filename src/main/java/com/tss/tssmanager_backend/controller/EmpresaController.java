@@ -336,4 +336,15 @@ public class EmpresaController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
+
+    @GetMapping("/clientes")
+    public ResponseEntity<List<EmpresaDTO>> obtenerEmpresas() {
+        try {
+            List<EmpresaDTO> empresasDTO = empresaService.obtenerEmpresasClientes();
+            return ResponseEntity.ok(empresasDTO);
+        } catch (Exception e) {
+            logger.error("Error: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
 }

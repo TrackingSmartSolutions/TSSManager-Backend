@@ -1,6 +1,9 @@
 package com.tss.tssmanager_backend.controller;
 
+import com.tss.tssmanager_backend.dto.ComisionDTO;
+import com.tss.tssmanager_backend.dto.ComisionDesdeCuentaPorCobrarDTO;
 import com.tss.tssmanager_backend.dto.CuentaPorCobrarDTO;
+import com.tss.tssmanager_backend.dto.CuentaPorCobrarSimpleDTO;
 import com.tss.tssmanager_backend.entity.CategoriaTransacciones;
 import com.tss.tssmanager_backend.entity.CuentaPorCobrar;
 import com.tss.tssmanager_backend.enums.EsquemaCobroEnum;
@@ -8,7 +11,9 @@ import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
 import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
 import com.tss.tssmanager_backend.exception.ResourceNotFoundException;
 import com.tss.tssmanager_backend.repository.CategoriaTransaccionesRepository;
+import com.tss.tssmanager_backend.repository.ComisionRepository;
 import com.tss.tssmanager_backend.repository.CuentaPorCobrarRepository;
+import com.tss.tssmanager_backend.service.ComisionService;
 import com.tss.tssmanager_backend.service.CuentaPorCobrarService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,8 +28,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/cuentas-por-cobrar")
@@ -34,6 +42,12 @@ public class CuentaPorCobrarController {
 
     @Autowired
     private CuentaPorCobrarService cuentaPorCobrarService;
+
+    @Autowired
+    private ComisionService comisionService;
+
+    @Autowired
+    private ComisionRepository comisionRepository;
 
     @Autowired
     private CuentaPorCobrarRepository cuentaPorCobrarRepository;
@@ -67,17 +81,90 @@ public class CuentaPorCobrarController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/{id}/marcar-pagada")
-    public ResponseEntity<CuentaPorCobrarDTO> marcarComoPagada(@PathVariable Integer id,
-                                                               @RequestPart("fechaPago") String fechaPago,
-                                                               @RequestPart("montoPago") String montoPago,
-                                                               @RequestPart("categoriaId") String categoriaId,
-                                                               @RequestPart("comprobante") MultipartFile comprobante) throws Exception {
-        logger.info("Solicitud para marcar como pagada cuenta por cobrar con ID: {} con monto: {} y categoría: {}", id, montoPago, categoriaId);
-        LocalDate fechaPagoDate = LocalDate.parse(fechaPago);
-        BigDecimal montoDecimal = new BigDecimal(montoPago);
-        Integer categoriaIdInt = Integer.parseInt(categoriaId);
-        return ResponseEntity.ok(cuentaPorCobrarService.marcarComoPagada(id, fechaPagoDate, montoDecimal, comprobante, categoriaIdInt));
+    @PostMapping(value = "/{id}/marcar-pagada", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> marcarComoPagada(
+            @PathVariable Integer id,
+            @RequestParam("fechaPago") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaPago,
+            @RequestParam("montoPago") BigDecimal montoPago,
+            @RequestParam("categoriaId") Integer categoriaId,
+            @RequestPart("comprobante") MultipartFile comprobante
+    ) {
+        try {
+            logger.info("Solicitud para marcar pagada ID: {}, Monto: {}, Cat: {}", id, montoPago, categoriaId);
+
+            CuentaPorCobrarDTO cuentaActualizada = cuentaPorCobrarService.marcarComoPagada(
+                    id,
+                    fechaPago,
+                    montoPago,
+                    comprobante,
+                    categoriaId
+            );
+
+            boolean yaExisteComision = comisionService.existeComisionParaCuenta(id);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("cuenta", cuentaActualizada);
+            response.put("mostrarModalComision", !yaExisteComision);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            logger.error("Error al marcar como pagada", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/crear-comision")
+    public ResponseEntity<ComisionDTO> crearComisionDesdeCuenta(
+            @PathVariable Integer id,
+            @RequestBody ComisionDesdeCuentaPorCobrarDTO dto) {
+        try {
+            CuentaPorCobrar cuenta = cuentaPorCobrarService.obtenerPorId(id);
+            BigDecimal montoPagado = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+
+            ComisionDTO comision = comisionService.crearComisionDesdeCuentaPorCobrar(id, montoPagado, dto);
+            return ResponseEntity.status(HttpStatus.CREATED).body(comision);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/trato/{tratoId}/pagadas-proceso")
+    public ResponseEntity<List<CuentaPorCobrarSimpleDTO>> obtenerCuentasPorTratoConEstatus(
+            @PathVariable Integer tratoId,
+            @RequestParam(required = false) Integer cuentaActualId) {
+        try {
+            List<EstatusPagoEnum> estatusPermitidos = Arrays.asList(
+                    EstatusPagoEnum.PAGADO,
+                    EstatusPagoEnum.EN_PROCESO
+            );
+
+            List<Integer> idsConComision = comisionRepository.findAllCuentaPorCobrarIds();
+
+            List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository
+                    .findByCotizacionTratoIdAndEstatusIn(tratoId, estatusPermitidos);
+
+            List<CuentaPorCobrarSimpleDTO> dtos = cuentas.stream()
+                    .filter(c -> {
+                        boolean esLaCuentaActual = cuentaActualId != null && c.getId().equals(cuentaActualId);
+                        boolean tieneComision = idsConComision.contains(c.getId());
+
+                        return esLaCuentaActual || !tieneComision;
+                    })
+                    .map(c -> new CuentaPorCobrarSimpleDTO(
+                            c.getId(),
+                            c.getFolio(),
+                            c.getMontoPagado(),
+                            c.getEstatus().name()
+                    ))
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(dtos);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @GetMapping("/categorias-ingreso")

@@ -66,7 +66,6 @@ public class Cotizacion {
     @Column(name = "notas_comerciales_tipo")
     private String notasComercialesTopo;
 
-    // Agregar nuevos campos para Ficha Técnica
     @Column(name = "ficha_tecnica_nombre")
     private String fichaTecnicaNombre;
 

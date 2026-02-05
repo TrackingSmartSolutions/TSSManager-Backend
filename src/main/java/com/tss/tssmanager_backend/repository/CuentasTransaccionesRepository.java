@@ -11,4 +11,5 @@ public interface CuentasTransaccionesRepository extends JpaRepository<CuentasTra
     Optional<CuentasTransacciones> findByNombre(String nombre);
     List<CuentasTransacciones> findByNombreAndCategoria(String nombre, CategoriaTransacciones categoria);
     List<CuentasTransacciones> findByNombreAndCategoria_Id(String nombre, Integer categoriaId);
+    List<CuentasTransacciones> findByCategoria(CategoriaTransacciones categoria);
 }

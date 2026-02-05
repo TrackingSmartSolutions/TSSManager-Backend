@@ -2,8 +2,10 @@ package com.tss.tssmanager_backend.controller;
 
 import com.tss.tssmanager_backend.dto.*;
 import com.tss.tssmanager_backend.entity.Actividad;
+import com.tss.tssmanager_backend.entity.Trato;
 import com.tss.tssmanager_backend.enums.EstatusActividadEnum;
 import com.tss.tssmanager_backend.repository.ActividadRepository;
+import com.tss.tssmanager_backend.repository.TratoRepository;
 import com.tss.tssmanager_backend.service.TratoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -33,6 +35,9 @@ public class TratoController {
 
     @Autowired
     private ActividadRepository actividadRepository;
+
+    @Autowired
+    private TratoRepository tratoRepository;
 
     @GetMapping("/filtrar")
     public ResponseEntity<?> filtrarTratos(
@@ -297,6 +302,27 @@ public class TratoController {
             response.put("success", false);
             response.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    @GetMapping("/empresa/{empresaId}/activos")
+    public ResponseEntity<List<TratoDTO>> obtenerTratosPorEmpresaActivos(@PathVariable Integer empresaId) {
+        try {
+            List<Trato> tratos = tratoRepository.findByEmpresaIdExcludingCerradoPerdido(empresaId);
+            List<TratoDTO> tratosDTO = tratos.stream()
+                    .map(trato -> {
+                        TratoDTO dto = new TratoDTO();
+                        dto.setId(trato.getId());
+                        dto.setNombre(trato.getNombre());
+                        dto.setNoTrato(trato.getNoTrato());
+                        dto.setFase(trato.getFase());
+                        return dto;
+                    })
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(tratosDTO);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }
