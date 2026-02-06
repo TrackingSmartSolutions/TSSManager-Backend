@@ -3,6 +3,8 @@ package com.tss.tssmanager_backend.controller;
 import com.tss.tssmanager_backend.entity.Notificacion;
 import com.tss.tssmanager_backend.service.NotificacionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -86,6 +88,23 @@ public class NotificacionController {
             return ResponseEntity.ok("Proceso de envío manual ejecutado. Revisa los logs para confirmar.");
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Error al ejecutar envío manual: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/reporte-equipos-expirar-pdf")
+    public ResponseEntity<byte[]> generarReporteEquiposExpirarPdf() {
+        try {
+            byte[] pdfBytes = notificacionService.generarPdfEquiposExpirar();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("inline", "Reporte_Equipos_Expirar.pdf");
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
         }
     }
 }

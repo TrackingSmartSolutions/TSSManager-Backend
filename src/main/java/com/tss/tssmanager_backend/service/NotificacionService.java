@@ -8,6 +8,8 @@ import com.tss.tssmanager_backend.enums.RolUsuarioEnum;
 import com.tss.tssmanager_backend.repository.*;
 import com.tss.tssmanager_backend.security.CustomUserDetails;
 import jakarta.annotation.PostConstruct;
+import org.xhtmlrenderer.pdf.ITextRenderer;
+import java.io.ByteArrayOutputStream;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.*;
@@ -884,11 +886,18 @@ public class NotificacionService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal saldoActual = obtenerSaldoPlataforma(plataforma);
-            BigDecimal creditosFaltantes = saldoActual.subtract(creditosRequeridos);
+            BigDecimal creditosFaltantes = creditosRequeridos.subtract(saldoActual);
 
-            String estadoCreditos = creditosFaltantes.compareTo(BigDecimal.ZERO) >= 0
+            String estadoCreditos = creditosFaltantes.compareTo(BigDecimal.ZERO) <= 0
                     ? "✓ Suficientes"
                     : "✗ Insuficientes";
+
+            String creditosFaltantesDisplay;
+            if (creditosFaltantes.compareTo(BigDecimal.ZERO) <= 0) {
+                creditosFaltantesDisplay = "-";
+            } else {
+                creditosFaltantesDisplay = creditosFaltantes.setScale(0, BigDecimal.ROUND_HALF_UP).toString();
+            }
 
             resumenPlataformas.append(String.format(
                     "<tr>" +
@@ -897,11 +906,13 @@ public class NotificacionService {
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: right;\">%s</td>" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: right;\">%s</td>" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
                             "</tr>",
                     plataforma,
                     equiposPlataforma.size(),
-                    creditosRequeridos,
-                    saldoActual,
+                    creditosRequeridos.setScale(0, BigDecimal.ROUND_HALF_UP),
+                    saldoActual.setScale(0, BigDecimal.ROUND_HALF_UP),
+                    creditosFaltantesDisplay,
                     estadoCreditos
             ));
         }
@@ -934,7 +945,6 @@ public class NotificacionService {
                             "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%d</td>" +
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
-                            // Aquí inyectamos el estilo y el texto condicional
                             "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center; %s\">%s</td>" +
                             "</tr>",
                     estiloFila,
@@ -1004,25 +1014,26 @@ public class NotificacionService {
                 <h2 style="color: #e74c3c;">⚠️ Alerta de Expiración de Equipos</h2>
                 
                 <div class="alert-box">
-                    <strong>Atención:</strong> Existen %d equipos que requieren atención (Vencidos o próximos a vencer).
-                    Por favor, revise la información a continuación y planifique las renovaciones necesarias.
-                </div>
-
-                <div class="section-title">📊 Resumen por Plataforma</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Plataforma</th>
-                            <th style="text-align: center;">Equipos</th>
-                            <th style="text-align: right;">Créditos Requeridos</th>
-                            <th style="text-align: right;">Saldo Actual</th>
-                            <th style="text-align: center;">Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        %s
-                    </tbody>
-                </table>
+                                                            <strong>Atención:</strong> Existen %d equipos que requieren atención (Vencidos o próximos a vencer).
+                                                            Por favor, revise la información a continuación y planifique las renovaciones necesarias.
+                                                        </div>
+                        
+                                                        <div class="section-title">📊 Resumen por Plataforma</div>
+                                                        <table>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Plataforma</th>
+                                                                    <th style="text-align: center;">Equipos</th>
+                                                                    <th style="text-align: right;">Créditos Requeridos</th>
+                                                                    <th style="text-align: right;">Saldo Actual</th>
+                                                                    <th style="text-align: center;">Créditos Faltantes</th>
+                                                                    <th style="text-align: center;">Estado</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                %s
+                                                            </tbody>
+                                                        </table>
 
                 <div class="section-title">📋 Detalle de Equipos</div>
                 <table>
@@ -1051,6 +1062,191 @@ public class NotificacionService {
                 equipos.size(),
                 resumenPlataformas.toString(),
                 tablaEquipos.toString()
+        );
+    }
+
+    private String construirCuerpoAlertaExpiracionParaPdf(List<Equipo> equipos) {
+        LocalDate hoy = LocalDate.now(ZONE_ID);
+
+        Map<String, List<Equipo>> equiposPorPlataforma = equipos.stream()
+                .collect(Collectors.groupingBy(
+                        e -> e.getPlataforma() != null ? e.getPlataforma().getNombrePlataforma() : "Sin Plataforma"
+                ));
+
+        StringBuilder resumenPlataformas = new StringBuilder();
+        for (Map.Entry<String, List<Equipo>> entry : equiposPorPlataforma.entrySet()) {
+            String plataforma = entry.getKey();
+            List<Equipo> equiposPlataforma = entry.getValue();
+
+            BigDecimal creditosRequeridos = equiposPlataforma.stream()
+                    .map(e -> new BigDecimal(e.getCreditosUsados() != null ? e.getCreditosUsados() : 0))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal saldoActual = obtenerSaldoPlataforma(plataforma);
+            BigDecimal creditosFaltantes = creditosRequeridos.subtract(saldoActual);
+
+            String estadoCreditos = creditosFaltantes.compareTo(BigDecimal.ZERO) <= 0
+                    ? "Suficientes"
+                    : "Insuficientes";
+
+            String creditosFaltantesDisplay;
+            if (creditosFaltantes.compareTo(BigDecimal.ZERO) <= 0) {
+                creditosFaltantesDisplay = "-";
+            } else {
+                creditosFaltantesDisplay = creditosFaltantes.setScale(0, BigDecimal.ROUND_HALF_UP).toString();
+            }
+
+            resumenPlataformas.append(String.format(
+                    "<tr>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%d</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: right;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: right;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
+                            "</tr>",
+                    plataforma,
+                    equiposPlataforma.size(),
+                    creditosRequeridos.setScale(0, BigDecimal.ROUND_HALF_UP),
+                    saldoActual.setScale(0, BigDecimal.ROUND_HALF_UP),
+                    creditosFaltantesDisplay,
+                    estadoCreditos
+            ));
+        }
+
+        StringBuilder tablaEquipos = new StringBuilder();
+
+        for (Equipo equipo : equipos) {
+            long diasRestantes = ChronoUnit.DAYS.between(hoy, equipo.getFechaExpiracion().toLocalDate());
+            String plataforma = equipo.getPlataforma() != null ? equipo.getPlataforma().getNombrePlataforma() : "N/A";
+
+            boolean esExpirado = diasRestantes < 0 || "EXPIRADO".equals(equipo.getEstatus().name());
+
+            String textoColumnaDias;
+            String estiloTextoDias;
+            String estiloFila;
+
+            if (esExpirado) {
+                textoColumnaDias = "EXPIRADO";
+                estiloTextoDias = "color: #d32f2f; font-weight: bold;";
+                estiloFila = "background-color: #fff5f5;";
+            } else {
+                textoColumnaDias = diasRestantes + " dias";
+                estiloTextoDias = "color: #333; font-weight: bold;";
+                estiloFila = "";
+            }
+
+            tablaEquipos.append(String.format(
+                    "<tr style=\"%s\">" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%d</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center;\">%s</td>" +
+                            "<td style=\"padding: 10px; border: 1px solid #ddd; text-align: center; %s\">%s</td>" +
+                            "</tr>",
+                    estiloFila,
+                    equipo.getNombre(),
+                    plataforma,
+                    equipo.getCreditosUsados() != null ? equipo.getCreditosUsados() : 0,
+                    equipo.getFechaExpiracion(),
+                    estiloTextoDias,
+                    textoColumnaDias
+            ));
+        }
+
+        return String.format("""
+    <html>
+    <head>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                color: #333;
+                margin: 20px;
+            }
+            table {
+                width: 100%%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                margin-bottom: 20px;
+            }
+            th {
+                background-color: #34495e;
+                color: white;
+                padding: 12px;
+                text-align: left;
+                border: 1px solid #bdc3c7;
+            }
+            td {
+                padding: 10px;
+                border: 1px solid #ddd;
+            }
+            .section-title {
+                background-color: #e74c3c;
+                color: white;
+                padding: 12px;
+                margin-top: 20px;
+                margin-bottom: 10px;
+                font-weight: bold;
+            }
+            .alert-box {
+                background-color: #fff3cd;
+                border: 1px solid #ffc107;
+                padding: 15px;
+                margin: 15px 0;
+            }
+            h2 {
+                color: #e74c3c;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Alerta de Expiracion de Equipos</h2>
+        
+        <div class="alert-box">
+                                                <strong>Atencion:</strong> Existen %d equipos que requieren atencion (Vencidos o proximos a vencer).
+                                            </div>
+                        
+                                            <div class="section-title">Resumen por Plataforma</div>
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th>Plataforma</th>
+                                                        <th style="text-align: center;">Equipos</th>
+                                                        <th style="text-align: right;">Creditos Requeridos</th>
+                                                        <th style="text-align: right;">Saldo Actual</th>
+                                                        <th style="text-align: center;">Creditos Faltantes</th>
+                                                        <th style="text-align: center;">Estado</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    %s
+                                                </tbody>
+                                            </table>
+
+        <div class="section-title">Detalle de Equipos</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nombre del Equipo</th>
+                    <th>Plataforma</th>
+                    <th style="text-align: center;">Creditos Requeridos</th>
+                    <th style="text-align: center;">Fecha de Expiracion</th>
+                    <th style="text-align: center;">Dias Restantes / Estatus</th>
+                </tr>
+            </thead>
+            <tbody>
+                %s
+            </tbody>
+        </table>
+
+        <p><strong>Generado el:</strong> %s</p>
+    </body>
+    </html>
+    """,
+                equipos.size(),
+                resumenPlataformas.toString(),
+                tablaEquipos.toString(),
+                LocalDate.now(ZONE_ID).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
         );
     }
 
@@ -1466,6 +1662,36 @@ public class NotificacionService {
     </body>
     </html>
     """, nombreUsuario, filasTabla.toString());
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] generarPdfEquiposExpirar() throws Exception {
+        logger.info("Generando PDF de equipos próximos a expirar...");
+
+        List<Equipo> equiposProximosAExpirar = equipoService.obtenerEquiposProximosAExpirar();
+
+        if (equiposProximosAExpirar.isEmpty()) {
+            logger.warn("No hay equipos próximos a expirar para generar PDF");
+            throw new RuntimeException("No hay equipos próximos a expirar");
+        }
+        String htmlContent = construirCuerpoAlertaExpiracionParaPdf(equiposProximosAExpirar);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        try {
+            ITextRenderer renderer = new ITextRenderer();
+            renderer.setDocumentFromString(htmlContent);
+            renderer.layout();
+            renderer.createPDF(outputStream);
+            outputStream.close();
+
+            logger.info("PDF generado exitosamente con {} equipos", equiposProximosAExpirar.size());
+            return outputStream.toByteArray();
+
+        } catch (Exception e) {
+            logger.error("Error al generar PDF: {}", e.getMessage(), e);
+            throw new Exception("Error al generar el PDF: " + e.getMessage());
+        }
     }
 
     private String formatearEstatus(String estatus) {

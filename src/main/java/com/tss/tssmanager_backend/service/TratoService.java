@@ -66,7 +66,6 @@ public class TratoService {
 
     @CacheEvict(value = "tratos", allEntries = true)
     public void clearCache() {
-        // Método para limpiar todo el cache de tratos
     }
 
     public List<TratoDTO> listarTratos() {
