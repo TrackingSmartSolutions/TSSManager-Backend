@@ -1167,8 +1167,13 @@ public class NotificacionService {
                 width: 100%%;
                 border-collapse: collapse;
                 margin-top: 10px;
+                -fs-table-paginate: paginate;
                 margin-bottom: 20px;
+                border-spacing: 0;
             }
+            tr {
+                page-break-inside: avoid;
+                }
             th {
                 background-color: #34495e;
                 color: white;
