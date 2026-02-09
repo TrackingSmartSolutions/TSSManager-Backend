@@ -1,5 +1,6 @@
 package com.tss.tssmanager_backend.repository;
 
+import com.tss.tssmanager_backend.dto.CuentaPorCobrarSimpleProjection;
 import com.tss.tssmanager_backend.entity.CuentaPorCobrar;
 import com.tss.tssmanager_backend.enums.EstatusPagoEnum;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -85,14 +86,16 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
     Optional<EstatusPagoEnum> findEstatusBySolicitudId(@Param("solicitudId") Integer solicitudId);
 
     @Query(value = """
-    SELECT cpc.* FROM "Cuentas_por_Cobrar" cpc 
-    JOIN "Cotizaciones" cot ON cpc.cotizacion_id = cot.id 
+    SELECT 
+        cpc.id as id,
+        cpc.folio as folio,
+        cpc.monto_pagado as montoPagado,
+        cpc.estatus as estatus
+    FROM "CuentasPorCobrar" cpc
+    JOIN "Cotizaciones" cot ON cpc.cotizacion_id = cot.id
     WHERE cot.trato_id = :tratoId 
-    AND cpc.estatus IN (:#{#estatus.![name()]}) 
+    AND cpc.estatus IN ('PAGADO', 'EN_PROCESO')
     ORDER BY cpc.fecha_pago DESC
     """, nativeQuery = true)
-    List<CuentaPorCobrar> findByCotizacionTratoIdAndEstatusIn(
-            @Param("tratoId") Integer tratoId,
-            @Param("estatus") List<EstatusPagoEnum> estatus
-    );
+    List<CuentaPorCobrarSimpleProjection> findByTratoIdSimple(@Param("tratoId") Integer tratoId);
 }

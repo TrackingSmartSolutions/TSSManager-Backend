@@ -1,9 +1,6 @@
 package com.tss.tssmanager_backend.controller;
 
-import com.tss.tssmanager_backend.dto.ComisionDTO;
-import com.tss.tssmanager_backend.dto.ComisionDesdeCuentaPorCobrarDTO;
-import com.tss.tssmanager_backend.dto.CuentaPorCobrarDTO;
-import com.tss.tssmanager_backend.dto.CuentaPorCobrarSimpleDTO;
+import com.tss.tssmanager_backend.dto.*;
 import com.tss.tssmanager_backend.entity.CategoriaTransacciones;
 import com.tss.tssmanager_backend.entity.CuentaPorCobrar;
 import com.tss.tssmanager_backend.enums.EsquemaCobroEnum;
@@ -140,22 +137,16 @@ public class CuentaPorCobrarController {
             System.out.println("tratoId recibido: " + tratoId);
             System.out.println("cuentaActualId: " + cuentaActualId);
 
-            List<EstatusPagoEnum> estatusPermitidos = Arrays.asList(
-                    EstatusPagoEnum.PAGADO,
-                    EstatusPagoEnum.EN_PROCESO
-            );
-            System.out.println("Estatus permitidos: " + estatusPermitidos);
-
             System.out.println("Obteniendo IDs con comisión...");
             List<Integer> idsConComision = comisionRepository.findAllCuentaPorCobrarIds();
             System.out.println("IDs con comisión: " + idsConComision);
 
             System.out.println("Buscando cuentas por trato...");
-            List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository
-                    .findByCotizacionTratoIdAndEstatusIn(tratoId, estatusPermitidos);
-            System.out.println("Cuentas encontradas: " + cuentas.size());
+            List<CuentaPorCobrarSimpleProjection> cuentasProj = cuentaPorCobrarRepository
+                    .findByTratoIdSimple(tratoId);
+            System.out.println("Cuentas encontradas: " + cuentasProj.size());
 
-            List<CuentaPorCobrarSimpleDTO> dtos = cuentas.stream()
+            List<CuentaPorCobrarSimpleDTO> dtos = cuentasProj.stream()
                     .filter(c -> {
                         boolean esLaCuentaActual = cuentaActualId != null && c.getId().equals(cuentaActualId);
                         boolean tieneComision = idsConComision.contains(c.getId());
@@ -164,15 +155,12 @@ public class CuentaPorCobrarController {
 
                         return esLaCuentaActual || !tieneComision;
                     })
-                    .map(c -> {
-                        System.out.println("Mapeando cuenta: " + c.getId());
-                        return new CuentaPorCobrarSimpleDTO(
-                                c.getId(),
-                                c.getFolio(),
-                                c.getMontoPagado(),
-                                c.getEstatus().name()
-                        );
-                    })
+                    .map(c -> new CuentaPorCobrarSimpleDTO(
+                            c.getId(),
+                            c.getFolio(),
+                            c.getMontoPagado(),
+                            c.getEstatus()
+                    ))
                     .collect(Collectors.toList());
 
             System.out.println("DTOs finales: " + dtos.size());
