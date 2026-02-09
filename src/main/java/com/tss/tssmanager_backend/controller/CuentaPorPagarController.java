@@ -149,12 +149,13 @@ public class CuentaPorPagarController {
     public ResponseEntity<ReporteCuentasPorPagarDTO> obtenerDatosReporte(
             @RequestParam String fechaInicio,
             @RequestParam String fechaFin,
-            @RequestParam(defaultValue = "Todas") String filtroEstatus) {
+            @RequestParam(defaultValue = "Todas") String filtroEstatus,
+            @RequestParam(required = false) String filtroCuenta) {
         try {
             LocalDate inicio = LocalDate.parse(fechaInicio);
             LocalDate fin = LocalDate.parse(fechaFin);
 
-            ReporteCuentasPorPagarDTO datos = reporteService.generarDatosReporte(inicio, fin, filtroEstatus);
+            ReporteCuentasPorPagarDTO datos = reporteService.generarDatosReporte(inicio, fin, filtroEstatus, filtroCuenta);
             return ResponseEntity.ok(datos);
         } catch (Exception e) {
             System.err.println("Error al generar datos del reporte: " + e.getMessage());
@@ -166,13 +167,14 @@ public class CuentaPorPagarController {
     public ResponseEntity<byte[]> generarReportePDF(
             @RequestParam String fechaInicio,
             @RequestParam String fechaFin,
-            @RequestParam(defaultValue = "Todas") String filtroEstatus) {
+            @RequestParam(defaultValue = "Todas") String filtroEstatus,
+            @RequestParam(required = false) String filtroCuenta) {
         try {
             LocalDate inicio = LocalDate.parse(fechaInicio);
             LocalDate fin = LocalDate.parse(fechaFin);
 
-            ReporteCuentasPorPagarDTO datos = reporteService.generarDatosReporte(inicio, fin, filtroEstatus);
-            byte[] pdfBytes = reporteService.generarReportePDF(datos);
+            ReporteCuentasPorPagarDTO datos = reporteService.generarDatosReporte(inicio, fin, filtroEstatus, filtroCuenta);
+            byte[] pdfBytes = reporteService.generarReportePDF(datos, filtroCuenta);
 
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             String fileName = String.format("reporte_cuentas_por_pagar_%s_%s.pdf",
@@ -194,12 +196,13 @@ public class CuentaPorPagarController {
     public ResponseEntity<byte[]> generarReporteResumidoPDF(
             @RequestParam String fechaInicio,
             @RequestParam String fechaFin,
-            @RequestParam(defaultValue = "Todas") String filtroEstatus) {
+            @RequestParam(defaultValue = "Todas") String filtroEstatus,
+            @RequestParam(required = false) String filtroCuenta) { // <--- Agregar parámetro
         try {
             LocalDate inicio = LocalDate.parse(fechaInicio);
             LocalDate fin = LocalDate.parse(fechaFin);
 
-            byte[] pdfBytes = reporteService.generarReporteResumidoPDF(inicio, fin, filtroEstatus);
+            byte[] pdfBytes = reporteService.generarReporteResumidoPDF(inicio, fin, filtroEstatus, filtroCuenta);
 
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             String fileName = String.format("reporte_resumido_cuentas_por_pagar_%s_%s.pdf",

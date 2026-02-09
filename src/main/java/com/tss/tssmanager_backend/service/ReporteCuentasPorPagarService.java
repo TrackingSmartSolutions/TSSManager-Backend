@@ -52,9 +52,7 @@ public class ReporteCuentasPorPagarService {
             "02", "Tarjeta Spin"
     );
 
-    public ReporteCuentasPorPagarDTO generarDatosReporte(LocalDate fechaInicio, LocalDate fechaFin, String filtroEstatus) {
-        List<CuentaPorPagar> cuentas = obtenerCuentasFiltradas(fechaInicio, fechaFin, filtroEstatus);
-
+    public ReporteCuentasPorPagarDTO generarDatosReporte(LocalDate fechaInicio, LocalDate fechaFin, String filtroEstatus, String filtroCuenta) {        List<CuentaPorPagar> cuentas = obtenerCuentasFiltradas(fechaInicio, fechaFin, filtroEstatus, filtroCuenta);
         ReporteCuentasPorPagarDTO reporte = new ReporteCuentasPorPagarDTO(fechaInicio, fechaFin, filtroEstatus);
 
         BigDecimal montoTotal = BigDecimal.ZERO;
@@ -117,13 +115,16 @@ public class ReporteCuentasPorPagarService {
         return reporte;
     }
 
-    private List<CuentaPorPagar> obtenerCuentasFiltradas(LocalDate fechaInicio, LocalDate fechaFin, String filtroEstatus) {
+    private List<CuentaPorPagar> obtenerCuentasFiltradas(LocalDate fechaInicio, LocalDate fechaFin, String filtroEstatus, String filtroCuenta) {
         if ("Todas".equals(filtroEstatus)) {
-            return cuentaPorPagarRepository.findByFechaPagoBetween(fechaInicio, fechaFin);
+            return cuentaPorPagarRepository.findByFechaPagoBetween(fechaInicio, fechaFin).stream()
+                    .filter(c -> filtroCuenta == null || filtroCuenta.isEmpty() || (c.getCuenta() != null && c.getCuenta().getNombre().equals(filtroCuenta)))
+                    .collect(Collectors.toList());
         } else {
             return cuentaPorPagarRepository.findByFechaPagoBetween(fechaInicio, fechaFin)
                     .stream()
                     .filter(cuenta -> filtroEstatus.equals(cuenta.getEstatus()))
+                    .filter(c -> filtroCuenta == null || filtroCuenta.isEmpty() || (c.getCuenta() != null && c.getCuenta().getNombre().equals(filtroCuenta)))
                     .collect(Collectors.toList());
         }
     }
@@ -145,7 +146,7 @@ public class ReporteCuentasPorPagarService {
         );
     }
 
-    public byte[] generarReportePDF(ReporteCuentasPorPagarDTO datosReporte) throws Exception {
+    public byte[] generarReportePDF(ReporteCuentasPorPagarDTO datosReporte, String filtroCuenta) throws Exception {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 30, 30, 40, 40);
         PdfWriter writer = PdfWriter.getInstance(document, baos);
@@ -155,7 +156,6 @@ public class ReporteCuentasPorPagarService {
         NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("es", "MX"));
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-        // Definición de fuentes (Igual que tenías)
         Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 24, PRIMARY_BLUE);
         Font subtitleFont = FontFactory.getFont(FontFactory.HELVETICA, 12, new Color(108, 117, 125));
         Font sectionTitleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, PRIMARY_BLUE);
@@ -169,7 +169,12 @@ public class ReporteCuentasPorPagarService {
 
         addResumenEjecutivo(document, datosReporte, dateFormatter, currencyFormat, sectionTitleFont, tableHeaderFont, normalFont);
 
-        List<CuentaPorPagar> cuentasRaw = obtenerCuentasFiltradas(datosReporte.getFechaInicio(), datosReporte.getFechaFin(), datosReporte.getFiltroEstatus());
+        List<CuentaPorPagar> cuentasRaw = obtenerCuentasFiltradas(
+                datosReporte.getFechaInicio(),
+                datosReporte.getFechaFin(),
+                datosReporte.getFiltroEstatus(),
+                filtroCuenta
+        );
 
         List<CuentaPorPagar> otrosPagos = new ArrayList<>();
         List<DatosTelcelEnriquecidos> pagosTelcel = new ArrayList<>();
@@ -585,7 +590,7 @@ public class ReporteCuentasPorPagarService {
         }
     }
 
-    public byte[] generarReporteResumidoPDF(LocalDate fechaInicio, LocalDate fechaFin, String filtroEstatus) throws Exception {
+    public byte[] generarReporteResumidoPDF(LocalDate fechaInicio, LocalDate fechaFin, String filtroEstatus, String filtroCuenta) throws Exception {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 30, 30, 40, 40);
         PdfWriter.getInstance(document, baos);
@@ -601,7 +606,7 @@ public class ReporteCuentasPorPagarService {
         Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 9, TEXT_DARK);
         Font moneyFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, SUCCESS_GREEN);
 
-        List<CuentaPorPagar> cuentas = obtenerCuentasFiltradas(fechaInicio, fechaFin, filtroEstatus);
+        List<CuentaPorPagar> cuentas = obtenerCuentasFiltradas(fechaInicio, fechaFin, filtroEstatus, filtroCuenta);
         List<FilaResumenDTO> resumen = agruparParaResumen(cuentas, true);
         BigDecimal montoTotal = calcularMontoTotal(cuentas, true);
 

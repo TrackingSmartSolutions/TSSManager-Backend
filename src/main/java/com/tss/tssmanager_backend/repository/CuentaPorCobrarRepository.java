@@ -86,8 +86,7 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
 
     @Query("""
     SELECT c FROM CuentaPorCobrar c 
-    JOIN FETCH c.cotizacion cot
-    WHERE cot.tratoId = :tratoId 
+    WHERE c.cotizacion.tratoId = :tratoId 
     AND c.estatus IN :estatus
     ORDER BY c.fechaPago DESC
     """)

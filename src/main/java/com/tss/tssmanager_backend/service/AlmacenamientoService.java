@@ -203,10 +203,18 @@ public class AlmacenamientoService {
         try {
             log.info("Iniciando limpieza automática de todas las tablas");
 
-            Integer totalEliminados = almacenamientoRepository.limpiarRegistrosAntiguos("Tratos", null, "AUTOMATICA");
+            String tablaObjetivo = "Tratos";
+            Optional<ConfiguracionAlmacenamiento> config = configuracionRepository.findByTablaNombre(tablaObjetivo);
+            if (config.isEmpty() || !config.get().getHabilitadoLimpieza()) {
+                log.info("Limpieza automática omitida para '{}': La limpieza está deshabilitada en la configuración.", tablaObjetivo);
+                return 0;
+            }
+
+            Integer totalEliminados = almacenamientoRepository.limpiarRegistrosAntiguos(tablaObjetivo, null, "AUTOMATICA");
             log.info("Limpieza automática completada. Registros eliminados: {}", totalEliminados);
 
             return totalEliminados;
+
         } catch (Exception e) {
             log.error("Error durante la limpieza automática", e);
             return 0;
