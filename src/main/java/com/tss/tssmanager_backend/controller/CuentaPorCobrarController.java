@@ -136,33 +136,57 @@ public class CuentaPorCobrarController {
             @PathVariable Integer tratoId,
             @RequestParam(required = false) Integer cuentaActualId) {
         try {
+            System.out.println("=== INICIO GET CUENTAS POR TRATO ===");
+            System.out.println("tratoId recibido: " + tratoId);
+            System.out.println("cuentaActualId: " + cuentaActualId);
+
             List<EstatusPagoEnum> estatusPermitidos = Arrays.asList(
                     EstatusPagoEnum.PAGADO,
                     EstatusPagoEnum.EN_PROCESO
             );
+            System.out.println("Estatus permitidos: " + estatusPermitidos);
 
+            System.out.println("Obteniendo IDs con comisión...");
             List<Integer> idsConComision = comisionRepository.findAllCuentaPorCobrarIds();
+            System.out.println("IDs con comisión: " + idsConComision);
 
+            System.out.println("Buscando cuentas por trato...");
             List<CuentaPorCobrar> cuentas = cuentaPorCobrarRepository
                     .findByCotizacionTratoIdAndEstatusIn(tratoId, estatusPermitidos);
+            System.out.println("Cuentas encontradas: " + cuentas.size());
 
             List<CuentaPorCobrarSimpleDTO> dtos = cuentas.stream()
                     .filter(c -> {
                         boolean esLaCuentaActual = cuentaActualId != null && c.getId().equals(cuentaActualId);
                         boolean tieneComision = idsConComision.contains(c.getId());
 
+                        System.out.println("Cuenta " + c.getId() + " - esActual: " + esLaCuentaActual + ", tieneComision: " + tieneComision);
+
                         return esLaCuentaActual || !tieneComision;
                     })
-                    .map(c -> new CuentaPorCobrarSimpleDTO(
-                            c.getId(),
-                            c.getFolio(),
-                            c.getMontoPagado(),
-                            c.getEstatus().name()
-                    ))
+                    .map(c -> {
+                        System.out.println("Mapeando cuenta: " + c.getId());
+                        return new CuentaPorCobrarSimpleDTO(
+                                c.getId(),
+                                c.getFolio(),
+                                c.getMontoPagado(),
+                                c.getEstatus().name()
+                        );
+                    })
                     .collect(Collectors.toList());
 
+            System.out.println("DTOs finales: " + dtos.size());
+            System.out.println("=== FIN GET CUENTAS POR TRATO ===");
+
             return ResponseEntity.ok(dtos);
+
         } catch (Exception e) {
+            System.err.println("=== ERROR EN GET CUENTAS POR TRATO ===");
+            System.err.println("tratoId: " + tratoId);
+            System.err.println("cuentaActualId: " + cuentaActualId);
+            System.err.println("Mensaje de error: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("=== FIN ERROR ===");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
