@@ -1460,9 +1460,10 @@ public class NotificacionService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<Map<String, Object>> obtenerActividadesProximasUsuario() {
         try {
+
             Integer userId = ((CustomUserDetails) SecurityContextHolder.getContext()
                     .getAuthentication().getPrincipal()).getId();
 

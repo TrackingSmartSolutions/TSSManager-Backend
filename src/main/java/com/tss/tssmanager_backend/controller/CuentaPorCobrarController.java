@@ -72,10 +72,19 @@ public class CuentaPorCobrarController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarCuentaPorCobrar(@PathVariable Integer id) {
+    public ResponseEntity<Map<String, String>> eliminarCuentaPorCobrar(@PathVariable Integer id) {
         logger.info("Solicitud para eliminar cuenta por cobrar con ID: {}", id);
-        cuentaPorCobrarService.eliminarCuentaPorCobrar(id);
-        return ResponseEntity.noContent().build();
+        try {
+            cuentaPorCobrarService.eliminarCuentaPorCobrar(id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalStateException e) {
+            String mensaje = switch (e.getMessage()) {
+                case "SOLICITUD_VINCULADA" -> "No se puede eliminar porque está vinculada a una solicitud de factura/nota.";
+                case "COMISION_VINCULADA" -> "No se puede eliminar porque tiene una comisión asociada.";
+                default -> "No se puede eliminar esta cuenta.";
+            };
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", mensaje));
+        }
     }
 
     @PostMapping(value = "/{id}/marcar-pagada", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -133,48 +142,29 @@ public class CuentaPorCobrarController {
             @PathVariable Integer tratoId,
             @RequestParam(required = false) Integer cuentaActualId) {
         try {
-            System.out.println("=== INICIO GET CUENTAS POR TRATO ===");
-            System.out.println("tratoId recibido: " + tratoId);
-            System.out.println("cuentaActualId: " + cuentaActualId);
-
-            System.out.println("Obteniendo IDs con comisión...");
             List<Integer> idsConComision = comisionRepository.findAllCuentaPorCobrarIds();
-            System.out.println("IDs con comisión: " + idsConComision);
 
-            System.out.println("Buscando cuentas por trato...");
-            List<CuentaPorCobrarSimpleProjection> cuentasProj = cuentaPorCobrarRepository
-                    .findByTratoIdSimple(tratoId);
-            System.out.println("Cuentas encontradas: " + cuentasProj.size());
+            List<CuentaPorCobrarSimpleProjection> proyecciones = cuentaPorCobrarRepository
+                    .findByTratoIdNative(tratoId);
 
-            List<CuentaPorCobrarSimpleDTO> dtos = cuentasProj.stream()
-                    .filter(c -> {
-                        boolean esLaCuentaActual = cuentaActualId != null && c.getId().equals(cuentaActualId);
-                        boolean tieneComision = idsConComision.contains(c.getId());
-
-                        System.out.println("Cuenta " + c.getId() + " - esActual: " + esLaCuentaActual + ", tieneComision: " + tieneComision);
-
+            List<CuentaPorCobrarSimpleDTO> dtos = proyecciones.stream()
+                    .filter(p -> {
+                        boolean esLaCuentaActual = cuentaActualId != null && p.getId().equals(cuentaActualId);
+                        boolean tieneComision = idsConComision.contains(p.getId());
                         return esLaCuentaActual || !tieneComision;
                     })
-                    .map(c -> new CuentaPorCobrarSimpleDTO(
-                            c.getId(),
-                            c.getFolio(),
-                            c.getMontoPagado(),
-                            c.getEstatus()
+                    .map(p -> new CuentaPorCobrarSimpleDTO(
+                            p.getId(),
+                            p.getFolio(),
+                            p.getMontoPagado(),
+                            p.getEstatus()
                     ))
                     .collect(Collectors.toList());
-
-            System.out.println("DTOs finales: " + dtos.size());
-            System.out.println("=== FIN GET CUENTAS POR TRATO ===");
 
             return ResponseEntity.ok(dtos);
 
         } catch (Exception e) {
-            System.err.println("=== ERROR EN GET CUENTAS POR TRATO ===");
-            System.err.println("tratoId: " + tratoId);
-            System.err.println("cuentaActualId: " + cuentaActualId);
-            System.err.println("Mensaje de error: " + e.getMessage());
-            e.printStackTrace();
-            System.err.println("=== FIN ERROR ===");
+            logger.error("Error al obtener cuentas por trato", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

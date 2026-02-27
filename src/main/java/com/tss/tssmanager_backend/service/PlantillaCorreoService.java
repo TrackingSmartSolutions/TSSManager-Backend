@@ -28,6 +28,9 @@ public class PlantillaCorreoService {
     @Autowired
     private Cloudinary cloudinary;
 
+    @Autowired
+    private ProcesoAutomaticoService procesoAutomaticoService;
+
     public List<PlantillaCorreo> obtenerTodasLasPlantillas() {
         return repositorio.findAll();
     }
@@ -180,6 +183,9 @@ public class PlantillaCorreoService {
 
     @Transactional
     public void eliminarPlantilla(Integer id) {
+        if (procesoAutomaticoService.plantillaEstaEnUso(id)) {
+            throw new IllegalStateException("Esta plantilla no puede eliminarse porque está asociada a un proceso automático activo.");
+        }
         PlantillaCorreo plantilla = repositorio.findById(id)
                 .orElseThrow(() -> new RuntimeException("Plantilla no encontrada"));
         repositorio.delete(plantilla);

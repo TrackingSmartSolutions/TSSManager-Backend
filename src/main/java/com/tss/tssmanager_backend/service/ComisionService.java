@@ -7,6 +7,8 @@ import com.tss.tssmanager_backend.entity.*;
 import com.tss.tssmanager_backend.enums.EstatusComisionEnum;
 import com.tss.tssmanager_backend.enums.TipoTransaccionEnum;
 import com.tss.tssmanager_backend.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class ComisionService {
     private TratoRepository tratoRepository;
 
     private static final Integer CATEGORIA_COMISIONES_ID = 17;
+    private static final Logger logger = LoggerFactory.getLogger(ComisionService.class);
     private static final String CUENTA_PROYECTO_DEFAULT = "Dagoberto Emmanuel Nieto González";
 
     public List<ComisionDTO> obtenerTodas() {
@@ -226,79 +229,26 @@ public class ComisionService {
         CuentasTransacciones cuenta = cuentasTransaccionesRepository.findById(cuentaId)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta no encontrada"));
 
-        // Verificar si es la misma cuenta para venta y proyecto
-        List<Comision> comisionesMismaCuenta = comisionRepository
-                .findComisionesPendientesMismaCuenta(cuentaId);
+        BigDecimal montoRestante = montoPago;
 
-        if (!comisionesMismaCuenta.isEmpty()) {
-            aplicarPagoMismaCuenta(comisionesMismaCuenta, montoPago);
-            return;
-        }
-
-        // Si no es la misma cuenta, aplicar por separado
         List<Comision> comisionesVenta = comisionRepository
                 .findComisionesVentaPendientesByCuenta(cuentaId);
 
         if (!comisionesVenta.isEmpty()) {
-            aplicarPagoFIFO(comisionesVenta, montoPago, true);
-            return;
+            montoRestante = aplicarPagoFIFO(comisionesVenta, montoRestante, true);
         }
 
-        List<Comision> comisionesProyecto = comisionRepository
-                .findComisionesProyectoPendientesByCuenta(cuentaId);
+        if (montoRestante.compareTo(BigDecimal.ZERO) > 0) {
+            List<Comision> comisionesProyecto = comisionRepository
+                    .findComisionesProyectoPendientesByCuenta(cuentaId);
 
-        if (!comisionesProyecto.isEmpty()) {
-            aplicarPagoFIFO(comisionesProyecto, montoPago, false);
-        }
-    }
-
-    private void aplicarPagoMismaCuenta(List<Comision> comisiones, BigDecimal montoPago) {
-        BigDecimal montoRestante = montoPago;
-
-        for (Comision comision : comisiones) {
-            if (montoRestante.compareTo(BigDecimal.ZERO) <= 0) {
-                break;
+            if (!comisionesProyecto.isEmpty()) {
+                montoRestante = aplicarPagoFIFO(comisionesProyecto, montoRestante, false);
             }
-
-            // Primero saldar comisión de venta si está pendiente
-            if (comision.getEstatusVenta() == EstatusComisionEnum.PENDIENTE) {
-                BigDecimal saldoVenta = comision.getSaldoPendienteVenta();
-
-                if (montoRestante.compareTo(saldoVenta) >= 0) {
-                    // Pago completo de venta
-                    comision.setSaldoPendienteVenta(BigDecimal.ZERO);
-                    comision.setEstatusVenta(EstatusComisionEnum.PAGADO);
-                    montoRestante = montoRestante.subtract(saldoVenta);
-                } else {
-                    // Pago parcial de venta
-                    comision.setSaldoPendienteVenta(saldoVenta.subtract(montoRestante));
-                    montoRestante = BigDecimal.ZERO;
-                }
-            }
-
-            // Luego saldar comisión de proyecto si aún hay monto restante
-            if (montoRestante.compareTo(BigDecimal.ZERO) > 0 &&
-                    comision.getEstatusProyecto() == EstatusComisionEnum.PENDIENTE) {
-
-                BigDecimal saldoProyecto = comision.getSaldoPendienteProyecto();
-
-                if (montoRestante.compareTo(saldoProyecto) >= 0) {
-                    // Pago completo de proyecto
-                    comision.setSaldoPendienteProyecto(BigDecimal.ZERO);
-                    comision.setEstatusProyecto(EstatusComisionEnum.PAGADO);
-                    montoRestante = montoRestante.subtract(saldoProyecto);
-                } else {
-                    // Pago parcial de proyecto
-                    comision.setSaldoPendienteProyecto(saldoProyecto.subtract(montoRestante));
-                    montoRestante = BigDecimal.ZERO;
-                }
-            }
-
-            comisionRepository.save(comision);
         }
     }
 
-    private void aplicarPagoFIFO(List<Comision> comisiones, BigDecimal montoPago, boolean esVenta) {
+    private BigDecimal aplicarPagoFIFO(List<Comision> comisiones, BigDecimal montoPago, boolean esVenta) {
         BigDecimal montoRestante = montoPago;
 
         for (Comision comision : comisiones) {
@@ -311,7 +261,6 @@ public class ComisionService {
                     : comision.getSaldoPendienteProyecto();
 
             if (montoRestante.compareTo(saldoPendiente) >= 0) {
-                // Pago completo
                 if (esVenta) {
                     comision.setSaldoPendienteVenta(BigDecimal.ZERO);
                     comision.setEstatusVenta(EstatusComisionEnum.PAGADO);
@@ -321,7 +270,6 @@ public class ComisionService {
                 }
                 montoRestante = montoRestante.subtract(saldoPendiente);
             } else {
-                // Pago parcial
                 BigDecimal nuevoSaldo = saldoPendiente.subtract(montoRestante);
                 if (esVenta) {
                     comision.setSaldoPendienteVenta(nuevoSaldo);
@@ -333,6 +281,8 @@ public class ComisionService {
 
             comisionRepository.save(comision);
         }
+
+        return montoRestante;
     }
 
     @Transactional
@@ -490,5 +440,70 @@ public class ComisionService {
 
     public boolean existeComisionParaCuenta(Integer cuentaPorCobrarId) {
         return comisionRepository.existsByCuentaPorCobrarId(cuentaPorCobrarId);
+    }
+
+    @Transactional
+    public void revertirPagoComisiones(Integer cuentaId, BigDecimal montoRevertido) {
+        BigDecimal montoRestante = montoRevertido;
+
+        // Revertir primero sobre comisiones de proyecto (orden inverso al pago FIFO)
+        List<Comision> comisionesProyecto = comisionRepository
+                .findComisionesProyectoPagadasOParcialmentePagadasByCuenta(cuentaId);
+
+        for (Comision comision : comisionesProyecto) {
+            if (montoRestante.compareTo(BigDecimal.ZERO) <= 0) break;
+
+            // Cuánto fue efectivamente pagado en esta comisión de proyecto
+            BigDecimal montoComision = comision.getMontoComisionProyecto();
+            BigDecimal saldoActual = comision.getSaldoPendienteProyecto();
+            BigDecimal efectivamentePagado = montoComision.subtract(saldoActual);
+
+            if (efectivamentePagado.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+            BigDecimal aRevertir = montoRestante.min(efectivamentePagado);
+            BigDecimal nuevoSaldo = saldoActual.add(aRevertir);
+
+            comision.setSaldoPendienteProyecto(nuevoSaldo);
+            comision.setEstatusProyecto(EstatusComisionEnum.PENDIENTE);
+
+            montoRestante = montoRestante.subtract(aRevertir);
+            comisionRepository.save(comision);
+
+            logger.info("Comisión ID {} - Proyecto revertido en {}. Nuevo saldo pendiente proyecto: {}",
+                    comision.getId(), aRevertir, nuevoSaldo);
+        }
+
+        // Si queda monto por revertir, aplicar sobre comisiones de venta
+        if (montoRestante.compareTo(BigDecimal.ZERO) > 0) {
+            List<Comision> comisionesVenta = comisionRepository
+                    .findComisionesVentaPagadasOParcialmentePagadasByCuenta(cuentaId);
+
+            for (Comision comision : comisionesVenta) {
+                if (montoRestante.compareTo(BigDecimal.ZERO) <= 0) break;
+
+                BigDecimal montoComision = comision.getMontoComisionVenta();
+                BigDecimal saldoActual = comision.getSaldoPendienteVenta();
+                BigDecimal efectivamentePagado = montoComision.subtract(saldoActual);
+
+                if (efectivamentePagado.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                BigDecimal aRevertir = montoRestante.min(efectivamentePagado);
+                BigDecimal nuevoSaldo = saldoActual.add(aRevertir);
+
+                comision.setSaldoPendienteVenta(nuevoSaldo);
+                comision.setEstatusVenta(EstatusComisionEnum.PENDIENTE);
+
+                montoRestante = montoRestante.subtract(aRevertir);
+                comisionRepository.save(comision);
+
+                logger.info("Comisión ID {} - Venta revertida en {}. Nuevo saldo pendiente venta: {}",
+                        comision.getId(), aRevertir, nuevoSaldo);
+            }
+        }
+
+        if (montoRestante.compareTo(BigDecimal.ZERO) > 0) {
+            logger.warn("Monto no revertido completamente para cuenta ID {}. Restante: {}",
+                    cuentaId, montoRestante);
+        }
     }
 }

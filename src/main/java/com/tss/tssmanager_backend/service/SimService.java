@@ -165,9 +165,7 @@ public class SimService {
             BigDecimal recargaActual = savedSim.getRecarga();
 
             if (equipoVinculado.getEstatus() == EstatusEquipoEnum.EXPIRADO) {
-                if (recargaActual == null || recargaActual.compareTo(new BigDecimal("10.00")) != 0) {
-                    System.out.println("SIM vinculada a equipo EXPIRADO. Forzando recarga a $10.00");
-                    // Guardamos directamente para evitar recursión infinita o llamadas circulares complejas
+                if (esSimNueva && (recargaActual == null || recargaActual.compareTo(new BigDecimal("10.00")) != 0)) {
                     savedSim.setRecarga(new BigDecimal("10.00"));
                     savedSim = simRepository.save(savedSim);
 
@@ -180,8 +178,7 @@ public class SimService {
             }
             else if (equipoVinculado.getEstatus() == EstatusEquipoEnum.ACTIVO ||
                     equipoVinculado.getEstatus() == EstatusEquipoEnum.INACTIVO) {
-                if (recargaActual == null || recargaActual.compareTo(new BigDecimal("50.00")) != 0) {
-                    System.out.println("SIM vinculada a equipo NO EXPIRADO. Forzando recarga a $50.00");
+                if (esSimNueva && (recargaActual == null || recargaActual.compareTo(new BigDecimal("50.00")) != 0)) {
                     savedSim.setRecarga(new BigDecimal("50.00"));
                     savedSim = simRepository.save(savedSim);
 

@@ -141,18 +141,6 @@ public class AlmacenamientoService {
         try {
             log.info("Iniciando limpieza manual para tabla: {}", solicitud.getTablaNombre());
 
-            // Verificar que la tabla esté habilitada para limpieza
-            Optional<ConfiguracionAlmacenamiento> config = configuracionRepository.findByTablaNombre(solicitud.getTablaNombre());
-            if (!config.isPresent() || !config.get().getHabilitadoLimpieza()) {
-                return new ResultadoLimpiezaDTO(
-                        solicitud.getTablaNombre(),
-                        0,
-                        BigDecimal.ZERO,
-                        "La tabla no está habilitada para limpieza automática",
-                        false
-                );
-            }
-
             // Calcular tamaño antes de la limpieza
             Double tamanoAntes = almacenamientoRepository.calcularTamanoTabla(solicitud.getTablaNombre());
 
@@ -233,11 +221,11 @@ public class AlmacenamientoService {
 
     private EstadisticasAlmacenamientoDTO mapearEstadisticas(Object[] resultado) {
         return new EstadisticasAlmacenamientoDTO(
-                (String) resultado[0],           // tabla_nombre
-                (Long) resultado[1],             // total_registros
-                (BigDecimal) resultado[2],       // tamano_mb
-                (Long) resultado[3],             // registros_antiguos
-                (BigDecimal) resultado[4]        // espacio_recuperable_mb
+                (String) resultado[0],
+                resultado[1] != null ? ((Number) resultado[1]).longValue() : 0L,
+                resultado[2] != null ? (BigDecimal) resultado[2] : BigDecimal.ZERO,
+                resultado[3] != null ? ((Number) resultado[3]).longValue() : 0L,
+                resultado[4] != null ? (BigDecimal) resultado[4] : BigDecimal.ZERO
         );
     }
 

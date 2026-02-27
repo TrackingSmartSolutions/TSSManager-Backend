@@ -102,10 +102,13 @@ public class ModeloEquipoService {
         List<ModeloEquipo> modelos = repository.findAll();
         List<Object[]> conteos = repository.countEquiposByModelo();
 
-        Map<Integer, Long> conteoMap = conteos.stream()
+        Map<Integer, Long[]> conteoMap = conteos.stream()
                 .collect(Collectors.toMap(
                         row -> (Integer) row[0],
-                        row -> ((Number) row[1]).longValue()
+                        row -> new Long[]{
+                                ((Number) row[1]).longValue(),
+                                ((Number) row[2]).longValue()
+                        }
                 ));
 
         List<Map<String, Object>> modelosConConteo = modelos.stream()
@@ -115,7 +118,12 @@ public class ModeloEquipoService {
                     modeloMap.put("nombre", modelo.getNombre());
                     modeloMap.put("uso", modelo.getUso());
                     modeloMap.put("imagenUrl", modelo.getImagenUrl());
-                    modeloMap.put("cantidad", conteoMap.getOrDefault(modelo.getId(), 0L));
+
+                    Long[] counts = conteoMap.getOrDefault(modelo.getId(), new Long[]{0L, 0L});
+
+                    modeloMap.put("cantidad", counts[0]);
+                    modeloMap.put("disponibles", counts[1]);
+
                     return modeloMap;
                 })
                 .sorted((a, b) -> {

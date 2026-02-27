@@ -1,20 +1,19 @@
 package com.tss.tssmanager_backend.service;
 
-import com.tss.tssmanager_backend.entity.Contacto;
-import com.tss.tssmanager_backend.entity.PlantillaCorreo;
-import com.tss.tssmanager_backend.entity.Trato;
-import com.tss.tssmanager_backend.entity.Adjunto;
+import com.tss.tssmanager_backend.entity.*;
+import com.tss.tssmanager_backend.repository.ProcesoAutomaticoRepository;
 import com.tss.tssmanager_backend.repository.TratoRepository;
-import com.tss.tssmanager_backend.repository.PlantillaCorreoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.stream.Collectors;
 
 @Service
 public class CorreosSeguimientoService {
@@ -23,15 +22,15 @@ public class CorreosSeguimientoService {
     private TratoRepository tratoRepository;
 
     @Autowired
-    private PlantillaCorreoRepository plantillaCorreoRepository;
+    private EmailService emailService;
 
     @Autowired
-    private EmailService emailService;
+    private ProcesoAutomaticoRepository procesoRepository;
 
     private final List<String> FASES_SEGUIMIENTO = Arrays.asList("ENVIO_DE_INFORMACION", "RESPUESTA_POR_CORREO");
 
     @Transactional
-    public void activarCorreosSeguimiento(Integer tratoId) {
+    public void activarCorreosSeguimiento(Integer tratoId, Integer procesoId) {
         Trato trato = tratoRepository.findById(tratoId)
                 .orElseThrow(() -> new RuntimeException("Trato no encontrado"));
 
@@ -55,6 +54,9 @@ public class CorreosSeguimientoService {
         trato.setCorreosSeguimientoActivo(true);
         trato.setFechaActivacionSeguimiento(LocalDateTime.now());
         trato.setCorreosSeguimientoEnviados(0);
+        trato.setProcesoAutomaticoId(procesoId);
+        trato.setProcesoPasoActual(0);
+        trato.setProcesoFechaInicio(LocalDateTime.now());
         tratoRepository.save(trato);
     }
 
@@ -70,7 +72,8 @@ public class CorreosSeguimientoService {
 
     @Transactional
     public void procesarCorreosSeguimiento() {
-        List<Trato> tratosActivos = tratoRepository.findByCorreosSeguimientoActivoTrueAndFaseIn(FASES_SEGUIMIENTO);
+        List<Trato> tratosActivos = tratoRepository
+                .findByCorreosSeguimientoActivoTrueAndFaseInWithContacto(FASES_SEGUIMIENTO);
 
         for (Trato trato : tratosActivos) {
             if (debeEnviarCorreo(trato)) {
@@ -80,94 +83,59 @@ public class CorreosSeguimientoService {
     }
 
     private boolean debeEnviarCorreo(Trato trato) {
-        if (trato.getFechaActivacionSeguimiento() == null) {
-            return false;
+        if (trato.getFechaActivacionSeguimiento() == null || trato.getProcesoAutomaticoId() == null) return false;
+
+        ProcesoAutomatico proceso = procesoRepository.findByIdWithPasos(trato.getProcesoAutomaticoId()).orElse(null);
+        if (proceso == null || proceso.getPasos().isEmpty()) return false;
+
+        List<ProcesoPaso> pasos = proceso.getPasos().stream()
+                .sorted(Comparator.comparingInt(ProcesoPaso::getOrden))
+                .collect(Collectors.toList());
+
+        int pasoActual = trato.getProcesoPasoActual() != null ? trato.getProcesoPasoActual() : 0;
+        if (pasoActual >= pasos.size()) return false;
+
+        LocalDate fechaActivacion = trato.getFechaActivacionSeguimiento().toLocalDate();
+        LocalDate hoy = LocalDate.now();
+
+        int diasAcumulados = 0;
+        for (int i = 0; i <= pasoActual; i++) {
+            diasAcumulados += pasos.get(i).getDias();
         }
 
-        LocalDateTime ahora = LocalDateTime.now();
-        LocalDateTime fechaActivacion = trato.getFechaActivacionSeguimiento();
-        long diasTranscurridos = java.time.Duration.between(fechaActivacion, ahora).toDays();
+        LocalDate fechaEnvio = fechaActivacion.plusDays(diasAcumulados);
 
-        int correosSeguimientoEnviados = trato.getCorreosSeguimientoEnviados() != null ?
-                trato.getCorreosSeguimientoEnviados() : 0;
-
-        // Verificar si debe enviar el correo según los días transcurridos
-        if (correosSeguimientoEnviados == 0 && diasTranscurridos >= 3) {
-            return true; // Primer correo (día 3)
-        } else if (correosSeguimientoEnviados == 1 && diasTranscurridos >= 6) {
-            return true; // Segundo correo (día 6)
-        } else if (correosSeguimientoEnviados == 2 && diasTranscurridos >= 9) {
-            return true; // Tercer correo (día 9)
-        }
-
-        return false;
+        return !hoy.isBefore(fechaEnvio);
     }
 
     private void enviarCorreoSeguimiento(Trato trato) {
-        try {
-            if (trato.getContacto() == null || trato.getContacto().getCorreos() == null || trato.getContacto().getCorreos().isEmpty()) {
-                System.err.println("No se puede enviar correo de seguimiento: contacto sin correos para trato " + trato.getId());
-                return;
-            }
+        ProcesoAutomatico proceso = procesoRepository.findByIdWithPasos(trato.getProcesoAutomaticoId()).orElse(null);
+        if (proceso == null) return;
 
-            // Obtener el primer correo del contacto
-            String correoDestinatario = trato.getContacto().getCorreos().get(0).getCorreo();
-            if (correoDestinatario == null || correoDestinatario.trim().isEmpty()) {
-                System.err.println("No se puede enviar correo de seguimiento: correo vacío para trato " + trato.getId());
-                return;
-            }
+        List<ProcesoPaso> pasos = proceso.getPasos().stream()
+                .sorted(Comparator.comparingInt(ProcesoPaso::getOrden))
+                .collect(Collectors.toList());
 
-            int numeroCorreo = (trato.getCorreosSeguimientoEnviados() != null ?
-                    trato.getCorreosSeguimientoEnviados() : 0) + 1;
+        int pasoActual = trato.getProcesoPasoActual() != null ? trato.getProcesoPasoActual() : 0;
+        if (pasoActual >= pasos.size()) return;
 
-            PlantillaCorreo plantilla = obtenerPlantillaSeguimiento(numeroCorreo);
-            if (plantilla == null) {
-                System.err.println("No se encontró plantilla de seguimiento para el correo " + numeroCorreo);
-                return;
-            }
+        ProcesoPaso paso = pasos.get(pasoActual);
+        PlantillaCorreo plantilla = paso.getPlantilla();
 
-            // Preparar adjuntos de la plantilla
-            List<String> rutasAdjuntos = new ArrayList<>();
-            if (plantilla.getAdjuntos() != null && !plantilla.getAdjuntos().isEmpty()) {
-                for (Adjunto adjunto : plantilla.getAdjuntos()) {
-                    rutasAdjuntos.add(adjunto.getAdjuntoUrl());
-                }
-            }
+        String correoDestinatario = obtenerCorreoPrincipalContacto(trato.getContacto());
+        if (correoDestinatario == null) return;
 
-            // Enviar el correo
-            emailService.enviarCorreo(
-                    correoDestinatario,
-                    plantilla.getAsunto(),
-                    plantilla.getMensaje(),
-                    rutasAdjuntos,
-                    null,
-                    trato.getId()
-            );
+        List<String> rutasAdjuntos = plantilla.getAdjuntos().stream()
+                .map(Adjunto::getAdjuntoUrl).collect(Collectors.toList());
 
-            // Actualizar el contador de correos enviados
-            trato.setCorreosSeguimientoEnviados(numeroCorreo);
-            if (numeroCorreo >= 3) {
-                trato.setCorreosSeguimientoActivo(false);
-            }
+        emailService.enviarCorreo(correoDestinatario, plantilla.getAsunto(), plantilla.getMensaje(),
+                rutasAdjuntos, null, trato.getId());
 
-            tratoRepository.save(trato);
-
-        } catch (Exception e) {
-            System.err.println("Error al enviar correo de seguimiento para trato " + trato.getId() + ": " + e.getMessage());
-            e.printStackTrace();
+        trato.setProcesoPasoActual(pasoActual + 1);
+        if (pasoActual + 1 >= pasos.size()) {
+            trato.setCorreosSeguimientoActivo(false);
         }
-    }
-
-    private PlantillaCorreo obtenerPlantillaSeguimiento(int numeroCorreo) {
-        List<PlantillaCorreo> plantillas = plantillaCorreoRepository.findAll();
-
-        for (PlantillaCorreo plantilla : plantillas) {
-            if (plantilla.getNombre().toLowerCase().contains("seguimiento " + numeroCorreo)) {
-                return plantilla;
-            }
-        }
-
-        return null;
+        tratoRepository.save(trato);
     }
 
     private String obtenerCorreoPrincipalContacto(Contacto contacto) {
@@ -187,50 +155,19 @@ public class CorreosSeguimientoService {
 
     @Transactional
     public void verificarCorreosPendientes() {
-        List<Trato> tratosActivos = tratoRepository.findByCorreosSeguimientoActivoTrueAndFaseIn(FASES_SEGUIMIENTO);
-
+        List<Trato> tratosActivos = tratoRepository
+                .findByCorreosSeguimientoActivoTrueAndFaseInWithContacto(FASES_SEGUIMIENTO);
         for (Trato trato : tratosActivos) {
-            if (hayCorreosPendientes(trato)) {
-                enviarCorreosPendientes(trato);
+            if (debeEnviarCorreo(trato)) {
+                enviarCorreoSeguimiento(trato);
             }
         }
     }
 
-    private boolean hayCorreosPendientes(Trato trato) {
-        if (trato.getFechaActivacionSeguimiento() == null) {
-            return false;
-        }
-
-        LocalDateTime ahora = LocalDateTime.now();
-        LocalDateTime fechaActivacion = trato.getFechaActivacionSeguimiento();
-        long diasTranscurridos = java.time.Duration.between(fechaActivacion, ahora).toDays();
-
-        int correosSeguimientoEnviados = trato.getCorreosSeguimientoEnviados() != null ?
-                trato.getCorreosSeguimientoEnviados() : 0;
-
-        // Verificar si hay correos que debieron enviarse
-        return (correosSeguimientoEnviados == 0 && diasTranscurridos >= 3) ||
-                (correosSeguimientoEnviados == 1 && diasTranscurridos >= 6) ||
-                (correosSeguimientoEnviados == 2 && diasTranscurridos >= 9);
-    }
-
-    private void enviarCorreosPendientes(Trato trato) {
-        LocalDateTime ahora = LocalDateTime.now();
-        LocalDateTime fechaActivacion = trato.getFechaActivacionSeguimiento();
-        long diasTranscurridos = java.time.Duration.between(fechaActivacion, ahora).toDays();
-
-        int correosSeguimientoEnviados = trato.getCorreosSeguimientoEnviados() != null ?
-                trato.getCorreosSeguimientoEnviados() : 0;
-
-        // Enviar todos los correos pendientes de una vez
-        if (correosSeguimientoEnviados == 0 && diasTranscurridos >= 3) {
-            enviarCorreoSeguimiento(trato);
-        }
-        if (correosSeguimientoEnviados <= 1 && diasTranscurridos >= 6) {
-            enviarCorreoSeguimiento(trato);
-        }
-        if (correosSeguimientoEnviados <= 2 && diasTranscurridos >= 9) {
-            enviarCorreoSeguimiento(trato);
-        }
+    @Scheduled(cron = "0 0 8 * * *", zone = "America/Mexico_City")
+    @Transactional
+    public void procesarCorreosSeguimientoAutomatico() {
+        System.out.println("Procesando correos de seguimiento automáticos...");
+        procesarCorreosSeguimiento();
     }
 }

@@ -57,11 +57,15 @@ public class CopiaSeguridadService {
 
     private final CopiaSeguridadRepository copiaSeguridadRepository;
     private final ConfiguracionCopiasRepository configuracionCopiasRepository;
+    private final CotizacionRepository cotizacionRepository;
+    private final CuentaPorCobrarRepository cuentaPorCobrarRepository;
     private final TratoRepository tratosRepository;
     private final EmpresaRepository empresasRepository;
+    private final SolicitudFacturaNotaRepository solicitudFacturaNotaRepository;
     private final ContactoRepository contactosRepository;
     private final SectorRepository sectorRepository;
     private final EquipoRepository equiposRepository;
+    private final ComisionRepository comisionRepository;
     private final SimRepository simsRepository;
     private final UsuarioRepository usuarioRepository;
     private final PlataformaService plataformaService;
@@ -249,7 +253,6 @@ public class CopiaSeguridadService {
     }
 
     // Generación de copias
-    @Async
     @Transactional
     public void generarCopiaInstantanea(Integer usuarioId, List<TipoCopiaSeguridadEnum> tiposDatos) {
         try {
@@ -911,6 +914,10 @@ public class CopiaSeguridadService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarTratos(Integer usuarioId, List<String[]> datos) {
         try {
+            log.info("Eliminando comisiones relacionadas a tratos del usuario {}", usuarioId);
+            comisionRepository.deleteByTratoPropietarioId(usuarioId);
+            comisionRepository.flush();
+
             log.info("Eliminando tratos existentes para usuario {}", usuarioId);
             tratosRepository.deleteByPropietarioId(usuarioId);
             tratosRepository.flush();
@@ -932,10 +939,9 @@ public class CopiaSeguridadService {
                     trato.setEmpresaId(validarInteger(fila[2]));
 
                     if (!validarString(fila[3]).isEmpty()) {
-                        Contacto contacto = contactosRepository
-                                .findByNombreAndPropietario_Id(fila[3], usuarioId)
-                                .orElse(null);
-                        trato.setContacto(contacto);
+                        List<Contacto> contactos = contactosRepository
+                                .findByNombreAndPropietario_Id(fila[3], usuarioId);
+                        trato.setContacto(contactos.isEmpty() ? null : contactos.get(0));
                     }
 
                     trato.setNumeroUnidades(validarInteger(fila[4]));
@@ -980,7 +986,31 @@ public class CopiaSeguridadService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarEmpresas(Integer usuarioId, List<String[]> datos) {
         try {
-            log.info("Eliminando empresas existentes para usuario {}", usuarioId);
+            log.info("Eliminando comisiones para usuario {}", usuarioId);
+            comisionRepository.deleteByTratoPropietarioId(usuarioId);
+            comisionRepository.flush();
+
+            log.info("Eliminando solicitudes de factura/nota para usuario {}", usuarioId);
+            solicitudFacturaNotaRepository.deleteByEmpresaPropietarioId(usuarioId);
+            solicitudFacturaNotaRepository.flush();
+
+            log.info("Eliminando cuentas por cobrar para usuario {}", usuarioId);
+            cuentaPorCobrarRepository.deleteByEmpresaPropietarioId(usuarioId);
+            cuentaPorCobrarRepository.flush();
+
+            log.info("Eliminando cotizaciones para usuario {}", usuarioId);
+            cotizacionRepository.deleteByEmpresaPropietarioId(usuarioId);
+            cotizacionRepository.flush();
+
+            log.info("Eliminando tratos para usuario {}", usuarioId);
+            tratosRepository.deleteByPropietarioId(usuarioId);
+            tratosRepository.flush();
+
+            log.info("Eliminando contactos para usuario {}", usuarioId);
+            contactosRepository.deleteByPropietario_Id(usuarioId);
+            contactosRepository.flush();
+
+            log.info("Eliminando empresas para usuario {}", usuarioId);
             empresasRepository.deleteByPropietario_Id(usuarioId);
             empresasRepository.flush();
 
@@ -1010,6 +1040,9 @@ public class CopiaSeguridadService {
                     empresa.setRfc(validarString(fila[8]));
                     empresa.setRazonSocial(validarString(fila[9]));
                     empresa.setRegimenFiscal(validarString(fila[10]));
+
+                    empresa.setCreadoPor("SISTEMA_RESTAURACION");
+                    empresa.setModificadoPor("SISTEMA_RESTAURACION");
 
                     Instant ahora = Instant.now();
                     empresa.setFechaCreacion(ahora);
@@ -1041,6 +1074,14 @@ public class CopiaSeguridadService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarContactos(Integer usuarioId, List<String[]> datos) {
         try {
+            log.info("Eliminando comisiones relacionadas para usuario {}", usuarioId);
+            comisionRepository.deleteByTratoPropietarioId(usuarioId);
+            comisionRepository.flush();
+
+            log.info("Eliminando tratos relacionados para usuario {}", usuarioId);
+            tratosRepository.deleteByPropietarioId(usuarioId);
+            tratosRepository.flush();
+
             log.info("Eliminando contactos existentes para usuario {}", usuarioId);
             contactosRepository.deleteByPropietario_Id(usuarioId);
             contactosRepository.flush();
@@ -1106,6 +1147,9 @@ public class CopiaSeguridadService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarEquipos(Integer usuarioId, List<String[]> datos) {
         try {
+            log.info("Eliminando equipos existentes (SIMs se borran en cascada)");
+            equiposRepository.deleteAll();
+            equiposRepository.flush();
             log.info("Iniciando restauración de {} equipos", datos.size());
 
             int batchSize = 50;
@@ -1158,6 +1202,9 @@ public class CopiaSeguridadService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 300)
     private void restaurarSims(Integer usuarioId, List<String[]> datos) {
         try {
+            log.info("Eliminando SIMs existentes");
+            simsRepository.deleteAll();
+            simsRepository.flush();
             log.info("Iniciando restauración de {} SIMs", datos.size());
 
             int batchSize = 50;

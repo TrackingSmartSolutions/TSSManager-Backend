@@ -26,6 +26,8 @@ public class CuentaPorPagarController {
     private CuentaPorPagarService cuentasPorPagarService;
     @Autowired
     private ReporteCuentasPorPagarService reporteService;
+    @Autowired
+    private com.tss.tssmanager_backend.service.CalendarioService calendarioService;
 
     @GetMapping
     public ResponseEntity<List<CuentaPorPagar>> obtenerTodasLasCuentasPorPagar(
@@ -50,6 +52,7 @@ public class CuentaPorPagarController {
                     false,
                     request.getCantidadCreditos()
             );
+            calendarioService.invalidarCacheCalendario();
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (IllegalArgumentException e) {
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
@@ -111,6 +114,7 @@ public class CuentaPorPagarController {
                         request.getFormaPago()
                 );
             }
+            calendarioService.invalidarCacheCalendario();
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             System.err.println("Error al regenerar cuentas por pagar: " + e.getMessage());
@@ -134,6 +138,7 @@ public class CuentaPorPagarController {
                     true,
                     dto.getCantidadCreditos()
             );
+            calendarioService.invalidarCacheCalendario();
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
             System.err.println("Error de validación: " + e.getMessage());

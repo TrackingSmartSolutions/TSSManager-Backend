@@ -92,6 +92,20 @@ public class TratoController {
         }
     }
 
+    @GetMapping("/{tratoId}/actividades/{actividadId}")
+    public ResponseEntity<ActividadDTO> getActividadById(
+            @PathVariable Integer tratoId,
+            @PathVariable Integer actividadId) {
+        try {
+            Actividad actividad = actividadRepository.findById(actividadId)
+                    .orElseThrow(() -> new RuntimeException("Actividad no encontrada"));
+            ActividadDTO dto = tratoService.convertToDTO(actividad);
+            return ResponseEntity.ok(dto);
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @GetMapping("/{id}/detalles")
     public ResponseEntity<TratoDTO> getTratoDetalles(@PathVariable Integer id) {
         try {

@@ -2,6 +2,7 @@ package com.tss.tssmanager_backend.repository;
 
 import com.tss.tssmanager_backend.entity.Comision;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,7 +27,7 @@ public interface ComisionRepository extends JpaRepository<Comision, Integer> {
         SELECT c FROM Comision c 
         WHERE c.vendedorCuenta.id = :cuentaId 
         AND c.estatusVenta = 'PENDIENTE'
-        ORDER BY c.fechaCreacion ASC
+        ORDER BY c.fechaPago ASC
         """)
     List<Comision> findComisionesVentaPendientesByCuenta(@Param("cuentaId") Integer cuentaId);
 
@@ -34,7 +35,7 @@ public interface ComisionRepository extends JpaRepository<Comision, Integer> {
         SELECT c FROM Comision c 
         WHERE c.proyectoCuenta.id = :cuentaId 
         AND c.estatusProyecto = 'PENDIENTE'
-        ORDER BY c.fechaCreacion ASC
+        ORDER BY c.fechaPago ASC
         """)
     List<Comision> findComisionesProyectoPendientesByCuenta(@Param("cuentaId") Integer cuentaId);
 
@@ -43,7 +44,7 @@ public interface ComisionRepository extends JpaRepository<Comision, Integer> {
         WHERE c.vendedorCuenta.id = :cuentaId 
         AND c.proyectoCuenta.id = :cuentaId
         AND (c.estatusVenta = 'PENDIENTE' OR c.estatusProyecto = 'PENDIENTE')
-        ORDER BY c.fechaCreacion ASC, 
+        ORDER BY c.fechaPago ASC,
                  CASE WHEN c.estatusVenta = 'PENDIENTE' THEN 0 ELSE 1 END
         """)
     List<Comision> findComisionesPendientesMismaCuenta(@Param("cuentaId") Integer cuentaId);
@@ -77,4 +78,24 @@ public interface ComisionRepository extends JpaRepository<Comision, Integer> {
 
     @Query("SELECT c.cuentaPorCobrar.id FROM Comision c")
     List<Integer> findAllCuentaPorCobrarIds();
+
+    @Modifying
+    @Query("DELETE FROM Comision c WHERE c.trato.propietarioId = :propietarioId")
+    void deleteByTratoPropietarioId(@Param("propietarioId") Integer propietarioId);
+
+    @Query("""
+    SELECT c FROM Comision c 
+    WHERE c.vendedorCuenta.id = :cuentaId 
+    AND c.montoComisionVenta > c.saldoPendienteVenta
+    ORDER BY c.fechaPago DESC
+    """)
+    List<Comision> findComisionesVentaPagadasOParcialmentePagadasByCuenta(@Param("cuentaId") Integer cuentaId);
+
+    @Query("""
+    SELECT c FROM Comision c 
+    WHERE c.proyectoCuenta.id = :cuentaId 
+    AND c.montoComisionProyecto > c.saldoPendienteProyecto
+    ORDER BY c.fechaPago DESC
+    """)
+    List<Comision> findComisionesProyectoPagadasOParcialmentePagadasByCuenta(@Param("cuentaId") Integer cuentaId);
 }

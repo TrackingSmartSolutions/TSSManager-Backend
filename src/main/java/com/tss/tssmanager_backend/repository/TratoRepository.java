@@ -16,6 +16,7 @@ import java.util.Optional;
 
 @Repository
 public interface TratoRepository extends JpaRepository<Trato, Integer> {
+    List<Trato> findByFechaCreacionBetween(Instant fechaInicio, Instant fechaFin);
     List<Trato> findByEmpresaId(Integer empresaId);
     boolean existsByEmpresaId(Integer empresaId);
     List<Trato> findAllById(Iterable<Integer> ids);
@@ -414,4 +415,13 @@ ORDER BY a.fecha_limite ASC, n.fecha_creacion DESC
 
     @Query("SELECT t FROM Trato t WHERE t.empresaId = :empresaId AND t.fase NOT IN ('CERRADO_PERDIDO')")
     List<Trato> findByEmpresaIdExcludingCerradoPerdido(@Param("empresaId") Integer empresaId);
+
+    @Query("SELECT t FROM Trato t " +
+            "LEFT JOIN FETCH t.contacto c " +
+            "LEFT JOIN FETCH c.correos " +
+            "WHERE t.correosSeguimientoActivo = true " +
+            "AND t.fase IN :fases")
+    List<Trato> findByCorreosSeguimientoActivoTrueAndFaseInWithContacto(
+            @Param("fases") List<String> fases
+    );
 }

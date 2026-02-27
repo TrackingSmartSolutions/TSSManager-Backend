@@ -41,6 +41,9 @@ public class CuentaPorCobrarService {
     private ComisionService comisionService;
 
     @Autowired
+    private SolicitudFacturaNotaRepository solicitudFacturaNotaRepository;
+
+    @Autowired
     private CategoriaTransaccionesRepository categoriaTransaccionesRepository;
 
     @Autowired
@@ -233,7 +236,9 @@ public class CuentaPorCobrarService {
             throw new IllegalStateException("No se puede editar una cuenta pagada");
         }
 
-        cuenta.setFechaPago(dto.getFechaPago());
+        if (dto.getFechaPago() != null) {
+            cuenta.setFechaPago(dto.getFechaPago());
+        }
 
         if (cuenta.getConceptos() != null) {
             cuenta.getConceptos().clear();
@@ -260,7 +265,30 @@ public class CuentaPorCobrarService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         cuenta.setCantidadCobrar(nuevoTotal);
+
+        BigDecimal montoPagado = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal saldoPendiente = nuevoTotal.subtract(montoPagado);
+        cuenta.setSaldoPendiente(saldoPendiente);
+
+        LocalDate hoy = LocalDate.now();
+
+        if (saldoPendiente.compareTo(BigDecimal.ZERO) <= 0) {
+            cuenta.setEstatus(EstatusPagoEnum.PAGADO);
+            cuenta.setFechaRealPago(LocalDate.now());
+
+        } else if (montoPagado.compareTo(BigDecimal.ZERO) > 0) {
+            cuenta.setEstatus(EstatusPagoEnum.EN_PROCESO);
+
+        } else {
+            if (cuenta.getFechaPago().isBefore(hoy)) {
+                cuenta.setEstatus(EstatusPagoEnum.VENCIDA);
+            } else {
+                cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
+            }
+        }
+
         CuentaPorCobrar saved = cuentaPorCobrarRepository.save(cuenta);
+
         actualizarSolicitudesVinculadas(saved);
 
         return convertToDTO(saved);
@@ -318,9 +346,15 @@ public class CuentaPorCobrarService {
         logger.info("Eliminando cuenta por cobrar con ID: {}", id);
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cuenta por cobrar no encontrada con id: " + id));
-        if (cuenta.getComprobantePagoUrl() != null || !cuenta.getSolicitudesFacturasNotas().isEmpty()) {
-            throw new ResourceNotFoundException("No se puede eliminar la cuenta por cobrar porque está vinculada a una solicitud de factura/nota o ya tiene un comprobante de pago.");
+
+        if (!cuenta.getSolicitudesFacturasNotas().isEmpty()) {
+            throw new IllegalStateException("SOLICITUD_VINCULADA");
         }
+
+        if (comisionService.existeComisionParaCuenta(id)) {
+            throw new IllegalStateException("COMISION_VINCULADA");
+        }
+
         cuentaPorCobrarRepository.delete(cuenta);
     }
 
@@ -667,39 +701,85 @@ public class CuentaPorCobrarService {
         CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(transaccion.getCuentaPorCobrarId())
                 .orElse(null);
 
-        if (cuenta != null) {
-            BigDecimal montoEliminado = transaccion.getMonto();
+        if (cuenta == null) return;
 
-            BigDecimal pagadoActual = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal montoEliminado = transaccion.getMonto();
+        BigDecimal pagadoActual = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal nuevoPagado = pagadoActual.subtract(montoEliminado);
 
-            BigDecimal nuevoPagado = pagadoActual.subtract(montoEliminado);
+        if (nuevoPagado.compareTo(BigDecimal.ZERO) < 0) {
+            nuevoPagado = BigDecimal.ZERO;
+        }
 
-            if (nuevoPagado.compareTo(BigDecimal.ZERO) < 0) {
-                nuevoPagado = BigDecimal.ZERO;
-            }
-            cuenta.setMontoPagado(nuevoPagado);
+        cuenta.setMontoPagado(nuevoPagado);
+        BigDecimal nuevoSaldo = cuenta.getCantidadCobrar().subtract(nuevoPagado);
+        cuenta.setSaldoPendiente(nuevoSaldo);
 
-            BigDecimal nuevoSaldo = cuenta.getCantidadCobrar().subtract(nuevoPagado);
-            cuenta.setSaldoPendiente(nuevoSaldo);
+        LocalDate hoy = LocalDate.now();
 
-            if (cuenta.getSaldoPendiente().compareTo(BigDecimal.ZERO) > 0) {
-                LocalDate hoy = LocalDate.now();
+        if (nuevoSaldo.compareTo(BigDecimal.ZERO) <= 0) {
+            cuenta.setEstatus(EstatusPagoEnum.PAGADO);
+        } else if (nuevoPagado.compareTo(BigDecimal.ZERO) > 0) {
+            cuenta.setEstatus(EstatusPagoEnum.EN_PROCESO);
+            cuenta.setFechaRealPago(null);
+            cuenta.setComprobantePagoUrl(null);
+        } else {
+            cuenta.setEstatus(cuenta.getFechaPago().isBefore(hoy)
+                    ? EstatusPagoEnum.VENCIDA
+                    : EstatusPagoEnum.PENDIENTE);
+            cuenta.setFechaRealPago(null);
+            cuenta.setComprobantePagoUrl(null);
+        }
 
-                if (nuevoPagado.compareTo(BigDecimal.ZERO) > 0) {
-                    cuenta.setEstatus(EstatusPagoEnum.EN_PROCESO);
-                } else {
-                    if (cuenta.getFechaPago().isBefore(hoy)) {
-                        cuenta.setEstatus(EstatusPagoEnum.VENCIDA);
-                    } else {
-                        cuenta.setEstatus(EstatusPagoEnum.PENDIENTE);
+        cuentaPorCobrarRepository.save(cuenta);
+
+        actualizarSolicitudesVinculadasPorReversionPago(cuenta);
+
+        logger.info("Cuenta por cobrar ID {} revertida. Nuevo estatus: {}, Monto pagado: {}, Saldo: {}",
+                cuenta.getId(), cuenta.getEstatus(), nuevoPagado, nuevoSaldo);
+    }
+
+    private void actualizarSolicitudesVinculadasPorReversionPago(CuentaPorCobrar cuenta) {
+        if (cuenta.getSolicitudesFacturasNotas() == null
+                || cuenta.getSolicitudesFacturasNotas().isEmpty()) return;
+
+        for (SolicitudFacturaNota solicitud : cuenta.getSolicitudesFacturasNotas()) {
+            solicitud.setFechaModificacion(java.time.LocalDateTime.now());
+
+            BigDecimal subtotal = cuenta.getCantidadCobrar();
+            solicitud.setSubtotal(subtotal);
+
+            BigDecimal iva = BigDecimal.ZERO;
+            BigDecimal isrEstatal = BigDecimal.ZERO;
+            BigDecimal isrFederal = BigDecimal.ZERO;
+
+            if (solicitud.getTipo() == com.tss.tssmanager_backend.enums.TipoDocumentoSolicitudEnum.SOLICITUD_DE_FACTURA
+                    && solicitud.getCliente() != null) {
+
+                iva = subtotal.multiply(new BigDecimal("0.16"));
+
+                String regimen = solicitud.getCliente().getRegimenFiscal();
+                if ("601".equals(regimen) || "627".equals(regimen)) {
+                    String domicilio = solicitud.getCliente().getDomicilioFiscal().toLowerCase();
+                    boolean esGuanajuato = domicilio.contains("gto") || domicilio.contains("guanajuato");
+                    boolean cpMatch = domicilio.matches(".*\\b(36|37|38)\\d{4}\\b.*");
+
+                    isrFederal = subtotal.multiply(new BigDecimal("0.0125"));
+                    if (cpMatch || esGuanajuato) {
+                        isrEstatal = subtotal.multiply(new BigDecimal("0.02"));
                     }
-
-                    cuenta.setFechaRealPago(null);
-                    cuenta.setComprobantePagoUrl(null);
                 }
             }
 
-            cuentaPorCobrarRepository.save(cuenta);
+            BigDecimal total = subtotal.add(iva).subtract(isrEstatal).subtract(isrFederal);
+            solicitud.setIva(iva);
+            solicitud.setTotal(total);
+            solicitud.setImporteLetra(cotizacionService.convertToLetter(total));
+
+            logger.info("Solicitud ID {} actualizada por reversión de pago en cuenta ID {}. Nuevo total: {}",
+                    solicitud.getId(), cuenta.getId(), total);
         }
+
+        solicitudFacturaNotaRepository.saveAll(cuenta.getSolicitudesFacturasNotas());
     }
 }

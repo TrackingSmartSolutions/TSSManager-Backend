@@ -8,10 +8,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 public interface ContactoRepository extends JpaRepository<Contacto, Integer> {
+    List<Contacto> findByFechaCreacionBetween(Instant fechaInicio, Instant fechaFin);
     long countByEmpresaId(Integer empresaId);
     List<Contacto> findByEmpresaId(Integer empresaId);
     List<Contacto> findByEmpresaIdAndRol(Integer empresaId, RolContactoEnum rol);
@@ -22,7 +24,7 @@ public interface ContactoRepository extends JpaRepository<Contacto, Integer> {
     @Query("DELETE FROM Contacto c WHERE c.propietario.id = :propietarioId")
     void deleteByPropietario_Id(@Param("propietarioId") Integer propietarioId);
 
-    Optional<Contacto> findByNombreAndPropietario_Id(String nombre, Integer propietarioId);
+    List<Contacto> findByNombreAndPropietario_Id(String nombre, Integer propietarioId);
 
     @Query("SELECT COUNT(c) FROM Contacto c " +
             "LEFT JOIN c.correos cor " +

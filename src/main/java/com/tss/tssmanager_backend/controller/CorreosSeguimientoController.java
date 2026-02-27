@@ -13,14 +13,14 @@ public class CorreosSeguimientoController {
     private CorreosSeguimientoService correosSeguimientoService;
 
     @PostMapping("/activar/{tratoId}")
-    public ResponseEntity<String> activarCorreosSeguimiento(@PathVariable Integer tratoId) {
+    public ResponseEntity<String> activarCorreosSeguimiento(
+            @PathVariable Integer tratoId,
+            @RequestParam Integer procesoId) {
         try {
-            correosSeguimientoService.activarCorreosSeguimiento(tratoId);
+            correosSeguimientoService.activarCorreosSeguimiento(tratoId, procesoId);
             return ResponseEntity.ok("Correos de seguimiento activados exitosamente");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body("Error interno del servidor");
         }
     }
 

@@ -87,4 +87,14 @@ public class Trato {
 
     @Column(name = "cotizacion_id")
     private Integer cotizacionId;
+
+    @Column(name = "proceso_automatico_id")
+    private Integer procesoAutomaticoId;
+
+    @Column(name = "proceso_paso_actual")
+    private Integer procesoPasoActual;
+
+    @Column(name = "proceso_fecha_inicio")
+    private LocalDateTime procesoFechaInicio;
+
 }

@@ -21,7 +21,9 @@ public interface ModeloEquipoRepository extends JpaRepository<ModeloEquipo, Inte
     @Query("SELECT m FROM ModeloEquipo m WHERE LOWER(m.nombre) LIKE LOWER(CONCAT('%', :nombre, '%')) ORDER BY m.nombre")
     Page<ModeloEquipo> findByNombreContainingIgnoreCasePaginated(@Param("nombre") String nombre, Pageable pageable);
 
-    @Query(value = "SELECT m.id as modelo_id, COALESCE(COUNT(e.id), 0) as cantidad " +
+    @Query(value = "SELECT m.id as modelo_id, " +
+            "COALESCE(COUNT(e.id), 0) as total, " +
+            "COALESCE(SUM(CASE WHEN e.tipo IN ('ALMACEN', 'DEMO') THEN 1 ELSE 0 END), 0) as disponibles " +
             "FROM \"Modelos_Equipos\" m " +
             "LEFT JOIN \"Equipos\" e ON m.id = e.modelo_id " +
             "GROUP BY m.id", nativeQuery = true)

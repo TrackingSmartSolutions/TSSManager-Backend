@@ -8,10 +8,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 public interface EmpresaRepository extends JpaRepository<Empresa, Integer> {
+    List<Empresa> findByFechaCreacionBetween(Instant fechaInicio, Instant fechaFin);
     List<Empresa> findByNombreContainingIgnoreCase(String nombre);
     List<Empresa> findByEstatus(EstatusEmpresaEnum estatus);
     List<Empresa> findByNombreContainingIgnoreCaseAndEstatus(String nombre, EstatusEmpresaEnum estatus);

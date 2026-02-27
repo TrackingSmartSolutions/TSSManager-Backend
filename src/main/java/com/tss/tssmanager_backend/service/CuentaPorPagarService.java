@@ -5,10 +5,12 @@ import com.tss.tssmanager_backend.entity.Plataforma;
 import com.tss.tssmanager_backend.entity.Sim;
 import com.tss.tssmanager_backend.entity.Transaccion;
 import com.tss.tssmanager_backend.enums.ConceptoCreditoEnum;
-import com.tss.tssmanager_backend.enums.PlataformaEquipoEnum;
 import com.tss.tssmanager_backend.repository.CuentaPorPagarRepository;
 import com.tss.tssmanager_backend.repository.SimRepository;
 import com.tss.tssmanager_backend.repository.TransaccionRepository;
+import org.hibernate.validator.internal.util.stereotypes.Lazy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +46,10 @@ public class CuentaPorPagarService {
     private PlataformaService plataformaService;
 
     @Autowired
+    @Lazy
     private ComisionService comisionService;
+
+    private static final Logger logger = LoggerFactory.getLogger(CuentaPorPagarService.class);
 
     public List<CuentaPorPagar> obtenerTodas(String estatus) {
 
@@ -228,55 +233,50 @@ public class CuentaPorPagarService {
         CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cuenta por pagar no encontrada con ID: " + id));
 
-        // Verificar que no esté pagada
         if ("Pagado".equals(cuenta.getEstatus())) {
             throw new IllegalStateException("No se puede editar una cuenta que ya está pagada");
         }
 
-        // Actualizar campos editables
         if (fechaPago != null) {
             cuenta.setFechaPago(fechaPago);
+        }
 
-            // Recalcular el estatus basado en la nueva fecha si no está pagada
-            if (!"Pagado".equals(cuenta.getEstatus()) && !"En proceso".equals(cuenta.getEstatus())) {
-                LocalDate hoy = LocalDate.now();
-                if (fechaPago.isBefore(hoy)) {
-                    cuenta.setEstatus("Vencida");
-                } else {
-                    cuenta.setEstatus("Pendiente");
-                }
-            }
+        if (formaPago != null && !formaPago.isEmpty()) {
+            cuenta.setFormaPago(formaPago);
+        }
+
+        if (nota != null) {
+            cuenta.setNota(nota);
         }
 
         if (monto != null) {
             cuenta.setMonto(monto);
-
-            // Recalcular saldo pendiente y estatus cuando cambie el monto
             BigDecimal montoPagado = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
             BigDecimal nuevoSaldo = monto.subtract(montoPagado);
             cuenta.setSaldoPendiente(nuevoSaldo);
+        }
 
-            // Actualizar estatus basado en el nuevo saldo
-            if (nuevoSaldo.compareTo(BigDecimal.ZERO) <= 0) {
-                cuenta.setEstatus("Pagado");
-                // Si la cuenta queda pagada, actualizar vigencia de SIM si existe
-                if (cuenta.getSim() != null && fechaPago == null) {
-                    // Usar la fecha actual si no se especifica una nueva fecha de pago
-                    actualizarVigenciaSim(cuenta, LocalDate.now());
-                } else if (cuenta.getSim() != null) {
-                    actualizarVigenciaSim(cuenta, fechaPago);
-                }
-            } else if (montoPagado.compareTo(BigDecimal.ZERO) > 0) {
-                cuenta.setEstatus("En proceso");
+        BigDecimal montoPagadoActual = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal saldoActual = cuenta.getSaldoPendiente() != null ? cuenta.getSaldoPendiente() : cuenta.getMonto();
+        LocalDate hoy = LocalDate.now();
+
+        if (saldoActual.compareTo(BigDecimal.ZERO) <= 0) {
+            cuenta.setEstatus("Pagado");
+
+            if (cuenta.getSim() != null) {
+                LocalDate fechaParaVigencia = (fechaPago != null) ? fechaPago : LocalDate.now();
+                actualizarVigenciaSim(cuenta, fechaParaVigencia);
+            }
+
+        } else if (montoPagadoActual.compareTo(BigDecimal.ZERO) > 0) {
+            cuenta.setEstatus("En proceso");
+
+        } else {
+            if (cuenta.getFechaPago().isBefore(hoy)) {
+                cuenta.setEstatus("Vencida");
             } else {
                 cuenta.setEstatus("Pendiente");
             }
-        }
-        if (formaPago != null && !formaPago.isEmpty()) {
-            cuenta.setFormaPago(formaPago);
-        }
-        if (nota != null) {
-            cuenta.setNota(nota);
         }
 
         return cuentasPorPagarRepository.save(cuenta);
@@ -446,33 +446,44 @@ public class CuentaPorPagarService {
         CuentaPorPagar cuenta = cuentasPorPagarRepository.findById(transaccion.getCuentaPorPagarId())
                 .orElse(null);
 
-        if (cuenta != null) {
-            BigDecimal montoEliminado = transaccion.getMonto();
+        if (cuenta == null) return;
 
-            BigDecimal pagadoActual = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal montoEliminado = transaccion.getMonto();
+        BigDecimal pagadoActual = cuenta.getMontoPagado() != null ? cuenta.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal nuevoPagado = pagadoActual.subtract(montoEliminado);
 
-            BigDecimal nuevoPagado = pagadoActual.subtract(montoEliminado);
+        if (nuevoPagado.compareTo(BigDecimal.ZERO) < 0) {
+            nuevoPagado = BigDecimal.ZERO;
+        }
 
-            if (nuevoPagado.compareTo(BigDecimal.ZERO) < 0) {
-                nuevoPagado = BigDecimal.ZERO;
+        cuenta.setMontoPagado(nuevoPagado);
+        BigDecimal nuevoSaldo = cuenta.getMonto().subtract(nuevoPagado);
+        cuenta.setSaldoPendiente(nuevoSaldo);
+
+        LocalDate hoy = LocalDate.now();
+
+        if (nuevoSaldo.compareTo(BigDecimal.ZERO) <= 0) {
+            cuenta.setEstatus("Pagado");
+        } else if (nuevoPagado.compareTo(BigDecimal.ZERO) > 0) {
+            cuenta.setEstatus("En proceso");
+        } else {
+            cuenta.setEstatus(cuenta.getFechaPago().isBefore(hoy) ? "Vencida" : "Pendiente");
+        }
+
+        cuentasPorPagarRepository.save(cuenta);
+
+        if (transaccion.getCategoria() != null
+                && transaccion.getCategoria().getId() != null
+                && transaccion.getCategoria().getId() == 17
+                && cuenta.getCuenta() != null) {
+            try {
+                comisionService.revertirPagoComisiones(cuenta.getCuenta().getId(), montoEliminado);
+                logger.info("Comisiones revertidas para cuenta ID {} por monto {}",
+                        cuenta.getCuenta().getId(), montoEliminado);
+            } catch (Exception e) {
+                logger.error("Error al revertir comisiones para cuenta por pagar ID {}: {}",
+                        cuenta.getId(), e.getMessage());
             }
-            cuenta.setMontoPagado(nuevoPagado);
-
-            BigDecimal nuevoSaldo = cuenta.getMonto().subtract(nuevoPagado);
-            cuenta.setSaldoPendiente(nuevoSaldo);
-
-            if (cuenta.getSaldoPendiente().compareTo(BigDecimal.ZERO) > 0) {
-                if (nuevoPagado.compareTo(BigDecimal.ZERO) > 0) {
-                    cuenta.setEstatus("En proceso");
-                } else {
-                    LocalDate hoy = LocalDate.now();
-                    cuenta.setEstatus(cuenta.getFechaPago().isBefore(hoy) ? "Vencida" : "Pendiente");
-                }
-            } else {
-                cuenta.setEstatus("Pagado");
-            }
-
-            cuentasPorPagarRepository.save(cuenta);
         }
     }
 

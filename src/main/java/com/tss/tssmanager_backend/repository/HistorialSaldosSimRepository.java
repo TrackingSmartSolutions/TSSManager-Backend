@@ -6,9 +6,11 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.sql.Date;
 import java.util.List;
 
 public interface HistorialSaldosSimRepository extends JpaRepository<HistorialSaldosSim, Integer> {
+    List<HistorialSaldosSim> findByFechaBetween(Date fechaInicio, Date fechaFin);
     @Modifying
     @Query("DELETE FROM HistorialSaldosSim h WHERE h.sim.numero = :simNumero")
     void deleteBySimNumero(String simNumero);

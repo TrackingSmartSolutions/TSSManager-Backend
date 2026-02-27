@@ -1025,15 +1025,27 @@ public class CotizacionService {
                 bufferedImage = resized;
             }
 
+            BufferedImage rgbImage = new BufferedImage(
+                    bufferedImage.getWidth(),
+                    bufferedImage.getHeight(),
+                    BufferedImage.TYPE_INT_RGB
+            );
+            java.awt.Graphics2D g2d = rgbImage.createGraphics();
+            g2d.setColor(java.awt.Color.WHITE);
+            g2d.fillRect(0, 0, rgbImage.getWidth(), rgbImage.getHeight());
+            g2d.drawImage(bufferedImage, 0, 0, null);
+            g2d.dispose();
+
             ByteArrayOutputStream compressedImageOut = new ByteArrayOutputStream();
             javax.imageio.ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
             javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
             param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(0.90f);
+            param.setCompressionQuality(0.97f);
 
             writer.setOutput(ImageIO.createImageOutputStream(compressedImageOut));
-            writer.write(null, new javax.imageio.IIOImage(bufferedImage, null, null), param);
+            writer.write(null, new javax.imageio.IIOImage(rgbImage, null, null), param);
             writer.dispose();
+            rgbImage = null;
 
             byte[] compressedImageBytes = compressedImageOut.toByteArray();
             compressedImageOut.close();

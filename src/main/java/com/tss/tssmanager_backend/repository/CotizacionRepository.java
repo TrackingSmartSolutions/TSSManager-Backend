@@ -3,6 +3,7 @@ package com.tss.tssmanager_backend.repository;
 import com.tss.tssmanager_backend.entity.Cotizacion;
 import com.tss.tssmanager_backend.entity.Trato;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -20,4 +21,8 @@ public interface CotizacionRepository extends JpaRepository<Cotizacion, Integer>
 
     @Query("SELECT c FROM Cotizacion c WHERE c.cliente.id = :clienteId AND c.tratoId IS NULL ORDER BY c.fechaCreacion DESC")
     List<Cotizacion> findByClienteIdAndTratoIdIsNull(@Param("clienteId") Integer clienteId);
+
+    @Modifying
+    @Query("DELETE FROM Cotizacion c WHERE c.cliente.id IN (SELECT e.id FROM Empresa e WHERE e.propietario.id = :propietarioId)")
+    void deleteByEmpresaPropietarioId(@Param("propietarioId") Integer propietarioId);
 }

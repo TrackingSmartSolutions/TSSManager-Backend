@@ -61,8 +61,14 @@ public class PlantillaCorreoController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarPlantilla(@PathVariable Integer id) {
-        servicio.eliminarPlantilla(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<?> eliminarPlantilla(@PathVariable Integer id) {
+        try {
+            servicio.eliminarPlantilla(id);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409)
+                    .header("Content-Type", "application/json")
+                    .body("{\"mensaje\": \"" + e.getMessage() + "\"}");
+        }
     }
 }

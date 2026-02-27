@@ -47,7 +47,8 @@ public class TratoService {
     private EmailService emailService;
     @Autowired
     private CotizacionRepository cotizacionRepository;
-
+    @Autowired
+    private NotificacionPopupMostradaRepository notificacionPopupMostradaRepository;
 
     @Cacheable(value = "tratos", key = "#id")
     public Trato findById(Integer id) {
@@ -382,17 +383,21 @@ public class TratoService {
         }
 
         Trato updatedTrato = tratoRepository.save(trato);
-        notificacionService.generarNotificacionTratoGanado(updatedTrato);
 
-        if (requiereEscalamiento(nuevaFase) && !esAdministrador(propietarioAnterior)) {
+        if (requiereEscalamiento(nuevaFase) && propietarioAnterior != null && !esAdministrador(propietarioAnterior)) {
             Integer adminId = getAdministradorPredeterminado();
             if (adminId != null) {
                 trato.setPropietarioId(adminId);
                 crearNotaEscalamiento(trato.getId(), faseAnterior, nuevaFase, adminId);
+                updatedTrato = tratoRepository.save(trato);
+
                 escalado = true;
                 nuevoAdministrador = adminId;
+
                 notificacionService.generarNotificacionEscalamiento(updatedTrato, adminId);
             }
+        } else if ("CERRADO_GANADO".equals(nuevaFase)) {
+            notificacionService.generarNotificacionTratoGanado(updatedTrato);
         }
 
         TratoDTO result = convertToDTO(updatedTrato);
@@ -583,6 +588,12 @@ public class TratoService {
         }
 
         Actividad updatedActividad = actividadRepository.save(actividad);
+
+        try {
+            notificacionPopupMostradaRepository.deleteByActividadId(id);
+        } catch (Exception e) {
+            System.err.println("Error al borrar registro de popup mostrado: " + e.getMessage());
+        }
 
         return convertToDTO(updatedActividad);
     }

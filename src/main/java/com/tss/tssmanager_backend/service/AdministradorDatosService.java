@@ -33,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.Color;
 import java.io.*;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -40,6 +41,7 @@ import java.sql.Date;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
@@ -63,6 +65,7 @@ public class AdministradorDatosService {
     private final SimRepository simRepository;
     private final HistorialSaldosSimRepository historialSaldoRepository;
     private final UsuarioRepository usuarioRepository;
+    private final AuditoriaRepository auditoriaRepository;
     private final ResourceLoader resourceLoader;
     private final PlataformaService plataformaService;
 
@@ -71,6 +74,8 @@ public class AdministradorDatosService {
 
     @Value("${app.archivos.importaciones:/importaciones}")
     private String rutaImportaciones;
+
+    private final org.springframework.context.ApplicationContext applicationContext;
 
     public Resource descargarPlantilla(String tipoDatos) {
         try {
@@ -151,8 +156,6 @@ public class AdministradorDatosService {
                 .collect(Collectors.toList());
     }
 
-
-    @Transactional
     public ResultadoImportacionDTO importarDatos(MultipartFile archivo, String tipoDatos, Integer usuarioId) {
         ResultadoImportacionDTO resultado = new ResultadoImportacionDTO();
         StringBuilder errores = new StringBuilder();
@@ -172,13 +175,20 @@ public class AdministradorDatosService {
             }
 
             // Guardar archivo temporalmente
-            String nombreArchivo = "importacion_" + tipoDatos + "_" + System.currentTimeMillis() + ".csv";
+            String originalFilename = archivo.getOriginalFilename() != null ? archivo.getOriginalFilename() : "";
+            boolean esXLSX = originalFilename.endsWith(".xlsx");
+            String extension = esXLSX ? ".xlsx" : ".csv";
+            String nombreArchivo = "importacion_" + tipoDatos + "_" + System.currentTimeMillis() + extension;
             Path rutaArchivo = directorioImportaciones.resolve(nombreArchivo);
             Files.copy(archivo.getInputStream(), rutaArchivo);
 
-            // Parsear CSV
-            String contenidoCSV = new String(Files.readAllBytes(rutaArchivo), java.nio.charset.StandardCharsets.UTF_8);
-            contenidoCSV = limpiarBOM(contenidoCSV);
+            String contenidoCSV;
+            if (esXLSX) {
+                contenidoCSV = convertirXLSXaCSV(rutaArchivo);
+            } else {
+                contenidoCSV = new String(Files.readAllBytes(rutaArchivo), java.nio.charset.StandardCharsets.UTF_8);
+                contenidoCSV = limpiarBOM(contenidoCSV);
+            }
 
             try (Reader reader = new StringReader(contenidoCSV);
                  CSVParser csvParser = new CSVParser(reader,
@@ -191,11 +201,10 @@ public class AdministradorDatosService {
                 resultado.setRegistrosProcesados(records.size());
                 int exitosos = 0;
                 int fallidos = 0;
-
+                AdministradorDatosService proxy = applicationContext.getBean(AdministradorDatosService.class);
                 for (CSVRecord record : records) {
                     try {
-                        // Pasa el usuarioId al método procesarRegistro
-                        boolean procesado = procesarRegistro(record, tipoDatos, usuarioId);
+                        boolean procesado = proxy.procesarRegistro(record, tipoDatos, usuarioId);
 
                         if (procesado) {
                             exitosos++;
@@ -247,14 +256,16 @@ public class AdministradorDatosService {
         return resultado;
     }
 
-    private boolean procesarRegistro(CSVRecord record, String tipoDatos, Integer usuarioId) {
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW,
+            rollbackFor = Exception.class)
+    public boolean procesarRegistro(CSVRecord record, String tipoDatos, Integer usuarioId) {
         switch (tipoDatos) {
             case "tratos":
                 return procesarTrato(record, usuarioId);
             case "empresas":
-                return procesarEmpresa(record);
+                return procesarEmpresa(record, usuarioId);
             case "contactos":
-                return procesarContacto(record);
+                return procesarContacto(record, usuarioId);
             case "correoContactos":
                 return procesarCorreoContacto(record);
             case "modelos":
@@ -474,79 +485,170 @@ public class AdministradorDatosService {
     private boolean procesarTrato(CSVRecord record, Integer usuarioId) {
         try {
             Trato trato = new Trato();
+
+            // nombre
             String nombre = record.get("nombre");
-            trato.setNombre(nombre);
+            if (nombre == null || nombre.trim().isEmpty()) {
+                throw new RuntimeException("El campo 'nombre' es obligatorio y está vacío");
+            }
+            trato.setNombre(nombre.trim());
+
+            // empresa_id
             String empresaIdStr = record.get("empresa_id");
-            trato.setEmpresaId(Integer.parseInt(empresaIdStr));
+            if (empresaIdStr == null || empresaIdStr.trim().isEmpty()) {
+                throw new RuntimeException("El campo 'empresa_id' es obligatorio y está vacío");
+            }
+            try {
+                trato.setEmpresaId(Integer.parseInt(empresaIdStr.trim()));
+            } catch (NumberFormatException e) {
+                throw new RuntimeException("'empresa_id' debe ser un número entero, valor recibido: '" + empresaIdStr + "'");
+            }
+
+            // contacto_id
             String contactoIdStr = record.get("contacto_id");
-            Integer contactoId = Integer.parseInt(contactoIdStr);
+            if (contactoIdStr == null || contactoIdStr.trim().isEmpty()) {
+                throw new RuntimeException("El campo 'contacto_id' es obligatorio y está vacío");
+            }
+            Integer contactoId;
+            try {
+                contactoId = Integer.parseInt(contactoIdStr.trim());
+            } catch (NumberFormatException e) {
+                throw new RuntimeException("'contacto_id' debe ser un número entero, valor recibido: '" + contactoIdStr + "'");
+            }
             Optional<Contacto> contactoOpt = contactosRepository.findById(contactoId);
             if (contactoOpt.isEmpty()) {
-                throw new RuntimeException("Contacto no encontrado con ID: " + contactoId);
+                throw new RuntimeException("No existe un contacto con ID: " + contactoId);
             }
             trato.setContacto(contactoOpt.get());
+
+            // propietario_id (opcional, usa usuarioId por defecto)
             Integer propietarioId = usuarioId;
             try {
                 String propietarioIdStr = record.get("propietario_id");
                 if (propietarioIdStr != null && !propietarioIdStr.trim().isEmpty()) {
-                    propietarioId = Integer.parseInt(propietarioIdStr);
+                    propietarioId = Integer.parseInt(propietarioIdStr.trim());
                 }
-            } catch (Exception e) {
-                System.out.println("Usando usuarioId por defecto: " + usuarioId);
+            } catch (NumberFormatException e) {
+                throw new RuntimeException("'propietario_id' debe ser un número entero o estar vacío");
             }
-
             Optional<Usuario> propietarioOpt = usuarioRepository.findById(propietarioId);
             if (propietarioOpt.isEmpty()) {
-                throw new RuntimeException("Usuario propietario no encontrado con ID: " + propietarioId);
+                throw new RuntimeException("No existe un usuario con ID: " + propietarioId);
             }
             trato.setPropietarioId(propietarioId);
+
+            // numero_unidades (opcional)
             String unidadesStr = record.get("numero_unidades");
             if (unidadesStr != null && !unidadesStr.trim().isEmpty() && !unidadesStr.equalsIgnoreCase("null")) {
-                trato.setNumeroUnidades(Integer.parseInt(unidadesStr.trim()));
+                try {
+                    trato.setNumeroUnidades(Integer.parseInt(unidadesStr.trim()));
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException("'numero_unidades' debe ser un número entero, valor recibido: '" + unidadesStr + "'");
+                }
             }
+
+            // ingresos_esperados (opcional)
             String ingresosStr = record.get("ingresos_esperados");
             if (ingresosStr != null && !ingresosStr.trim().isEmpty() && !ingresosStr.equalsIgnoreCase("null")) {
-                trato.setIngresosEsperados(new BigDecimal(ingresosStr.trim()));
+                try {
+                    trato.setIngresosEsperados(new BigDecimal(ingresosStr.trim()));
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException("'ingresos_esperados' debe ser un número decimal, valor recibido: '" + ingresosStr + "'");
+                }
             }
+
+            // descripcion (opcional)
             String descripcion = record.get("descripcion");
             if (descripcion != null && !descripcion.trim().isEmpty() && !descripcion.equalsIgnoreCase("null")) {
                 trato.setDescripcion(descripcion.trim());
             }
+
+            // fecha_cierre (opcional, default +60 días)
             String fechaCierreStr = record.get("fecha_cierre");
             if (fechaCierreStr == null || fechaCierreStr.trim().isEmpty() || fechaCierreStr.equalsIgnoreCase("null")) {
                 trato.setFechaCierre(LocalDateTime.now().plusDays(60));
             } else {
-                trato.setFechaCierre(LocalDateTime.parse(fechaCierreStr.trim()));
+                try {
+                    trato.setFechaCierre(LocalDateTime.parse(fechaCierreStr.trim()));
+                } catch (Exception e1) {
+                    try {
+                        trato.setFechaCierre(LocalDate.parse(fechaCierreStr.trim()).atStartOfDay());
+                    } catch (Exception e2) {
+                        throw new RuntimeException("'fecha_cierre' tiene formato inválido: '" + fechaCierreStr + "'. Use yyyy-MM-ddTHH:mm:ss o yyyy-MM-dd");
+                    }
+                }
             }
+
+            // no_trato (opcional, pero único)
             String noTrato = record.get("no_trato");
             if (noTrato != null && !noTrato.trim().isEmpty() && !noTrato.equalsIgnoreCase("null")) {
                 trato.setNoTrato(noTrato.trim());
             }
+
+            // probabilidad (opcional, default 0)
             String probabilidadStr = record.get("probabilidad");
             if (probabilidadStr == null || probabilidadStr.trim().isEmpty() || probabilidadStr.equalsIgnoreCase("null")) {
                 trato.setProbabilidad(0);
             } else {
-                trato.setProbabilidad(Integer.parseInt(probabilidadStr.trim()));
+                try {
+                    int prob = Integer.parseInt(probabilidadStr.trim());
+                    if (prob < 0 || prob > 100) {
+                        throw new RuntimeException("'probabilidad' debe estar entre 0 y 100, valor recibido: " + prob);
+                    }
+                    trato.setProbabilidad(prob);
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException("'probabilidad' debe ser un número entero, valor recibido: '" + probabilidadStr + "'");
+                }
             }
+
+            // fase
             String fase = record.get("fase");
             if (fase == null || fase.trim().isEmpty() || fase.equalsIgnoreCase("null")) {
                 trato.setFase("PRIMER_CONTACTO");
             } else {
-                trato.setFase(fase.trim());
+                String faseValor = fase.trim();
+                List<String> fasesValidas = Arrays.asList(
+                        "CLASIFICACION",
+                        "PRIMER_CONTACTO",
+                        "ENVIO_DE_INFORMACION",
+                        "REUNION",
+                        "COTIZACION_PROPUESTA_PRACTICA",
+                        "NEGOCIACION_REVISION",
+                        "CERRADO_GANADO",
+                        "RESPUESTA_POR_CORREO",
+                        "INTERES_FUTURO",
+                        "CERRADO_PERDIDO",
+                        "SEGUIMIENTO"
+                );
+                if (!fasesValidas.contains(faseValor)) {
+                    throw new RuntimeException("'fase' tiene valor inválido: '" + faseValor + "'. Valores válidos: " + fasesValidas);
+                }
+                trato.setFase(faseValor);
             }
+
             trato.setFechaCreacion(Instant.now());
             trato.setFechaModificacion(Instant.now());
             trato.setFechaUltimaActividad(Instant.now());
             tratosRepository.save(trato);
             return true;
+
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Error al procesar trato en fila " + record.getRecordNumber() + ": " + e.getMessage(), e);
+            String mensajeError = e.getMessage() != null ? e.getMessage() : "Error desconocido";
+            // Detectar duplicado de no_trato
+            Throwable causa = e;
+            while (causa != null) {
+                String msg = causa.getMessage();
+                if (msg != null && (msg.toLowerCase().contains("unique") || msg.toLowerCase().contains("duplicate"))) {
+                    throw new RuntimeException("El 'no_trato' ya existe en la base de datos: " + record.get("no_trato"), e);
+                }
+                causa = causa.getCause();
+            }
+            throw new RuntimeException(mensajeError, e);
         }
     }
 
-
-    private boolean procesarContacto(CSVRecord record) {
+    private boolean procesarContacto(CSVRecord record, Integer usuarioId) {
         try {
             Contacto contacto = new Contacto();
             contacto.setNombre(record.get("nombre"));
@@ -562,12 +664,16 @@ public class AdministradorDatosService {
             contacto.setRol(RolContactoEnum.valueOf(record.get("rol")));
             contacto.setCelular(record.get("celular"));
 
-            // Buscar propietario por ID (campo obligatorio)
-            Integer propietarioId = Integer.parseInt(record.get("propietario_id"));
-            Optional<Usuario> propietarioOpt = usuarioRepository.findById(propietarioId);
-            if (propietarioOpt.isEmpty()) {
-                throw new RuntimeException("Usuario propietario no encontrado con ID: " + propietarioId);
+            Integer propietarioId = usuarioId;
+            if (record.isMapped("propietario_id")) {
+                String propStr = record.get("propietario_id");
+                if (propStr != null && !propStr.trim().isEmpty()) {
+                    propietarioId = Integer.parseInt(propStr);
+                }
             }
+
+            Optional<Usuario> propietarioOpt = usuarioRepository.findById(propietarioId);
+            if (propietarioOpt.isEmpty()) throw new RuntimeException("Usuario propietario no encontrado");
             contacto.setPropietario(propietarioOpt.get());
 
             contacto.setCreadoPor(record.get("creado_por"));
@@ -592,26 +698,28 @@ public class AdministradorDatosService {
             contactosRepository.save(contacto);
             return true;
         } catch (Exception e) {
-            return false;
+            throw new RuntimeException("Error al procesar contacto: " + e.getMessage(), e);
         }
     }
 
 
-    private boolean procesarEmpresa(CSVRecord record) {
+    private boolean procesarEmpresa(CSVRecord record, Integer usuarioId) {
         try {
             Empresa empresa = new Empresa();
-
-            // Campos obligatorios existentes
             empresa.setNombre(record.get("nombre"));
             empresa.setEstatus(EstatusEmpresaEnum.valueOf(record.get("estatus")));
             empresa.setDomicilioFisico(record.get("domicilio_fisico"));
 
             // Buscar propietario por ID (campo obligatorio)
-            Integer propietarioId = Integer.parseInt(record.get("propietario_id"));
-            Optional<Usuario> propietarioOpt = usuarioRepository.findById(propietarioId);
-            if (propietarioOpt.isEmpty()) {
-                throw new RuntimeException("Usuario propietario no encontrado con ID: " + propietarioId);
+            Integer propietarioId = usuarioId;
+            if (record.isMapped("propietario_id")) {
+                String propStr = record.get("propietario_id");
+                if (propStr != null && !propStr.trim().isEmpty()) {
+                    propietarioId = Integer.parseInt(propStr);
+                }
             }
+            Optional<Usuario> propietarioOpt = usuarioRepository.findById(propietarioId);
+            if (propietarioOpt.isEmpty()) throw new RuntimeException("Propietario no encontrado");
             empresa.setPropietario(propietarioOpt.get());
 
             empresa.setCreadoPor(record.get("creado_por"));
@@ -676,7 +784,7 @@ public class AdministradorDatosService {
             return true;
 
         } catch (Exception e) {
-            return false;
+            throw new RuntimeException("Error al procesar empresa: " + e.getMessage(), e);
         }
     }
 
@@ -760,52 +868,105 @@ public class AdministradorDatosService {
 
     private List<Object> obtenerDatosParaExportacion(String tipoDatos, String fechaInicio, String fechaFin) {
         List<Object> datos;
+        boolean filtrar = fechaInicio != null && !fechaInicio.isEmpty()
+                && fechaFin != null && !fechaFin.isEmpty();
+
+        Instant startInstant = null;
+        Instant endInstant = null;
+        java.sql.Date startDateSql = null;
+        java.sql.Date endDateSql = null;
+
+        if (filtrar) {
+            try {
+                LocalDate start = LocalDate.parse(fechaInicio);
+                LocalDate end = LocalDate.parse(fechaFin);
+
+                startInstant = start.atStartOfDay(ZoneId.systemDefault()).toInstant();
+                endInstant = end.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant();
+
+                startDateSql = java.sql.Date.valueOf(start);
+                endDateSql = java.sql.Date.valueOf(end);
+            } catch (Exception e) {
+                System.err.println("Error parseando fechas, se exportará todo: " + e.getMessage());
+                filtrar = false;
+            }
+        }
         switch (tipoDatos) {
             case "tratos":
-                datos = tratosRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
+                if (filtrar) {
+                    datos = tratosRepository.findByFechaCreacionBetween(startInstant, endInstant)
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                } else {
+                    datos = tratosRepository.findAll()
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                }
                 break;
+
             case "empresas":
-                datos = empresasRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
+                if (filtrar) {
+                    datos = empresasRepository.findByFechaCreacionBetween(startInstant, endInstant)
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                } else {
+                    datos = empresasRepository.findAll()
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                }
                 break;
+
             case "contactos":
-                datos = contactosRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
+                if (filtrar) {
+                    datos = contactosRepository.findByFechaCreacionBetween(startInstant, endInstant)
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                } else {
+                    datos = contactosRepository.findAll()
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                }
                 break;
-            case "correoContactos":
-                datos = correoContactoRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
+
+            case "historialSaldos":
+                if (filtrar) {
+                    datos = historialSaldoRepository.findByFechaBetween(startDateSql, endDateSql)
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                } else {
+                    datos = historialSaldoRepository.findAll()
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                }
                 break;
-            case "modelos":
-                datos = modeloRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
+
+            case "auditoria":
+                if (filtrar) {
+                    datos = auditoriaRepository.findByFechaBetween(startInstant, endInstant)
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                } else {
+                    datos = auditoriaRepository.findAll()
+                            .stream().map(Object.class::cast).collect(Collectors.toList());
+                }
                 break;
-            case "proveedores":
-                datos = proveedorRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
-                break;
+
             case "equipos":
                 datos = equipoRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
+                        .map(Object.class::cast).collect(Collectors.toList());
                 break;
+
+            case "correoContactos":
+                datos = correoContactoRepository.findAll().stream()
+                        .map(Object.class::cast).collect(Collectors.toList());
+                break;
+
+            case "modelos":
+                datos = modeloRepository.findAll().stream()
+                        .map(Object.class::cast).collect(Collectors.toList());
+                break;
+
+            case "proveedores":
+                datos = proveedorRepository.findAll().stream()
+                        .map(Object.class::cast).collect(Collectors.toList());
+                break;
+
             case "sims":
                 datos = simRepository.findAllWithEquipo().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
+                        .map(Object.class::cast).collect(Collectors.toList());
                 break;
-            case "historialSaldos":
-                datos = historialSaldoRepository.findAll().stream()
-                        .map(Object.class::cast)
-                        .collect(Collectors.toList());
-                break;
+
             default:
                 datos = new ArrayList<>();
         }
@@ -833,13 +994,14 @@ public class AdministradorDatosService {
                 return simRepository.count();
             case "historialSaldos":
                 return historialSaldoRepository.count();
+            case "auditoria":
+                return auditoriaRepository.count();
             default:
                 return 0;
         }
     }
 
     private int exportarCSV(List<Object> datos, Path rutaArchivo, String tipoDatos) throws IOException {
-        // Obtener columnas desde la base de datos
         Optional<PlantillaImportacion> plantillaOpt = plantillaRepository.findByTipoDatosAndActivoTrue(tipoDatos);
         if (plantillaOpt.isEmpty()) {
             throw new RuntimeException("Plantilla no encontrada para el tipo: " + tipoDatos);
@@ -847,12 +1009,17 @@ public class AdministradorDatosService {
 
         String[] columnas = plantillaOpt.get().getCamposCsv().split(",");
 
-        try (FileWriter writer = new FileWriter(rutaArchivo.toFile());
-             CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(columnas))) {
+        try (FileOutputStream fos = new FileOutputStream(rutaArchivo.toFile());
+             OutputStreamWriter osw = new OutputStreamWriter(fos, StandardCharsets.UTF_8);
+             PrintWriter writer = new PrintWriter(osw)) {
 
-            for (Object dato : datos) {
-                List<String> valores = extraerValores(dato, tipoDatos);
-                csvPrinter.printRecord(valores);
+            writer.write('\ufeff');
+
+            try (CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(columnas))) {
+                for (Object dato : datos) {
+                    List<String> valores = extraerValores(dato, tipoDatos);
+                    csvPrinter.printRecord(valores);
+                }
             }
         }
 
@@ -944,7 +1111,7 @@ public class AdministradorDatosService {
                 valores.add(trato.getNombre());
                 valores.add(trato.getEmpresaId() != null ? trato.getEmpresaId().toString() : "");
                 valores.add(trato.getContacto() != null ? trato.getContacto().getId().toString() : "");
-                valores.add(trato.getPropietarioId() != null ? trato.getPropietarioId().toString() : ""); // AGREGADO
+                valores.add(trato.getPropietarioId() != null ? trato.getPropietarioId().toString() : "");
                 valores.add(trato.getNumeroUnidades() != null ? trato.getNumeroUnidades().toString() : "");
                 valores.add(trato.getIngresosEsperados() != null ? trato.getIngresosEsperados().toString() : "");
                 valores.add(trato.getDescripcion() != null ? trato.getDescripcion() : "");
@@ -957,31 +1124,25 @@ public class AdministradorDatosService {
             case "empresas":
                 Empresa empresa = (Empresa) objeto;
                 valores.add(empresa.getNombre());
-                valores.add(empresa.getEstatus().toString());
-                valores.add(empresa.getDomicilioFisico());
                 valores.add(empresa.getPropietario() != null ? empresa.getPropietario().getId().toString() : "");
-                valores.add(empresa.getCreadoPor() != null ? empresa.getCreadoPor() : "");
-                valores.add(empresa.getFechaCreacion() != null ? empresa.getFechaCreacion().toString() : "");
+                valores.add(empresa.getEstatus().toString());
                 valores.add(empresa.getSitioWeb() != null ? empresa.getSitioWeb() : "");
                 valores.add(empresa.getSector() != null ? empresa.getSector().getNombreSector() : "");
+                valores.add(empresa.getDomicilioFisico() != null ? empresa.getDomicilioFisico() : "");
                 valores.add(empresa.getDomicilioFiscal() != null ? empresa.getDomicilioFiscal() : "");
                 valores.add(empresa.getRfc() != null ? empresa.getRfc() : "");
                 valores.add(empresa.getRazonSocial() != null ? empresa.getRazonSocial() : "");
                 valores.add(empresa.getRegimenFiscal() != null ? empresa.getRegimenFiscal() : "");
-                valores.add(empresa.getModificadoPor() != null ? empresa.getModificadoPor() : "");
                 break;
 
             case "contactos":
-                Contacto contacto = (Contacto) objeto;
-                valores.add(contacto.getNombre());
-                valores.add(contacto.getEmpresa() != null ? contacto.getEmpresa().getId().toString() : "");
-                valores.add(contacto.getRol().toString());
-                valores.add(contacto.getCelular() != null ? contacto.getCelular() : "");
-                valores.add(contacto.getPropietario() != null ? contacto.getPropietario().getId().toString() : "");
-                valores.add(contacto.getCreadoPor() != null ? contacto.getCreadoPor() : "");
-                valores.add(contacto.getFechaCreacion() != null ? contacto.getFechaCreacion().toString() : "");
-                valores.add(contacto.getModificadoPor() != null ? contacto.getModificadoPor() : "");
-                break;
+            Contacto contacto = (Contacto) objeto;
+            valores.add(contacto.getNombre());
+            valores.add(contacto.getEmpresa() != null ? contacto.getEmpresa().getId().toString() : "");
+            valores.add(contacto.getRol().toString());
+            valores.add(contacto.getCelular() != null ? contacto.getCelular() : "");
+            valores.add(contacto.getPropietario() != null ? contacto.getPropietario().getId().toString() : "");
+            break;
 
             case "correoContactos":
                 CorreoContacto correo = (CorreoContacto) objeto;
@@ -1040,6 +1201,28 @@ public class AdministradorDatosService {
                 valores.add(historial.getDatos() != null ? historial.getDatos().toString() : "");
                 valores.add(historial.getFecha() != null ? historial.getFecha().toString() : "");
                 valores.add(historial.getSim() != null ? historial.getSim().getNumero() : "");
+                break;
+
+            case "auditoria":
+                Auditoria audit = (Auditoria) objeto;
+                valores.add(audit.getId().toString());
+                valores.add(audit.getTabla());
+                valores.add(audit.getAccion());
+                valores.add(audit.getRegistroId() != null ? audit.getRegistroId().toString() : "");
+                valores.add(audit.getNombreUsuario() != null ? audit.getNombreUsuario() : "SISTEMA");
+                valores.add(audit.getDetalleAccion() != null ? audit.getDetalleAccion() : "");
+                valores.add(audit.getDatosAnteriores() != null ? audit.getDatosAnteriores().replace("\n", " ") : "");
+                valores.add(audit.getDatosNuevos() != null ? audit.getDatosNuevos().replace("\n", " ") : "");
+               if (audit.getFecha() != null) {
+                    LocalDateTime fechaLocal = LocalDateTime.ofInstant(
+                            audit.getFecha(),
+                            ZoneId.of("America/Mexico_City")
+                    );
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+                    valores.add(fechaLocal.format(formatter));
+                } else {
+                    valores.add("");
+                }
                 break;
 
             default:
@@ -1146,5 +1329,47 @@ public class AdministradorDatosService {
             return texto.substring(1);
         }
         return texto;
+    }
+
+    private String convertirXLSXaCSV(Path rutaXLSX) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try (InputStream is = Files.newInputStream(rutaXLSX);
+             XSSFWorkbook workbook = new XSSFWorkbook(is)) {
+            Sheet sheet = workbook.getSheetAt(0);
+            for (Row row : sheet) {
+                List<String> celdas = new ArrayList<>();
+                for (Cell cell : row) {
+                    String valor = "";
+                    switch (cell.getCellType()) {
+                        case STRING:
+                            valor = cell.getStringCellValue()
+                                    .replace("\r\n", " ")
+                                    .replace("\n", " ")
+                                    .replace("\r", " ")
+                                    .trim();
+                            break;
+                        case NUMERIC:
+                            if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
+                                valor = cell.getLocalDateTimeCellValue().toLocalDate().toString();
+                            } else {
+                                double d = cell.getNumericCellValue();
+                                valor = (d == Math.floor(d)) ? String.valueOf((long) d) : String.valueOf(d);
+                            }
+                            break;
+                        case BOOLEAN:
+                            valor = String.valueOf(cell.getBooleanCellValue());
+                            break;
+                        default:
+                            valor = "";
+                    }
+                    if (valor.contains(",") || valor.contains("\"") || valor.contains("\n")) {
+                        valor = "\"" + valor.replace("\"", "\"\"") + "\"";
+                    }
+                    celdas.add(valor);
+                }
+                sb.append(String.join(",", celdas)).append("\n");
+            }
+        }
+        return sb.toString();
     }
 }

@@ -85,7 +85,7 @@ public class EquipoService {
     }
 
     @Transactional
-    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
+    @CacheEvict(value = {"equipos", "dashboard-stats", "modelos"}, allEntries = true)
     public Equipo guardarEquipo(Equipo equipo) {
         boolean debeRegistrarCargo = false;
         Integer creditosARegistrar = 0;
@@ -143,7 +143,7 @@ public class EquipoService {
     }
 
     @Transactional
-    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
+    @CacheEvict(value = {"equipos", "dashboard-stats", "modelos"}, allEntries = true)
     public Equipo actualizarEquipo(Integer id, Equipo equipoDetails) {
         Equipo equipo = obtenerEquipo(id);
 
@@ -307,7 +307,7 @@ public class EquipoService {
         return equipoActualizado;
     }
 
-    @CacheEvict(value = {"equipos", "dashboard-stats"}, allEntries = true)
+    @CacheEvict(value = {"equipos", "dashboard-stats", "modelos"}, allEntries = true)
     public void eliminarEquipo(Integer id) {
         Equipo equipo = obtenerEquipo(id);
         if (equipo.getSimReferenciada() != null) {
